@@ -237,6 +237,21 @@ details.attendu .defile { margin-top: 8px; max-height: 40vh; }
 .statut.neutre { color: var(--sb-ink); background: var(--sb-surface-2); border-color: var(--sb-border-strong); }
 .compte-lignes { color: var(--sb-ink-soft); font-size: .88em; margin: 6px 0 0; }
 .CodeMirror.cm-lecture { background: var(--sb-surface-2); }
+.CodeMirror[hidden] { display: none; }
+
+/* Requête à trous (comme dans SQLSandbox et QueryCraft) : un champ par trou dans le texte */
+.trous {
+	margin: 0 0 8px; padding: 10px 12px; font-family: var(--sb-mono); font-size: 15px; line-height: 2.2;
+	white-space: pre-wrap; overflow-wrap: anywhere; color: var(--sb-ink); background: var(--sb-surface);
+	border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-sm);
+}
+.trous[hidden], #trous-erreur[hidden], .libelle[hidden] { display: none; }
+.trou {
+	min-width: 6ch; max-width: 100%; padding: 1px 6px; font: inherit; font-weight: 400; line-height: 1.4;
+	color: var(--sb-ink); background: var(--sb-accent-soft); border: 2px dashed var(--sb-accent); border-radius: 4px;
+}
+.trou:focus { outline: none; border-style: solid; background: var(--sb-surface); box-shadow: 0 0 0 3px var(--sb-accent-ring); }
+.trou.vide { border-color: var(--sb-danger); }
 
 /* Cohérence */
 .statut.avertissement { color: #8a5a06; background: #fdf2da; border-color: #f0d99a; }

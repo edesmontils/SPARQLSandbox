@@ -95,6 +95,7 @@
 	var resultat = document.getElementById('resultat');
 	var boutonExecuter = document.getElementById('executer');
 	function executer() {
+		if (!trousComplets()) return;
 		boutonExecuter.disabled = true;
 		resultat.innerHTML = "<p class='astuce'>⏳ Exécution…</p>";
 		var requete = editeur.getValue();
@@ -120,6 +121,14 @@
 	});
 
 	document.getElementById('effacer').addEventListener('click', function () {
+		if (modeleTrous !== null) {
+			champsTrous().forEach(function (c) { c.value = ''; c.classList.remove('vide'); ajusteTrou(c); });
+			majRequeteTrous();
+			resultat.innerHTML = '';
+			erreurTrous.hidden = true;
+			if (champsTrous()[0]) champsTrous()[0].focus();
+			return;
+		}
 		editeur.setValue('');
 		resultat.innerHTML = '';
 		editeur.focus();
@@ -127,6 +136,7 @@
 
 	document.querySelectorAll('[data-exemple]').forEach(function (b) {
 		b.addEventListener('click', function () {
+			quitteTrous();
 			editeur.setValue(donnees.exemples[+b.dataset.exemple][1]);
 			resultat.innerHTML = '';
 			editeur.focus();
@@ -153,6 +163,7 @@
 					var requete = sorte === 'classes'
 						? prefixesUtiles(nom) + 'SELECT ?s\nWHERE {\n  ?s a ' + terme(nom) + ' .\n}\nLIMIT 50'
 						: prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
+					quitteTrous();
 					editeur.setValue(requete);
 					resultat.innerHTML = '';
 					editeur.focus();
@@ -183,7 +194,7 @@
 			b.className = 'lien';
 			b.title = q;
 			b.textContent = q.replace(/^(\s*(PREFIX|BASE)\b[^\n]*\n)*/i, '').replace(/\s+/g, ' ').trim().slice(0, 70);
-			b.addEventListener('click', function () { editeur.setValue(q); editeur.focus(); });
+			b.addEventListener('click', function () { quitteTrous(); editeur.setValue(q); editeur.focus(); });
 			var x = document.createElement('button');
 			x.type = 'button';
 			x.className = 'supprimer';
@@ -233,6 +244,140 @@
 	}
 	function raccourci() {
 		if (exercice && questionCourante().attendu === 'R') verifier(); else executer();
+	}
+
+	//------------------------------------------------------
+	// Requête à trous (types rI->R, rIT->R), saisie comme dans SQLSandbox et QueryCraft :
+	// le modèle marque chaque trou par « ___ » (trois soulignés ou plus) ; chaque trou a son
+	// champ, et la requête assemblée (« ___ » pour un trou vide) va dans l'éditeur, masqué,
+	// que lisent l'exécution, la vérification et le suivi. L'exécution attend tous les trous.
+	//------------------------------------------------------
+	var MARQUE_TROU = /_{3,}/;
+	var modeleTrous = null; // modèle de la question à trous affichée, null sinon
+	var assemblage = false; // vrai pendant que l'éditeur reçoit la requête assemblée
+	var zoneTrous = document.createElement('div');
+	zoneTrous.className = 'trous cm-s-default';
+	zoneTrous.id = 'trous';
+	zoneTrous.hidden = true;
+	var erreurTrous = document.createElement('p');
+	erreurTrous.className = 'statut ko';
+	erreurTrous.id = 'trous-erreur';
+	erreurTrous.hidden = true;
+	var consigneTrous = document.createElement('p');
+	consigneTrous.className = 'libelle';
+	consigneTrous.hidden = true;
+	consigneTrous.innerHTML = 'Complétez la requête en remplissant les trous '
+		+ '<span class="astuce">(Entrée : trou suivant, Ctrl+Entrée : vérifier)</span>';
+	var enveloppe = editeur.getWrapperElement();
+	enveloppe.parentNode.insertBefore(consigneTrous, enveloppe);
+	enveloppe.parentNode.insertBefore(zoneTrous, enveloppe);
+	enveloppe.parentNode.insertBefore(erreurTrous, enveloppe);
+	var boutonPrefixes = document.getElementById('prefixes');
+
+	function aTrous(q) { return !!(q && q.attendu === 'R' && q.modele && MARQUE_TROU.test(q.modele)); }
+	function partiesModele(modele) { return modele.split(MARQUE_TROU); }
+	// Valeurs des trous retrouvées dans une réponse, ou null si elle ne suit pas le modèle
+	function valeursTrous(modele, requete) {
+		var esc = function (x) { return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+		var m = new RegExp('^' + partiesModele(modele).map(esc).join('([\\s\\S]*?)') + '$').exec(requete || '');
+		if (!m) return null;
+		return m.slice(1).map(function (v) { return MARQUE_TROU.test(v) && !v.replace(MARQUE_TROU, '').trim() ? '' : v; });
+	}
+	function champsTrous() { return Array.prototype.slice.call(zoneTrous.querySelectorAll('.trou')); }
+	function assembleTrous() {
+		var parties = partiesModele(modeleTrous), champs = champsTrous(), r = parties[0];
+		for (var i = 1; i < parties.length; i++) r += ((champs[i - 1] ? champs[i - 1].value.trim() : '') || '___') + parties[i];
+		return r;
+	}
+	function majRequeteTrous() {
+		assemblage = true;
+		editeur.setValue(assembleTrous());
+		assemblage = false;
+	}
+	function ajusteTrou(champ) { champ.style.width = Math.max(8, champ.value.length + 2) + 'ch'; }
+
+	// Coloration SPARQL d'un texte, par le mode CodeMirror de l'éditeur (HTML échappé)
+	function coloreSparql(texte) {
+		var mode = CodeMirror.getMode(editeur.options, editeur.getOption('mode'));
+		var etat = CodeMirror.startState(mode), h = '';
+		texte.split('\n').forEach(function (ligne, n) {
+			if (n) h += '\n';
+			var flux = new CodeMirror.StringStream(ligne, editeur.getOption('tabSize'));
+			if (!ligne && mode.blankLine) mode.blankLine(etat);
+			while (!flux.eol()) {
+				var style = mode.token(flux, etat), mot = echappe(flux.current());
+				h += style ? '<span class="' + style.replace(/(^|\s+)/g, '$1cm-') + '">' + mot + '</span>' : mot;
+				flux.start = flux.pos;
+			}
+		});
+		return h;
+	}
+
+	function afficheTrous(q, reponse) {
+		modeleTrous = q.modele;
+		var valeurs = valeursTrous(q.modele, reponse || '');
+		var parties = partiesModele(q.modele);
+		// La requête est colorée d'un seul tenant, chaque trou y étant un repère (un mot ASCII
+		// que l'analyseur garde d'un bloc) ; les repères deviennent ensuite les champs
+		var texte = parties[0];
+		for (var k = 1; k < parties.length; k++) texte += 'qqtrou' + k + 'qq' + parties[k];
+		zoneTrous.innerHTML = coloreSparql(texte).replace(/qqtrou(\d+)qq/g, '<span class="place-trou" data-trou="$1"></span>');
+		zoneTrous.querySelectorAll('.place-trou').forEach(function (place) {
+			var i = parseInt(place.getAttribute('data-trou'), 10);
+			var champ = document.createElement('input');
+			champ.type = 'text';
+			champ.className = 'trou';
+			champ.spellcheck = false;
+			champ.autocomplete = 'off';
+			champ.setAttribute('autocapitalize', 'off');
+			champ.setAttribute('aria-label', 'Trou ' + i + ' sur ' + (parties.length - 1));
+			champ.value = valeurs ? valeurs[i - 1] : '';
+			ajusteTrou(champ);
+			champ.addEventListener('input', function () {
+				ajusteTrou(champ);
+				champ.classList.remove('vide');
+				erreurTrous.hidden = true;
+				majRequeteTrous();
+			});
+			champ.addEventListener('keydown', function (e) {
+				if (e.key !== 'Enter') return;
+				e.preventDefault();
+				if (e.ctrlKey || e.metaKey) { raccourci(); return; }
+				var champs = champsTrous(), suivant = champs[champs.indexOf(champ) + 1];
+				if (suivant) suivant.focus();
+			});
+			place.parentNode.replaceChild(champ, place);
+		});
+		zoneTrous.hidden = consigneTrous.hidden = false;
+		erreurTrous.hidden = true;
+		enveloppe.hidden = true;
+		boutonPrefixes.hidden = true;
+		majRequeteTrous();
+	}
+
+	// Retour à l'éditeur complet (autre question, fin de l'exercice, ou requête remplacée
+	// par un exemple ou l'explorateur)
+	function quitteTrous() {
+		if (modeleTrous === null) return;
+		modeleTrous = null;
+		zoneTrous.hidden = consigneTrous.hidden = erreurTrous.hidden = true;
+		zoneTrous.innerHTML = '';
+		enveloppe.hidden = false;
+		boutonPrefixes.hidden = false;
+		editeur.refresh();
+	}
+
+	// Avant exécution : tous les trous remplis, sinon les vides sont signalés
+	function trousComplets() {
+		if (modeleTrous === null) return true;
+		var vides = champsTrous().filter(function (c) { return !c.value.trim(); });
+		vides.forEach(function (c) { c.classList.add('vide'); });
+		if (vides.length === 0) return true;
+		erreurTrous.textContent = vides.length === 1 ? "⚠️ Il reste un trou à compléter avant d'exécuter la requête."
+			: '⚠️ Il reste ' + vides.length + " trous à compléter avant d'exécuter la requête.";
+		erreurTrous.hidden = false;
+		vides[0].focus();
+		return false;
 	}
 	function cleSuivi(code) { return 'sparqlsandbox-exercice-' + donnees.jeu + '-' + code; }
 	function suivi(code) {
@@ -285,6 +430,7 @@
 		panneau.innerHTML = '';
 		boutonVerifier.hidden = true;
 		titreEditeur.textContent = titreLibre;
+		quitteTrous();
 		lecture(false);
 		editeur.setValue(texteLibre !== null ? texteLibre : '');
 		resultat.innerHTML = '';
@@ -327,8 +473,11 @@
 			titreEditeur.textContent = '✏️ Votre réponse';
 			boutonVerifier.hidden = false;
 			lecture(false);
+			quitteTrous();
 			editeur.setValue(typeof e.reponse === 'string' ? e.reponse : (q.modele || ''));
+			if (aTrous(q)) afficheTrous(q, typeof e.reponse === 'string' ? e.reponse : '');
 		} else {
+			quitteTrous();
 			titreEditeur.textContent = '🔎 Requête à comprendre';
 			boutonVerifier.hidden = true;
 			lecture(true);
@@ -350,6 +499,7 @@
 
 	function verifier() {
 		var q = questionCourante();
+		if (!trousComplets()) return;
 		boutonVerifier.disabled = true;
 		resultat.innerHTML = "<p class='astuce'>⏳ Vérification…</p>";
 		appel('verifier', { exercice: exercice.code, question: q.code, requete64: base64(editeur.getValue()) }).then(function (r) {
