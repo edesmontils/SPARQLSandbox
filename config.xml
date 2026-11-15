@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Configuration générale de SPARQL Sandbox. Les jeux de données sont décrits chacun
+     par le config.xml de leur dossier dans donnees/. -->
+<sparqlsandbox version="0.1" name="SPARQL Sandbox">
+	<accueil>
+		<section class="post accueil">
+			<h2 class="title">Bienvenue dans SPARQL Sandbox</h2>
+			<div class="story">
+				<p>SPARQL Sandbox est un « bac à sable » pour apprendre <strong>SPARQL</strong>, le langage
+					de requête du Web sémantique : vous interrogez et modifiez de petits graphes RDF,
+					directement dans le navigateur, sans rien installer. Chaque étudiant travaille sur
+					<strong>sa propre copie</strong> des jeux de données : vous pouvez tout essayer
+					(<code>SELECT</code>, <code>ASK</code>, <code>CONSTRUCT</code>, mais aussi
+					<code>INSERT DATA</code>, <code>DELETE WHERE</code>…), les données d'origine restent intactes.</p>
+				<p>Vos modifications sont conservées trois heures après votre dernière action, même si vous
+					rechargez la page ou fermez le navigateur.</p>
+			</div>
+		</section>
+		<section class="post accueil">
+			<h2 class="title">Mode d'emploi rapide</h2>
+			<div class="story">
+				<ol>
+					<li><strong>Choisissez un jeu de données</strong> parmi les pastilles en haut de la page :
+						sa description s'affiche.</li>
+					<li><strong>Découvrez-le</strong> : « 🧩 Contenu de votre copie » liste ses classes et ses
+						propriétés ; un clic en fait une requête.</li>
+					<li><strong>Écrivez une requête</strong>, ou partez d'un exemple, puis lancez-la avec
+						<strong>▶️ Exécuter</strong> (ou Ctrl+Entrée, Cmd+Entrée sur Mac).
+						« 🏷️ Insérer les préfixes » ajoute les déclarations <code>PREFIX</code> du jeu.</li>
+					<li><strong>Gardez vos requêtes</strong> utiles avec <strong>🧺 Mémoriser</strong>.</li>
+					<li>Pour <strong>repartir de zéro</strong>, « ↩️ Revenir au jeu d'origine » efface vos
+						modifications.</li>
+				</ol>
+			</div>
+		</section>
+		<section class="post accueil">
+			<h2 class="title">Limites</h2>
+			<div class="story">
+				<ul>
+					<li>Une requête est arrêtée au bout de 5 secondes, et seules les 1000 premières lignes
+						d'un résultat sont affichées.</li>
+					<li>Les requêtes fédérées (<code>SERVICE</code>) et <code>LOAD</code> sont refusées : le
+						serveur n'interroge pas d'autres sites.</li>
+					<li>Oxigraph ne fait pas d'inférence : <code>rdfs:subClassOf</code> n'est pas déduit
+						automatiquement, mais vous pouvez le suivre avec un chemin de propriétés
+						(<code>rdf:type/rdfs:subClassOf*</code>).</li>
+				</ul>
+			</div>
+		</section>
+	</accueil>
+</sparqlsandbox>

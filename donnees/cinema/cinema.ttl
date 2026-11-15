@@ -1,0 +1,133 @@
+# Jeu de données « Cinéma » de SPARQL Sandbox
+# Films, personnes (acteurs et réalisateurs), rôles, cinémas de l'agglomération nantaise
+# et projections (programme fictif).
+
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix cine: <http://example.org/cinema/vocab#> .
+@prefix ex:   <http://example.org/cinema/> .
+
+#---------------------------------------------------------------
+# Vocabulaire (schéma RDFS)
+#---------------------------------------------------------------
+
+cine:Film a rdfs:Class ; rdfs:label "Film"@fr, "Film"@en .
+cine:Personne a rdfs:Class ; rdfs:subClassOf foaf:Person ; rdfs:label "Personne"@fr .
+cine:Acteur a rdfs:Class ; rdfs:subClassOf cine:Personne ; rdfs:label "Acteur"@fr, "Actor"@en .
+cine:Realisateur a rdfs:Class ; rdfs:subClassOf cine:Personne ; rdfs:label "Réalisateur"@fr, "Director"@en .
+cine:Role a rdfs:Class ; rdfs:label "Rôle"@fr ;
+    rdfs:comment "Un acteur joue un personnage dans un film (relation à trois termes)."@fr .
+cine:Cinema a rdfs:Class ; rdfs:label "Cinéma"@fr .
+cine:Projection a rdfs:Class ; rdfs:label "Projection"@fr .
+
+cine:titre a rdf:Property ; rdfs:domain cine:Film ; rdfs:range rdfs:Literal .
+cine:annee a rdf:Property ; rdfs:domain cine:Film ; rdfs:range xsd:integer .
+cine:genre a rdf:Property ; rdfs:domain cine:Film ; rdfs:range xsd:string .
+cine:realisePar a rdf:Property ; rdfs:domain cine:Film ; rdfs:range cine:Realisateur .
+cine:acteur a rdf:Property ; rdfs:domain cine:Role ; rdfs:range cine:Acteur .
+cine:film a rdf:Property ; rdfs:range cine:Film .
+cine:personnage a rdf:Property ; rdfs:domain cine:Role ; rdfs:range xsd:string .
+cine:cinema a rdf:Property ; rdfs:domain cine:Projection ; rdfs:range cine:Cinema .
+cine:date a rdf:Property ; rdfs:domain cine:Projection ; rdfs:range xsd:date .
+cine:ville a rdf:Property ; rdfs:domain cine:Cinema ; rdfs:range xsd:string .
+
+#---------------------------------------------------------------
+# Personnes
+#---------------------------------------------------------------
+
+ex:tautou a cine:Acteur ; foaf:name "Audrey Tautou" .
+ex:kassovitz a cine:Acteur, cine:Realisateur ; foaf:name "Mathieu Kassovitz" .
+ex:cluzet a cine:Acteur ; foaf:name "François Cluzet" .
+ex:sy a cine:Acteur ; foaf:name "Omar Sy" .
+ex:cassel a cine:Acteur ; foaf:name "Vincent Cassel" .
+ex:jugnot a cine:Acteur ; foaf:name "Gérard Jugnot" .
+ex:villeret a cine:Acteur ; foaf:name "Jacques Villeret" .
+ex:lhermitte a cine:Acteur ; foaf:name "Thierry Lhermitte" .
+ex:merad a cine:Acteur ; foaf:name "Kad Merad" .
+ex:boon a cine:Acteur, cine:Realisateur ; foaf:name "Dany Boon" .
+ex:depardieu a cine:Acteur ; foaf:name "Gérard Depardieu" .
+ex:debbouze a cine:Acteur ; foaf:name "Jamel Debbouze" .
+ex:chabat a cine:Acteur, cine:Realisateur ; foaf:name "Alain Chabat" .
+ex:reno a cine:Acteur ; foaf:name "Jean Reno" .
+ex:barr a cine:Acteur ; foaf:name "Jean-Marc Barr" .
+ex:portman a cine:Acteur ; foaf:name "Natalie Portman" .
+
+ex:jeunet a cine:Realisateur ; foaf:name "Jean-Pierre Jeunet" .
+ex:nakache a cine:Realisateur ; foaf:name "Olivier Nakache" .
+ex:toledano a cine:Realisateur ; foaf:name "Éric Toledano" .
+ex:barratier a cine:Realisateur ; foaf:name "Christophe Barratier" .
+ex:veber a cine:Realisateur ; foaf:name "Francis Veber" .
+ex:besson a cine:Realisateur ; foaf:name "Luc Besson" .
+
+#---------------------------------------------------------------
+# Films
+#---------------------------------------------------------------
+
+ex:amelie a cine:Film ;
+    cine:titre "Le Fabuleux Destin d'Amélie Poulain"@fr, "Amélie"@en ;
+    cine:annee 2001 ; cine:genre "Comédie" ; cine:realisePar ex:jeunet .
+ex:intouchables a cine:Film ;
+    cine:titre "Intouchables"@fr, "The Intouchables"@en ;
+    cine:annee 2011 ; cine:genre "Comédie dramatique" ; cine:realisePar ex:nakache, ex:toledano .
+ex:haine a cine:Film ;
+    cine:titre "La Haine"@fr, "Hate"@en ;
+    cine:annee 1995 ; cine:genre "Drame" ; cine:realisePar ex:kassovitz .
+ex:choristes a cine:Film ;
+    cine:titre "Les Choristes"@fr, "The Chorus"@en ;
+    cine:annee 2004 ; cine:genre "Drame" ; cine:realisePar ex:barratier .
+ex:diner a cine:Film ;
+    cine:titre "Le Dîner de cons"@fr, "The Dinner Game"@en ;
+    cine:annee 1998 ; cine:genre "Comédie" ; cine:realisePar ex:veber .
+ex:chtis a cine:Film ;
+    cine:titre "Bienvenue chez les Ch'tis"@fr, "Welcome to the Sticks"@en ;
+    cine:annee 2008 ; cine:genre "Comédie" ; cine:realisePar ex:boon .
+ex:cleopatre a cine:Film ;
+    cine:titre "Astérix & Obélix : Mission Cléopâtre"@fr ;
+    cine:annee 2002 ; cine:genre "Comédie" ; cine:realisePar ex:chabat .
+ex:grandbleu a cine:Film ;
+    cine:titre "Le Grand Bleu"@fr, "The Big Blue"@en ;
+    cine:annee 1988 ; cine:genre "Drame" ; cine:realisePar ex:besson .
+ex:leon a cine:Film ;
+    cine:titre "Léon"@fr, "Léon: The Professional"@en ;
+    cine:annee 1994 ; cine:genre "Policier" ; cine:realisePar ex:besson .
+
+#---------------------------------------------------------------
+# Rôles (nœuds anonymes : un acteur, un film, un personnage)
+#---------------------------------------------------------------
+
+[] a cine:Role ; cine:acteur ex:tautou ; cine:film ex:amelie ; cine:personnage "Amélie Poulain" .
+[] a cine:Role ; cine:acteur ex:kassovitz ; cine:film ex:amelie ; cine:personnage "Nino Quincampoix" .
+[] a cine:Role ; cine:acteur ex:cluzet ; cine:film ex:intouchables ; cine:personnage "Philippe" .
+[] a cine:Role ; cine:acteur ex:sy ; cine:film ex:intouchables ; cine:personnage "Driss" .
+[] a cine:Role ; cine:acteur ex:cassel ; cine:film ex:haine ; cine:personnage "Vinz" .
+[] a cine:Role ; cine:acteur ex:jugnot ; cine:film ex:choristes ; cine:personnage "Clément Mathieu" .
+[] a cine:Role ; cine:acteur ex:villeret ; cine:film ex:diner ; cine:personnage "François Pignon" .
+[] a cine:Role ; cine:acteur ex:lhermitte ; cine:film ex:diner ; cine:personnage "Pierre Brochant" .
+[] a cine:Role ; cine:acteur ex:merad ; cine:film ex:chtis ; cine:personnage "Philippe Abrams" .
+[] a cine:Role ; cine:acteur ex:boon ; cine:film ex:chtis ; cine:personnage "Antoine Bailleul" .
+[] a cine:Role ; cine:acteur ex:depardieu ; cine:film ex:cleopatre ; cine:personnage "Obélix" .
+[] a cine:Role ; cine:acteur ex:debbouze ; cine:film ex:cleopatre ; cine:personnage "Numérobis" .
+[] a cine:Role ; cine:acteur ex:chabat ; cine:film ex:cleopatre ; cine:personnage "Jules César" .
+[] a cine:Role ; cine:acteur ex:reno ; cine:film ex:grandbleu ; cine:personnage "Enzo Molinari" .
+[] a cine:Role ; cine:acteur ex:barr ; cine:film ex:grandbleu ; cine:personnage "Jacques Mayol" .
+[] a cine:Role ; cine:acteur ex:reno ; cine:film ex:leon ; cine:personnage "Léon" .
+[] a cine:Role ; cine:acteur ex:portman ; cine:film ex:leon ; cine:personnage "Mathilda" .
+
+#---------------------------------------------------------------
+# Cinémas et projections (programme fictif)
+#---------------------------------------------------------------
+
+ex:katorza a cine:Cinema ; rdfs:label "Le Katorza" ; cine:ville "Nantes" .
+ex:cinematographe a cine:Cinema ; rdfs:label "Le Cinématographe" ; cine:ville "Nantes" .
+ex:atlantis a cine:Cinema ; rdfs:label "Pathé Atlantis" ; cine:ville "Saint-Herblain" .
+
+ex:p1 a cine:Projection ; cine:film ex:amelie ; cine:cinema ex:katorza ; cine:date "2026-12-02"^^xsd:date .
+ex:p2 a cine:Projection ; cine:film ex:amelie ; cine:cinema ex:atlantis ; cine:date "2026-12-05"^^xsd:date .
+ex:p3 a cine:Projection ; cine:film ex:haine ; cine:cinema ex:cinematographe ; cine:date "2026-12-03"^^xsd:date .
+ex:p4 a cine:Projection ; cine:film ex:intouchables ; cine:cinema ex:atlantis ; cine:date "2026-12-04"^^xsd:date .
+ex:p5 a cine:Projection ; cine:film ex:leon ; cine:cinema ex:katorza ; cine:date "2026-12-09"^^xsd:date .
+ex:p6 a cine:Projection ; cine:film ex:grandbleu ; cine:cinema ex:katorza ; cine:date "2026-12-10"^^xsd:date .
+ex:p7 a cine:Projection ; cine:film ex:choristes ; cine:cinema ex:cinematographe ; cine:date "2026-12-12"^^xsd:date .
+ex:p8 a cine:Projection ; cine:film ex:chtis ; cine:cinema ex:atlantis ; cine:date "2026-12-12"^^xsd:date .

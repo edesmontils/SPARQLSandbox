@@ -1,0 +1,8 @@
+tmp/*
+!tmp/.htaccess
+!tmp/index.html
+!tmp/readme.txt
+sparqlsandbox.ini
+bin/
+.DS_Store
+.idea/

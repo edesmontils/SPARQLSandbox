@@ -1,0 +1,14 @@
+; Réglages de SPARQL Sandbox : copier ce fichier HORS du site, à côté de la racine web,
+; sous le nom sparqlsandbox.ini (~/sparqlsandbox.ini chez OVH, droits 600), ou indiquer
+; son emplacement dans la variable d'environnement SPARQLSANDBOX_INI.
+; Tous les réglages sont facultatifs.
+
+; Chemin de l'exécutable Oxigraph (par défaut : bin/oxigraph du site, puis le PATH)
+;oxigraph = /home/utilisateur/.local/bin/oxigraph
+
+; Durée de vie d'une session et des copies des jeux de données, en minutes (180 par défaut)
+;duree_session_min = 180
+
+; Total des copies de session, et espace libre à garder sur le disque, en Mo
+;occupation_max_mo = 1024
+;espace_libre_min_mo = 200
