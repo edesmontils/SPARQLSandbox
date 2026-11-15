@@ -1,0 +1,66 @@
+{
+  "database": {
+    "type": "rdf",
+    "name": "cinema.ttl"
+  },
+  "questions": {
+    "c1": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nSELECT ?titre\nWHERE {\n  ?f a cine:Film ;\n     cine:annee ?a ;\n     cine:titre ?titre .\n  FILTER (?a < 2000 && lang(?titre) = \"fr\")\n}\nORDER BY ?a",
+      "Les titres en français des films sortis avant 2000, du plus ancien au plus récent.",
+      "Un film a plusieurs titres : filtrez sur la langue avec lang(). L'ordre est demandé : ORDER BY.",
+      "I->R",
+      ""
+    ],
+    "c2": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX ex:   <http://example.org/cinema/>\nSELECT DISTINCT ?nom\nWHERE {\n  ?f cine:realisePar ex:besson .\n  ?r cine:film ?f ;\n     cine:acteur ?a .\n  ?a foaf:name ?nom .\n}",
+      "Le nom des acteurs qui ont joué dans un film réalisé par Luc Besson (ex:besson), chacun une seule fois.",
+      "Passez par les rôles (cine:Role) : un rôle relie un acteur et un film. Un acteur peut avoir joué dans plusieurs de ses films : DISTINCT.",
+      "IT->R",
+      ""
+    ],
+    "c3": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?nom (COUNT(?p) AS ?n)\nWHERE {\n  ?p a cine:Projection ;\n     cine:cinema ?c .\n  ?c rdfs:label ?nom .\n}\nGROUP BY ?nom",
+      "Pour chaque cinéma, son nom et le nombre de projections programmées.",
+      "Il faut une fonction d'agrégat, et regrouper par cinéma.",
+      "rI->R",
+      "Complétez les ___.",
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?nom (___ AS ?n)\nWHERE {\n  ?p a cine:Projection ;\n     cine:cinema ?c .\n  ?c rdfs:label ?nom .\n}\nGROUP BY ___"
+    ],
+    "c4": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX foaf: <http://xmlns.com/foaf/0.1/>\nSELECT ?nom\nWHERE {\n  ?p a cine:Acteur, cine:Realisateur ;\n     foaf:name ?nom .\n}",
+      "Le nom des personnes qui sont à la fois acteur et réalisateur.",
+      "Une ressource peut avoir plusieurs types : ?p a cine:Acteur, cine:Realisateur.",
+      "rIT->R",
+      "Complétez les ___.",
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX foaf: <http://xmlns.com/foaf/0.1/>\nSELECT ?nom\nWHERE {\n  ?p a ___ ;\n     foaf:name ?nom .\n}"
+    ],
+    "c5": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nSELECT ?titre\nWHERE {\n  ?f a cine:Film ;\n     cine:titre ?titre .\n  FILTER (lang(?titre) = \"fr\")\n  FILTER NOT EXISTS {\n    ?f cine:titre ?autre .\n    FILTER (lang(?autre) = \"en\")\n  }\n}",
+      "Le titre français des films qui n'ont pas de titre en anglais.",
+      "FILTER NOT EXISTS garde les films pour lesquels le motif entre accolades n'a aucune solution.",
+      "R->I",
+      "Exécutez la requête, puis rédigez en une phrase ce qu'elle recherche."
+    ],
+    "c6": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nSELECT ?ville (COUNT(DISTINCT ?f) AS ?films)\nWHERE {\n  ?p cine:cinema ?c ;\n     cine:film ?f .\n  ?c cine:ville ?ville .\n}\nGROUP BY ?ville",
+      "Pour chaque ville, le nombre de films différents projetés dans ses cinémas.",
+      "COUNT(DISTINCT ?f) ne compte qu'une fois un film projeté plusieurs fois.",
+      "RT->I",
+      ""
+    ],
+    "c7": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX ex:   <http://example.org/cinema/>\nASK {\n  ?r cine:acteur ex:reno ;\n     cine:film ?f .\n  ?f cine:realisePar ex:besson .\n}",
+      "Jean Reno (ex:reno) a-t-il joué dans un film réalisé par Luc Besson (ex:besson) ?",
+      "Une question fermée se traduit par ASK.",
+      "I->R",
+      ""
+    ],
+    "c8": [
+      "PREFIX cine: <http://example.org/cinema/vocab#>\nCONSTRUCT { ?f cine:distribution ?a }\nWHERE {\n  ?r cine:film ?f ;\n     cine:acteur ?a .\n}",
+      "Construire un graphe qui relie directement chaque film à chacun de ses acteurs par la propriété cine:distribution.",
+      "CONSTRUCT { modèle de triplets } WHERE { motif }.",
+      "I->R",
+      ""
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "database": {
+    "type": "rdf",
+    "name": "amis.ttl"
+  },
+  "questions": {
+    "a1": [
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX ex:   <http://example.org/amis/>\nSELECT ?nom\nWHERE {\n  ?p ex:ville \"Nantes\" ;\n     foaf:name ?nom .\n}\nORDER BY ?nom",
+      "Le nom des personnes qui habitent à Nantes, par ordre alphabétique.",
+      "La ville est un littéral : ex:ville \"Nantes\".",
+      "I->R",
+      ""
+    ],
+    "a2": [
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nSELECT ?nom\nWHERE {\n  ?p a foaf:Person ;\n     foaf:name ?nom .\n  FILTER NOT EXISTS { ?p foaf:age ?age }\n}",
+      "Le nom des personnes dont on ne connaît pas l'âge.",
+      "FILTER NOT EXISTS, ou OPTIONAL suivi de FILTER (!bound(?age)).",
+      "IT->R",
+      ""
+    ],
+    "a3": [
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX ex:   <http://example.org/amis/>\nSELECT DISTINCT ?nom\nWHERE {\n  ex:alice foaf:knows/foaf:knows ?p .\n  ?p foaf:name ?nom .\n  FILTER (?p != ex:alice)\n}",
+      "Le nom des personnes que connaissent les personnes connues d'Alice (ex:alice), sans Alice elle-même.",
+      "Un chemin de propriétés enchaîne deux foaf:knows avec /.",
+      "rI->R",
+      "Complétez le ___ par un chemin de propriétés.",
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX ex:   <http://example.org/amis/>\nSELECT DISTINCT ?nom\nWHERE {\n  ex:alice ___ ?p .\n  ?p foaf:name ?nom .\n  FILTER (?p != ex:alice)\n}"
+    ],
+    "a4": [
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nSELECT ?nom (COUNT(?i) AS ?n)\nWHERE {\n  ?p foaf:name ?nom ;\n     foaf:topic_interest ?i .\n}\nGROUP BY ?nom\nHAVING (COUNT(?i) > 1)",
+      "Le nom des personnes qui ont plusieurs centres d'intérêt, avec le nombre de leurs centres d'intérêt.",
+      "HAVING filtre les groupes, après le calcul des agrégats.",
+      "R->I",
+      ""
+    ],
+    "a5": [
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?libelle (COUNT(?p) AS ?n)\nWHERE {\n  ?p foaf:topic_interest ?i .\n  ?i rdfs:label ?libelle .\n  FILTER (lang(?libelle) = \"fr\")\n}\nGROUP BY ?libelle\nHAVING (COUNT(?p) > 2)",
+      "Les centres d'intérêt (libellé en français) partagés par plus de deux personnes, avec le nombre de ces personnes.",
+      "Regroupez par libellé, puis filtrez les groupes avec HAVING.",
+      "I->R",
+      ""
+    ],
+    "a6": [
+      "PREFIX foaf: <http://xmlns.com/foaf/0.1/>\nSELECT ?nom\nWHERE {\n  ?p a foaf:Person ;\n     foaf:name ?nom .\n  FILTER NOT EXISTS { ?p foaf:knows ?x }\n}",
+      "Le nom des personnes qui ne connaissent personne.",
+      "Attention au sens de foaf:knows : ici, ?p n'est le sujet d'aucun foaf:knows.",
+      "RT->I",
+      ""
+    ]
+  }
+}

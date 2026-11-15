@@ -1,8 +1,11 @@
 <?php
 // Actions appelées par le JavaScript (POST, réponse JSON) :
-// executer (jeu, requete64), explorer (jeu), reinitialiser (jeu)
+// executer (jeu, requete64), explorer (jeu), reinitialiser (jeu),
+// exercice (jeu, exercice), verifier (jeu, exercice, question, requete64),
+// intention (jeu, exercice, question, intention)
 require __DIR__.'/session.php';
 require_once __DIR__.'/fonctions.php';
+require_once __DIR__.'/exercices.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -28,6 +31,21 @@ case 'executer':
 	if (is_null($requete)) reponse(false, "<p class='statut ko'>❌ Pas de requête reçue.</p>", 400);
 	$r = execute_sparql($jeu, $requete);
 	reponse($r['ok'], affiche_resultat($r, prefixes_jeu($jeu)));
+// Exercices au format QueryCraft (exercices.php)
+case 'exercice':
+	$ex = questions_exercice($jeu, param('exercice'));
+	if (is_null($ex)) reponse(false, "<p class='statut ko'>❌ Exercice inconnu.</p>", 404);
+	http_response_code(200);
+	echo json_encode(array('ok' => true, 'exercice' => $ex), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	exit;
+case 'verifier':
+	$requete = requete_recue();
+	if (is_null($requete)) reponse(false, "<p class='statut ko'>❌ Pas de requête reçue.</p>", 400);
+	list($ok, $h) = verifie_reponse($jeu, param('exercice'), param('question'), $requete);
+	reponse($ok, $h);
+case 'intention':
+	list($ok, $h) = intention_reference($jeu, param('exercice'), param('question'), param('intention'));
+	reponse($ok, $h);
 case 'explorer':
 	reponse(true, explore_jeu($jeu));
 case 'reinitialiser':

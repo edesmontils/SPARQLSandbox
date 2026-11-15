@@ -9,6 +9,7 @@ define('DELAI_MAX', 2);
 define('TAILLE_MAX_COPIE', 2 * 1024 * 1024);
 require __DIR__.'/../dossiers.php';
 require __DIR__.'/../fonctions.php';
+require __DIR__.'/../exercices.php';
 $_SESSION = array();
 
 $succes = 0;
@@ -82,6 +83,13 @@ verifie(strpos(message_oxigraph("Error: x in ".DOSSIER_TMP."/copie_1\n\nStack ba
 $jeux = liste_jeux();
 verifie(isset($jeux['cinema'], $jeux['amis']), 'jeux cinema et amis trouvés');
 verifie(isset(prefixes_jeu('cinema')['cine']), 'préfixes du jeu lus');
+verifie(array_map('basename', $jeux['cinema']['fichiers']) === array('ontologie.ttl', 'cinema.ttl'), 'cinema : ontologie et instances dans deux fichiers');
+verifie(isset(prefixes_jeu('cinema')['ex']), 'préfixes lus dans tous les fichiers du jeu');
+verifie(compte_triplets(store_copie('cinema')) === 260, 'cinema : les deux fichiers sont chargés ensemble (260 triplets)');
+$r = execute_sparql('cinema', 'PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX cine: <http://example.org/cinema/vocab#> '
+	.'SELECT (COUNT(*) AS ?n) WHERE { ?p a ?c . ?c rdfs:subClassOf+ cine:Personne }');
+verifie($r['ok'] && ($r['resultat']['lignes'][0]['n']['value'] ?? '') === '25', "ontologie et instances interrogées ensemble");
+reinitialise_jeu('cinema');
 charge_config();
 verifie(contenu_xml(charge_config()->accueil) !== '', "page d'accueil dans config.xml");
 
@@ -156,6 +164,82 @@ verifie(!is_dir($copie), 'copie inactive purgée');
 verifie(!is_null(store_copie('amis')), 'copie refaite après la purge');
 
 //------------------------------------------------------------
+// Exercices au format QueryCraft
+//------------------------------------------------------------
+$_SESSION = array();
+verifie(isset(exos_de_jeu('cinema')['cinema-tp1'], exos_de_jeu('amis')['amis-tp1']), 'exercices rattachés à leur jeu');
+verifie(!isset(exos_de_jeu('amis')['cinema-tp1']), "un exercice n'apparaît que pour son jeu");
+$v = exos_valides(array('ok' => array('database' => array('type' => 'rdf', 'name' => 'x.ttl'), 'questions' => array(
+		'q1' => array('SELECT * {}', 'i', 'c', 'I->R', ''), 'q2' => array('a', 'b'), 'q3' => array(1, 2, 3, 4, 5))),
+	'../mauvais' => array('questions' => array('q' => array('a', 'b', 'c', 'I->R', '')))));
+verifie(array_keys($v) === array('ok') && array_keys($v['ok']['questions']) === array('q1'), 'exercices et questions mal formés écartés');
+verifie(exos_type('rIT->R') === array('modele' => true, 'table' => true, 'attendu' => 'R') && exos_type('RT->I')['attendu'] === 'I'
+	&& exos_type('nimporte')['attendu'] === 'R', 'lecture des types de question');
+
+// Ce qui part vers le navigateur : jamais la solution d'un …->R, ni l'intention attendue d'un …->I
+foreach (array('cinema' => 'cinema-tp1', 'amis' => 'amis-tp1') as $jeu => $code) {
+	$ex = questions_exercice($jeu, $code);
+	verifie(!is_null($ex) && count($ex['questions']) == count(exos_de_jeu($jeu)[$code]['questions']), "$code : questions envoyées");
+	foreach ($ex['questions'] as $c) {
+		$q = exos_question($jeu, $code, $c['code']);
+		$t = exos_type($q['type']);
+		$json = json_encode($c, JSON_UNESCAPED_UNICODE);
+		if ($t['attendu'] === 'R') verifie($c['requete'] === '' && strpos($json, json_encode($q['requete'], JSON_UNESCAPED_UNICODE)) === false, "$code/{$c['code']} : solution non envoyée");
+		else verifie($c['intention'] === '' && strpos($json, json_encode($q['intention'], JSON_UNESCAPED_UNICODE)) === false && $c['requete'] === $q['requete'], "$code/{$c['code']} : intention non envoyée, requête donnée");
+		verifie(($c['table'] !== '') === $t['table'], "$code/{$c['code']} : table attendue selon le type");
+		if ($t['table']) verifie(strpos($c['table'], '<table') !== false, "$code/{$c['code']} : table calculée");
+		verifie(($c['modele'] !== '') === $t['modele'], "$code/{$c['code']} : requête à trous selon le type");
+		// la solution de chaque question …->R est reconnue comme bonne réponse
+		if ($t['attendu'] === 'R') {
+			list($ok, $h) = verifie_reponse($jeu, $code, $c['code'], $q['requete']);
+			verifie($ok && strpos($h, "data-correct='1'") !== false, "$code/{$c['code']} : la solution est une bonne réponse");
+		}
+	}
+}
+verifie(is_null(questions_exercice('cinema', 'amis-tp1')) && is_null(questions_exercice('cinema', '../x')), 'exercice inconnu refusé');
+
+$P = "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX foaf: <http://xmlns.com/foaf/0.1/>\nPREFIX ex: <http://example.org/cinema/>\n";
+$cas = array(
+	// [question, réponse, bonne ?, extrait du message]
+	array('c1', $P.'SELECT ?t WHERE { ?f cine:annee ?a ; cine:titre ?t . FILTER(?a < 2000 && lang(?t)="fr") } ORDER BY DESC(?a)', false, "pas dans l'ordre"),
+	array('c1', $P.'SELECT ?t ?a WHERE { ?f cine:annee ?a ; cine:titre ?t . FILTER(?a < 2000 && lang(?t)="fr") } ORDER BY ?a', false, '2 colonnes'),
+	array('c1', $P.'SELECT ?t WHERE { ?f cine:annee ?a ; cine:titre ?t . FILTER(?a < 2000) } ORDER BY ?a', false, 'celui attendu en a 4'),
+	array('c2', $P.'SELECT DISTINCT ?n WHERE { ?r cine:acteur ?a ; cine:film ?f . ?f cine:realisePar ex:besson . ?a foaf:name ?n } ORDER BY DESC(?n)', true, 'Bonne réponse'),
+	array('c2', $P.'SELECT ?n WHERE { ?r cine:acteur ?a ; cine:film ?f . ?f cine:realisePar ex:besson . ?a foaf:name ?n }', false, 'celui attendu en a 3'),
+	array('c2', $P.'SELECT ?n WHERE { ?a a cine:Realisateur ; foaf:name ?n } LIMIT 3', false, 'certaines diffèrent'),
+	array('c7', $P.'ASK { ?r cine:acteur ex:portman ; cine:film ex:grandbleu }', false, "pas la réponse attendue"),
+	array('c7', $P.'ASK { ex:leon cine:realisePar ex:besson }', true, 'Bonne réponse'),
+	array('c7', $P.'SELECT * WHERE { ?s ?p ?o } LIMIT 1', false, 'requête ASK'),
+	array('c8', $P.'CONSTRUCT { ?f cine:distribution ?a . ?f cine:distribution ?a } WHERE { ?f a cine:Film . ?r cine:film ?f ; cine:acteur ?a }', true, 'Bonne réponse'),
+	array('c8', $P.'CONSTRUCT { ?f cine:distribution ?a } WHERE { ?r cine:film ?f ; cine:acteur ?a . FILTER(?f != ex:leon) }', false, 'triplets'),
+	array('c1', $P.'INSERT DATA { ex:x ex:y "z" }', false, "pas une mise à jour"),
+	array('c1', 'SELECT * WHERE { SERVICE <http://x> { ?s ?p ?o } }', false, 'SERVICE'),
+	array('c5', 'SELECT * WHERE { ?s ?p ?o }', false, 'Question inconnue'),
+);
+foreach ($cas as $c) {
+	list($ok, $h) = verifie_reponse('cinema', 'cinema-tp1', $c[0], $c[1]);
+	verifie((strpos($h, "data-correct='1'") !== false) === $c[2] && strpos(html_entity_decode($h, ENT_QUOTES), $c[3]) !== false,
+		"vérification {$c[0]} (« {$c[3]} ») : ".strip_tags($h));
+}
+reinitialise_jeu('cinema');
+// Des nœuds anonymes différents d'une exécution à l'autre restent équivalents
+$r1 = array('ok' => true, 'forme' => 'CONSTRUCT', 'prefixes' => array(), 'resultat' => array('tronque' => false, 'triplets' => array(
+	array(array('type' => 'bnode', 'value' => 'b1'), array('type' => 'uri', 'value' => 'http://p'), array('type' => 'literal', 'value' => 'x')))));
+$r2 = $r1; $r2['resultat']['triplets'][0][0]['value'] = 'autre';
+verifie(compare_resultats($r1, $r2, false)[0], 'nœuds anonymes équivalents');
+$r2['resultat']['triplets'][0][2]['xml:lang'] = 'fr';
+verifie(!compare_resultats($r1, $r2, false)[0], 'la langue d\'un littéral compte');
+
+list($ok, $h) = intention_reference('cinema', 'cinema-tp1', 'c5', 'court');
+verifie($ok && strpos($h, "pas de titre en anglais") !== false && strpos($h, 'court') !== false, 'intention : référence montrée avec celle de l\'étudiant');
+list($ok, $h) = intention_reference('cinema', 'cinema-tp1', 'c5', '  ');
+verifie(!$ok && strpos($h, 'anglais') === false, 'intention vide : pas de référence');
+list($ok, $h) = intention_reference('cinema', 'cinema-tp1', 'c1', 'Les titres des vieux films');
+verifie(!$ok && strpos($h, 'plus ancien') === false, 'intention demandée sur une question …->R : refusée');
+list($ok, $h) = intention_reference('cinema', 'cinema-tp1', 'c6', str_repeat('a', INTENTION_MAX + 1));
+verifie(!$ok, 'intention trop longue refusée');
+
+//------------------------------------------------------------
 // Application servie par PHP (contrôleur, jeton)
 //------------------------------------------------------------
 $port = 18000 + getmypid() % 1000;
@@ -191,6 +275,17 @@ if (function_exists('curl_init')) {
 	verifie($code == 400, 'contrôleur : jeu inconnu refusé');
 	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'explorer', 'jeu' => 'cinema', 'csrf' => $jeton));
 	verifie($code == 200 && strpos($corps, 'cine:Film') !== false, 'contrôleur : exploration');
+	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'exercice', 'jeu' => 'cinema', 'csrf' => $jeton, 'exercice' => 'cinema-tp1'));
+	$j = json_decode($corps, true);
+	verifie($code == 200 && count($j['exercice']['questions'] ?? array()) == 8 && strpos($corps, 'cine:annee ?a') === false, 'contrôleur : exercice sans solutions');
+	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'verifier', 'jeu' => 'cinema', 'csrf' => $jeton,
+		'exercice' => 'cinema-tp1', 'question' => 'c7', 'requete64' => base64_encode('ASK { <http://example.org/cinema/leon> ?p ?o }')));
+	verifie($code == 200 && strpos($corps, "data-correct='1'") !== false, 'contrôleur : réponse vérifiée');
+	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'intention', 'jeu' => 'cinema', 'csrf' => $jeton,
+		'exercice' => 'cinema-tp1', 'question' => 'c6', 'intention' => 'Le nombre de films par ville'));
+	verifie($code == 200 && strpos($corps, 'films différents') !== false, 'contrôleur : intention de référence');
+	list($code, $page) = http("http://127.0.0.1:$port/?jeu=amis");
+	verifie(strpos($page, 'data-exercice="amis-tp1"') !== false, 'page : carte de l\'exercice');
 	list($code, $page) = http("http://127.0.0.1:$port/");
 	verifie($code == 200 && strpos($page, 'Bienvenue') !== false, "page d'accueil servie");
 } else echo "(extension curl absente : tests HTTP sautés)\n";

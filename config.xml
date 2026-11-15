@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <!-- Configuration générale de SPARQL Sandbox. Les jeux de données sont décrits chacun
      par le config.xml de leur dossier dans donnees/. -->
-<sparqlsandbox version="0.1" name="SPARQL Sandbox">
+<sparqlsandbox version="0.2" name="SPARQL Sandbox">
 	<accueil>
 		<section class="post accueil">
 			<h2 class="title">Bienvenue dans SPARQL Sandbox</h2>
@@ -28,6 +28,9 @@
 						<strong>▶️ Exécuter</strong> (ou Ctrl+Entrée, Cmd+Entrée sur Mac).
 						« 🏷️ Insérer les préfixes » ajoute les déclarations <code>PREFIX</code> du jeu.</li>
 					<li><strong>Gardez vos requêtes</strong> utiles avec <strong>🧺 Mémoriser</strong>.</li>
+					<li><strong>Entraînez-vous</strong> avec les exercices d'un jeu (« 📝 Exercices ») :
+						écrivez la requête demandée puis <strong>✅ Vérifier ma réponse</strong>, ou rédigez
+						l'intention d'une requête donnée et comparez-la à celle de l'enseignant.</li>
 					<li>Pour <strong>repartir de zéro</strong>, « ↩️ Revenir au jeu d'origine » efface vos
 						modifications.</li>
 				</ol>

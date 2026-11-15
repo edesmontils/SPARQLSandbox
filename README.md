@@ -13,7 +13,7 @@ réserve le droit de supprimer toute instance à tout moment.
 
 - **Moteur SPARQL** : [Oxigraph](https://github.com/oxigraph/oxigraph) (SPARQL 1.1, requêtes et
   mises à jour), appelé en ligne de commande par PHP. Chaque jeu de données est chargé une fois
-  dans un store Oxigraph (`origine_<jeu>_<empreinte>`, refait quand le fichier change) ; chaque
+  dans un store Oxigraph (`origine_<jeu>_<empreinte>`, refait quand l'un de ses fichiers change) ; chaque
   session reçoit, à sa première requête, une copie de ce store (`copie_<aléa>_<jeu>`).
 - **Mises à jour** (`INSERT DATA`, `DELETE WHERE`, `DELETE/INSERT`, `CLEAR`…) : exécutées sur une
   copie temporaire du store de la session, qui ne le remplace que si elle réussit et ne dépasse
@@ -24,6 +24,7 @@ réserve le droit de supprimer toute instance à tout moment.
 - **Exploration** : « 🧩 Contenu de votre copie » liste les classes et les propriétés utilisées
   (avec leur nombre) ; un clic en fait une requête.
 - **Exemples** : chaque jeu de données propose des requêtes commentées (`config.xml` du jeu).
+- **Exercices** au format QueryCraft, avec vérification des requêtes (voir plus bas).
 - **Mémoire** : les requêtes mémorisées et le brouillon en cours sont gardés dans le navigateur
   (`localStorage`), par jeu de données.
 
@@ -88,14 +89,17 @@ place de `bdd` et `lib`).
 
 Créer un dossier dans `donnees/` avec :
 
-- le fichier de données : Turtle (`.ttl`), TriG (`.trig`, pour des graphes nommés), N-Triples,
-  N-Quads ou RDF/XML (format reconnu par son extension) ;
+- le ou les fichiers de données : Turtle (`.ttl`), TriG (`.trig`, pour des graphes nommés),
+  N-Triples, N-Quads ou RDF/XML (format reconnu par son extension). Plusieurs fichiers, par
+  exemple l'ontologie et les instances (comme pour « Cinéma » : `ontologie.ttl` et `cinema.ttl`),
+  sont chargés ensemble dans le graphe par défaut ;
 - un `config.xml` :
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <jeu nom="monjeu">                <!-- minuscules, chiffres, - et _ -->
 	<titre>Mon jeu</titre>
+	<fichier nom="ontologie.ttl"/>    <!-- un ou plusieurs fichiers -->
 	<fichier nom="monjeu.ttl"/>
 	<référence>https://…</référence>  <!-- facultatif -->
 	<description><p>Description en HTML…</p></description>
@@ -109,6 +113,62 @@ Créer un dossier dans `donnees/` avec :
 
 Dans les exemples, `<` et `>` s'écrivent `&lt;` et `&gt;`. Les tests (`php tests/run.php`)
 exécutent tous les exemples de tous les jeux.
+
+## Exercices (format QueryCraft)
+
+Comme dans SQLSandbox, les exercices suivent le format JSON de
+[QueryCraft](https://pedago.desmontils.net/querycraft/). Ils sont rangés dans
+`donnees/exercices/` (protégé comme les données) : un fichier par exercice, dont le nom
+(sans `.json`) est le code de l'exercice.
+
+```json
+{
+  "database": {"type": "rdf", "name": "cinema.ttl"},
+  "questions": {
+    "c1": ["SELECT … (solution)", "intention", "commentaire (indice)", "I->R", "instructions"],
+    "c3": ["SELECT … (solution)", "intention", "commentaire", "rI->R", "instructions", "SELECT ___ … (requête à trous)"]
+  }
+}
+```
+
+L'exercice porte sur le jeu de données dont l'un des fichiers s'appelle `database.name` (`type` :
+`rdf` ou `sparql`). Chaque question est une liste `[requête, intention, commentaire, type,
+instructions]`, avec un 6e élément, la requête à trous, pour les types `rI->R` et `rIT->R`.
+
+| Type | L'étudiant reçoit | Il produit |
+|---|---|---|
+| `I->R` | l'intention | la requête |
+| `IT->R` | l'intention et la table attendue | la requête |
+| `rI->R` | l'intention et une requête à trous | la requête |
+| `rIT->R` | l'intention, une requête à trous et la table attendue | la requête |
+| `R->I` | une requête, qu'il peut exécuter | son intention |
+| `RT->I` | une requête et son résultat | son intention |
+
+**Vérification des requêtes** (`…->R`), propre à SPARQLSandbox : « ✅ Vérifier ma réponse »
+(ou Ctrl+Entrée) exécute la requête de l'étudiant sur sa copie, puis la solution sur la même
+copie, et compare les résultats :
+
+- les noms des variables ne comptent pas, l'ordre des colonnes si ;
+- l'ordre des lignes ne compte que si la solution contient `ORDER BY` ;
+- les nœuds anonymes sont tous équivalents (leurs identifiants changent d'une exécution à
+  l'autre), la langue et le type des littéraux comptent ;
+- pour `CONSTRUCT` et `DESCRIBE`, ce sont les ensembles de triplets qui sont comparés.
+
+Le message dit si la forme de requête, le nombre de colonnes ou de lignes, l'ordre ou le contenu
+diffère, sans montrer la solution. Une question dont la solution est une mise à jour n'est pas
+comparée : la mise à jour est exécutée et l'étudiant vérifie son effet.
+
+**Intentions** (`…->I`) : auto-évaluation. Une fois son intention rédigée, l'étudiant la voit à
+côté de celle de l'enseignant. (La correction par IA de SQLSandbox n'est pas encore reprise.)
+
+Le navigateur ne reçoit jamais la solution d'une question `…->R` ni l'intention attendue d'une
+question `…->I` : le serveur les relit dans le fichier. La table attendue (types `…T…`) est
+calculée sur le jeu d'**origine**, avec les mêmes protections que les requêtes des étudiants, et
+gardée en cache dans le dossier de travail (`table_*`). Les réponses, intentions et questions
+réussies sont gardées dans le navigateur ; l'adresse `?jeu=cinema&exercice=cinema-tp1` ouvre
+directement un exercice.
+
+Les tests vérifient que chaque solution est reconnue comme bonne réponse.
 
 ## Tests
 
