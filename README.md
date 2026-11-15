@@ -155,6 +155,12 @@ instructions]`, avec un 6e élément, la requête à trous, pour les types `rI->
 | `R->I` | une requête, qu'il peut exécuter | son intention |
 | `RT->I` | une requête et son résultat | son intention |
 
+**Requêtes à trous** (`rI->R`, `rIT->R`) : comme dans SQLSandbox et QueryCraft, chaque trou du
+modèle, marqué par `___` (trois soulignés ou plus), devient un champ de saisie dans le texte coloré
+de la requête ; seuls les trous se remplissent (Entrée : trou suivant, Ctrl+Entrée : vérifier).
+L'exécution et la vérification attendent que tous les trous soient remplis. Si le modèle ne contient
+pas de `___`, la requête se complète dans l'éditeur.
+
 **Vérification des requêtes** (`…->R`), propre à SPARQLSandbox : « ✅ Vérifier ma réponse »
 (ou Ctrl+Entrée) exécute la requête de l'étudiant sur sa copie, puis la solution sur la même
 copie, et compare les résultats :
