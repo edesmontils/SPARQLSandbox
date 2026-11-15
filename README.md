@@ -6,6 +6,8 @@ Cette petite application Web a été développée à des fins pédagogiques, dan
 petits graphes RDF, directement dans le navigateur, sans compte et sans rien installer ; les
 données d'origine restent intactes.
 
+Une instance est en ligne : <https://pedago.desmontils.net/SPARQLSandbox/>.
+
 L'auteur ne peut être considéré responsable des dysfonctionnements ou pertes de données et se
 réserve le droit de supprimer toute instance à tout moment.
 
