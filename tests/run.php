@@ -83,6 +83,13 @@ verifie(strpos(message_oxigraph("Error: x in ".DOSSIER_TMP."/copie_1\n\nStack ba
 $jeux = liste_jeux();
 verifie(isset($jeux['cinema'], $jeux['amis']), 'jeux cinema et amis trouvés');
 verifie(isset(prefixes_jeu('cinema')['cine']), 'préfixes du jeu lus');
+verifie(array_map('basename', $jeux['cinema']['fichiers']) === array('ontologie.ttl', 'cinema.ttl'), 'cinema : ontologie et instances dans deux fichiers');
+verifie(isset(prefixes_jeu('cinema')['ex']), 'préfixes lus dans tous les fichiers du jeu');
+verifie(compte_triplets(store_copie('cinema')) === 260, 'cinema : les deux fichiers sont chargés ensemble (260 triplets)');
+$r = execute_sparql('cinema', 'PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX cine: <http://example.org/cinema/vocab#> '
+	.'SELECT (COUNT(*) AS ?n) WHERE { ?p a ?c . ?c rdfs:subClassOf+ cine:Personne }');
+verifie($r['ok'] && ($r['resultat']['lignes'][0]['n']['value'] ?? '') === '25', "ontologie et instances interrogées ensemble");
+reinitialise_jeu('cinema');
 charge_config();
 verifie(contenu_xml(charge_config()->accueil) !== '', "page d'accueil dans config.xml");
 

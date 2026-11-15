@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <jeu nom="cinema">
 	<titre>Cinéma</titre>
+	<!-- L'ontologie et les instances sont dans deux fichiers, chargés ensemble -->
+	<fichier nom="ontologie.ttl"/>
 	<fichier nom="cinema.ttl"/>
 	<référence></référence>
 	<description>
 		<p>Des films français, leurs acteurs et réalisateurs, et le programme (fictif) de trois cinémas
-			de l'agglomération nantaise. Le vocabulaire <code>cine:</code> est décrit en RDFS dans le jeu
-			lui-même :</p>
+			de l'agglomération nantaise. Le vocabulaire <code>cine:</code> est décrit en RDFS dans
+			<code>ontologie.ttl</code>, les instances dans <code>cinema.ttl</code> ; les deux fichiers sont
+			chargés ensemble :</p>
 		<ul>
 			<li><b>cine:Film</b> : <code>cine:titre</code> (en français et souvent en anglais),
 				<code>cine:annee</code>, <code>cine:genre</code>, <code>cine:realisePar</code> ;</li>

@@ -5,7 +5,7 @@
 // Un exercice est un fichier JSON de donnees/exercices/ :
 // {"database": {"type": "rdf", "name": "cinema.ttl"},
 //  "questions": {code: [requete, intention, commentaire, type, instructions(, modele)]}}
-// Il porte sur le jeu de données dont le fichier s'appelle database.name.
+// Il porte sur le jeu de données dont l'un des fichiers s'appelle database.name.
 //
 // Types de question : à gauche de la flèche ce que reçoit l'étudiant, à droite ce qu'il
 // produit. I : intention, R : requête, r : requête à trous (6e élément), T : table résultat
@@ -57,15 +57,15 @@ function exos_catalogue() {
 	return $exercices = exos_valides($lus);
 }
 
-// Exercices du jeu $jeu : ceux dont database désigne son fichier de données
+// Exercices du jeu $jeu : ceux dont database désigne l'un de ses fichiers de données
 function exos_de_jeu($jeu) {
 	$jeux = liste_jeux();
 	$liste = array();
 	if (!isset($jeux[$jeu])) return $liste;
-	$fichier = basename($jeux[$jeu]['fichier']);
+	$fichiers = array_map('basename', $jeux[$jeu]['fichiers']);
 	foreach (exos_catalogue() as $code => $exo) {
 		$db = $exo['database'];
-		if ($db && in_array($db['type'] ?? '', EXOS_TYPES_BASE, true) && ($db['name'] ?? '') === $fichier) $liste[$code] = $exo;
+		if ($db && in_array($db['type'] ?? '', EXOS_TYPES_BASE, true) && in_array($db['name'] ?? '', $fichiers, true)) $liste[$code] = $exo;
 	}
 	ksort($liste, SORT_NATURAL | SORT_FLAG_CASE);
 	return $liste;

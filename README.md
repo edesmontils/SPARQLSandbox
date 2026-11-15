@@ -13,7 +13,7 @@ réserve le droit de supprimer toute instance à tout moment.
 
 - **Moteur SPARQL** : [Oxigraph](https://github.com/oxigraph/oxigraph) (SPARQL 1.1, requêtes et
   mises à jour), appelé en ligne de commande par PHP. Chaque jeu de données est chargé une fois
-  dans un store Oxigraph (`origine_<jeu>_<empreinte>`, refait quand le fichier change) ; chaque
+  dans un store Oxigraph (`origine_<jeu>_<empreinte>`, refait quand l'un de ses fichiers change) ; chaque
   session reçoit, à sa première requête, une copie de ce store (`copie_<aléa>_<jeu>`).
 - **Mises à jour** (`INSERT DATA`, `DELETE WHERE`, `DELETE/INSERT`, `CLEAR`…) : exécutées sur une
   copie temporaire du store de la session, qui ne le remplace que si elle réussit et ne dépasse
@@ -89,14 +89,17 @@ place de `bdd` et `lib`).
 
 Créer un dossier dans `donnees/` avec :
 
-- le fichier de données : Turtle (`.ttl`), TriG (`.trig`, pour des graphes nommés), N-Triples,
-  N-Quads ou RDF/XML (format reconnu par son extension) ;
+- le ou les fichiers de données : Turtle (`.ttl`), TriG (`.trig`, pour des graphes nommés),
+  N-Triples, N-Quads ou RDF/XML (format reconnu par son extension). Plusieurs fichiers, par
+  exemple l'ontologie et les instances (comme pour « Cinéma » : `ontologie.ttl` et `cinema.ttl`),
+  sont chargés ensemble dans le graphe par défaut ;
 - un `config.xml` :
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <jeu nom="monjeu">                <!-- minuscules, chiffres, - et _ -->
 	<titre>Mon jeu</titre>
+	<fichier nom="ontologie.ttl"/>    <!-- un ou plusieurs fichiers -->
 	<fichier nom="monjeu.ttl"/>
 	<référence>https://…</référence>  <!-- facultatif -->
 	<description><p>Description en HTML…</p></description>
@@ -128,7 +131,7 @@ Comme dans SQLSandbox, les exercices suivent le format JSON de
 }
 ```
 
-L'exercice porte sur le jeu de données dont le fichier s'appelle `database.name` (`type` :
+L'exercice porte sur le jeu de données dont l'un des fichiers s'appelle `database.name` (`type` :
 `rdf` ou `sparql`). Chaque question est une liste `[requête, intention, commentaire, type,
 instructions]`, avec un 6e élément, la requête à trous, pour les types `rI->R` et `rIT->R`.
 

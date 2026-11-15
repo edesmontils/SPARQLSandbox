@@ -94,7 +94,9 @@ function contenu_xml($element) {
 }
 
 // Jeux de données : un dossier de donnees/ par jeu, décrit par son config.xml
-// nom => [titre, fichier, référence, description (HTML), exemples [[titre, requête]...]]
+// nom => [titre, fichiers, référence, description (HTML), exemples [[titre, requête]...]].
+// Un jeu peut avoir plusieurs fichiers (par exemple l'ontologie et les instances), chargés
+// ensemble dans le graphe par défaut.
 function liste_jeux() {
 	static $jeux = null;
 	if (!is_null($jeux)) return $jeux;
@@ -107,8 +109,10 @@ function liste_jeux() {
 			continue;
 		}
 		$nom = (string)$x['nom'];
-		$fichier = dirname($conf).'/'.basename((string)$x->fichier['nom']);
-		if (!preg_match('/^[a-z0-9][a-z0-9_-]*$/D', $nom) || !is_file($fichier)) {
+		$fichiers = array();
+		foreach ($x->fichier as $f) $fichiers[] = dirname($conf).'/'.basename((string)$f['nom']);
+		$absents = array_filter($fichiers, function ($f) { return !is_file($f); });
+		if (!preg_match('/^[a-z0-9][a-z0-9_-]*$/D', $nom) || !$fichiers || $absents) {
 			error_log("SPARQLSandbox : $conf ignoré (nom invalide ou fichier de données absent)");
 			continue;
 		}
@@ -117,7 +121,7 @@ function liste_jeux() {
 			$exemples[] = array((string)$ex['titre'], retire_marge((string)$ex));
 		$jeux[$nom] = array(
 			'titre' => (string)$x->titre !== '' ? (string)$x->titre : $nom,
-			'fichier' => $fichier,
+			'fichiers' => $fichiers,
 			'référence' => (string)$x->référence,
 			'description' => contenu_xml($x->description),
 			'exemples' => $exemples,
@@ -141,11 +145,12 @@ function retire_marge($texte) {
 	return trim(implode("\n", $lignes));
 }
 
-// Préfixes déclarés dans le fichier de données d'un jeu (@prefix ou PREFIX)
+// Préfixes déclarés dans les fichiers de données d'un jeu (@prefix ou PREFIX)
 function prefixes_jeu($jeu) {
 	$jeux = liste_jeux();
 	if (!isset($jeux[$jeu])) return array();
-	$texte = (string)@file_get_contents($jeux[$jeu]['fichier'], false, null, 0, 256 * 1024);
+	$texte = '';
+	foreach ($jeux[$jeu]['fichiers'] as $f) $texte .= (string)@file_get_contents($f, false, null, 0, 256 * 1024)."\n";
 	preg_match_all('/^\s*@?prefix\s+([A-Za-z][\w.-]*)?:\s*<([^>\s]*)>/mi', $texte, $m, PREG_SET_ORDER);
 	$p = array();
 	foreach ($m as $d) $p[$d[1]] = $d[2];
@@ -340,27 +345,29 @@ function libere($h) {
 	if (is_resource($h)) { flock($h, LOCK_UN); fclose($h); }
 }
 
-// Store du jeu d'origine, construit une fois depuis son fichier (Turtle, TriG, N-Triples...)
-// et refait quand le fichier change. Il n'est jamais interrogé : il sert de modèle aux copies.
+// Store du jeu d'origine, construit une fois depuis ses fichiers (Turtle, TriG, N-Triples...)
+// et refait quand l'un d'eux change. Il n'est jamais interrogé : il sert de modèle aux copies.
 function store_origine($jeu, &$erreur = null) {
 	$jeux = liste_jeux();
 	if (!isset($jeux[$jeu]) || is_null(DOSSIER_TMP)) { $erreur = "Jeu de données inconnu."; return null; }
-	$fichier = $jeux[$jeu]['fichier'];
-	$dossier = DOSSIER_TMP.'/origine_'.$jeu.'_'.substr(sha1_file($fichier), 0, 16);
+	$fichiers = $jeux[$jeu]['fichiers'];
+	$empreinte = '';
+	foreach ($fichiers as $f) $empreinte .= basename($f).':'.sha1_file($f)."\n";
+	$dossier = DOSSIER_TMP.'/origine_'.$jeu.'_'.substr(sha1($empreinte), 0, 16);
 	if (is_dir($dossier)) return $dossier;
 	$v = verrou('origine_'.$jeu, 30);
 	if (is_null($v)) { $erreur = "Le jeu de données est en cours de préparation : réessayez dans un instant."; return null; }
 	if (!is_dir($dossier)) {
 		$tmp = $dossier.'.tmp'.getmypid();
 		supprime_dossier($tmp);
-		$r = lance_oxigraph(array('load', '--location', $tmp, '--file', $fichier), '', 60);
+		$r = lance_oxigraph(array_merge(array('load', '--location', $tmp, '--file'), $fichiers), '', 60);
 		if ($r['code'] === 0 && is_dir($tmp) && @rename($tmp, $dossier)) {
 			// versions précédentes du même jeu
 			foreach (glob(DOSSIER_TMP.'/origine_'.$jeu.'_*') ?: array() as $ancien)
 				if ($ancien !== $dossier && strpos($ancien, '.tmp') === false) supprime_dossier($ancien);
 		} else {
 			supprime_dossier($tmp);
-			error_log("SPARQLSandbox : chargement de $fichier impossible : ".$r['erreur']);
+			error_log("SPARQLSandbox : chargement de ".implode(', ', $fichiers)." impossible : ".$r['erreur']);
 			$erreur = "Le jeu de données n'a pas pu être chargé.";
 		}
 	}

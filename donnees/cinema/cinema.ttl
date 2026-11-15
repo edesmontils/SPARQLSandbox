@@ -1,6 +1,6 @@
-# Jeu de données « Cinéma » de SPARQL Sandbox
+# Jeu de données « Cinéma » de SPARQL Sandbox : INSTANCES.
 # Films, personnes (acteurs et réalisateurs), rôles, cinémas de l'agglomération nantaise
-# et projections (programme fictif).
+# et projections (programme fictif). Le vocabulaire cine: est décrit dans ontologie.ttl.
 
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -8,30 +8,6 @@
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix cine: <http://example.org/cinema/vocab#> .
 @prefix ex:   <http://example.org/cinema/> .
-
-#---------------------------------------------------------------
-# Vocabulaire (schéma RDFS)
-#---------------------------------------------------------------
-
-cine:Film a rdfs:Class ; rdfs:label "Film"@fr, "Film"@en .
-cine:Personne a rdfs:Class ; rdfs:subClassOf foaf:Person ; rdfs:label "Personne"@fr .
-cine:Acteur a rdfs:Class ; rdfs:subClassOf cine:Personne ; rdfs:label "Acteur"@fr, "Actor"@en .
-cine:Realisateur a rdfs:Class ; rdfs:subClassOf cine:Personne ; rdfs:label "Réalisateur"@fr, "Director"@en .
-cine:Role a rdfs:Class ; rdfs:label "Rôle"@fr ;
-    rdfs:comment "Un acteur joue un personnage dans un film (relation à trois termes)."@fr .
-cine:Cinema a rdfs:Class ; rdfs:label "Cinéma"@fr .
-cine:Projection a rdfs:Class ; rdfs:label "Projection"@fr .
-
-cine:titre a rdf:Property ; rdfs:domain cine:Film ; rdfs:range rdfs:Literal .
-cine:annee a rdf:Property ; rdfs:domain cine:Film ; rdfs:range xsd:integer .
-cine:genre a rdf:Property ; rdfs:domain cine:Film ; rdfs:range xsd:string .
-cine:realisePar a rdf:Property ; rdfs:domain cine:Film ; rdfs:range cine:Realisateur .
-cine:acteur a rdf:Property ; rdfs:domain cine:Role ; rdfs:range cine:Acteur .
-cine:film a rdf:Property ; rdfs:range cine:Film .
-cine:personnage a rdf:Property ; rdfs:domain cine:Role ; rdfs:range xsd:string .
-cine:cinema a rdf:Property ; rdfs:domain cine:Projection ; rdfs:range cine:Cinema .
-cine:date a rdf:Property ; rdfs:domain cine:Projection ; rdfs:range xsd:date .
-cine:ville a rdf:Property ; rdfs:domain cine:Cinema ; rdfs:range xsd:string .
 
 #---------------------------------------------------------------
 # Personnes
