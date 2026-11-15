@@ -86,8 +86,9 @@ faire :
   HTTPS ; le texte des requêtes est envoyé en base64 pour ne pas être bloqué par un pare-feu
   applicatif ;
 - les messages d'Oxigraph sont montrés sans les chemins du serveur ;
-- les copies inactives depuis 3 heures (durée de la session) sont purgées à chaque ouverture de
-  l'application.
+- les copies inactives depuis 3 heures (durée de la session, réglable par `duree_session_min`)
+  sont purgées à chaque ouverture de l'application. La page d'accueil annonce la durée réglée, et
+  le pied de page affiche le temps restant avant l'expiration de la session.
 
 Les répertoires `donnees/`, `tests/` et `tmp/` ne doivent pas être accessibles depuis le web : les
 `.htaccess` fournis s'en chargent sous Apache. Sous nginx ou Caddy, les interdire dans la
