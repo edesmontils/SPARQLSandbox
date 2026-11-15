@@ -262,3 +262,61 @@ details.attendu .defile { margin-top: 8px; max-height: 40vh; }
 	display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: 4px;
 	background: var(--sb-accent-soft); color: var(--sb-accent); font-family: var(--sb-mono); font-size: .8em;
 }
+
+/* Copie de l'étudiant (exercice), à imprimer ou enregistrer en PDF, comme dans SQLSandbox */
+.post.editeur[hidden] { display: none; }
+.boutons-entete { display: flex; flex-wrap: wrap; gap: 8px; }
+.copie { margin-top: 8px; }
+.copie-entete { margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid var(--sb-accent-soft); }
+.copie-entete h2 { margin: 0 0 10px; }
+.copie-entete p { margin: 0 0 6px; }
+#copie-nom {
+	width: min(100%, 360px); padding: 6px 10px; font: inherit;
+	border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-sm);
+}
+#copie-nom:focus { outline: none; border-color: var(--sb-accent); box-shadow: 0 0 0 3px var(--sb-accent-ring); }
+.copie-bilan { font-weight: 600; }
+.copie-avertissement, .copie-pied { font-size: .88em; color: var(--sb-ink-faint); }
+.copie-question { padding: 14px 0; border-bottom: 1px solid var(--sb-border); break-inside: avoid; }
+.copie-question h3 { margin: 0 0 8px; }
+.copie-question h3 .type {
+	margin-left: 6px; font-size: .75em; font-weight: 600; text-transform: uppercase; color: var(--sb-ink-faint);
+}
+.copie-question p { margin: 0 0 8px; }
+.copie-question .libelle { margin-top: 0; }
+.copie-enonce { font-weight: 600; }
+.copie-consigne { font-style: italic; color: var(--sb-ink-soft); }
+pre.copie-sparql {
+	margin: 0 0 8px; padding: 10px 14px; font-family: var(--sb-mono); font-size: 14px; white-space: pre-wrap;
+	overflow-wrap: anywhere; background: var(--sb-surface-2); border: 1px solid var(--sb-border); border-radius: var(--sb-radius-sm);
+}
+.copie-texte {
+	margin: 0 0 8px; padding: 10px 14px; background: var(--sb-surface-2);
+	border-left: 4px solid var(--sb-accent); border-radius: var(--sb-radius-sm);
+}
+.copie-vide { font-style: italic; color: var(--sb-ink-faint); }
+.copie-etat { font-size: .92em; color: var(--sb-ink-soft); }
+.copie-etat.juste { color: var(--sb-ok); font-weight: 600; }
+.copie-etat.attention { color: var(--sb-danger); font-weight: 600; }
+.copie-pied { margin-top: 16px; }
+
+@media print {
+	@page { margin: 12mm 14mm; }
+	/* Seule la copie est imprimée, en version compacte (≈ 10 pt, 9 pt pour le SPARQL) */
+	body.mode-copie { padding: 0; background: #fff; font-size: 10pt; line-height: 1.35; }
+	body.mode-copie .container { box-shadow: none; border: none; border-radius: 0; max-width: none; }
+	body.mode-copie .entete, body.mode-copie nav.jeux, body.mode-copie .pied, body.mode-copie .laterale,
+	body.mode-copie main > .post, body.mode-copie main > .statut, body.mode-copie .sans-impression { display: none !important; }
+	body.mode-copie main { padding: 0; }
+	body.mode-copie .colonnes { display: block; }
+	body.mode-copie .exercice { padding: 0; border: none; box-shadow: none; }
+	#copie-nom { padding: 0; border: none; box-shadow: none; font-weight: 600; }
+	.copie-entete { margin-bottom: 6px; padding-bottom: 6px; }
+	.copie-entete h2 { margin-bottom: 4px; font-size: 14pt; }
+	.copie-entete p, .copie-question p { margin-bottom: 3px; }
+	.copie-question { padding: 6px 0; }
+	.copie-question h3 { margin-bottom: 3px; font-size: 11pt; }
+	pre.copie-sparql, .copie-texte { margin-bottom: 4px; padding: 4px 8px; break-inside: avoid; }
+	pre.copie-sparql { font-size: 9pt; line-height: 1.3; }
+	.copie-etat, .copie-avertissement, .copie-pied { font-size: 9pt; }
+}

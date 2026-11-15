@@ -425,6 +425,7 @@
 	}
 
 	function quitteExercice() {
+		modeCopie(false);
 		exercice = null;
 		panneau.hidden = true;
 		panneau.innerHTML = '';
@@ -438,11 +439,13 @@
 	}
 
 	function afficheQuestion(i) {
+		modeCopie(false);
 		exercice.index = i;
 		var q = questionCourante(), e = etatQuestion(q), n = exercice.questions.length, s = suivi(exercice.code);
 		var h = '<div class="exercice-entete"><h2 class="title">📝 ' + echappe(exercice.code) + ' · question ' + q.numero + '/' + n
 			+ ' <span class="sorte">' + echappe(q.libelle) + '</span></h2>'
-			+ '<button type="button" class="btn secondaire" data-action="quitter">✖ Quitter l\'exercice</button></div>';
+			+ '<span class="boutons-entete"><button type="button" class="btn secondaire" data-action="copie">📄 Ma copie</button>'
+			+ '<button type="button" class="btn secondaire" data-action="quitter">✖ Quitter l\'exercice</button></span></div>';
 		h += '<nav class="numeros" aria-label="Questions">';
 		exercice.questions.forEach(function (x, k) {
 			h += '<button type="button" class="numero' + (k === i ? ' courant' : '') + (faite(s[x.code]) ? ' faite' : '')
@@ -491,6 +494,7 @@
 			b.addEventListener('click', function () { afficheQuestion(+b.dataset.question); });
 		});
 		panneau.querySelector('[data-action="quitter"]').addEventListener('click', quitteExercice);
+		panneau.querySelector('[data-action="copie"]').addEventListener('click', afficheCopie);
 		panneau.querySelector('[data-action="precedente"]').addEventListener('click', function () { afficheQuestion(i - 1); });
 		panneau.querySelector('[data-action="suivante"]').addEventListener('click', function () { afficheQuestion(i + 1); });
 		var comparer = panneau.querySelector('[data-action="comparer"]');
@@ -502,9 +506,15 @@
 		if (!trousComplets()) return;
 		boutonVerifier.disabled = true;
 		resultat.innerHTML = "<p class='astuce'>⏳ Vérification…</p>";
-		appel('verifier', { exercice: exercice.code, question: q.code, requete64: base64(editeur.getValue()) }).then(function (r) {
+		var requete = editeur.getValue();
+		appel('verifier', { exercice: exercice.code, question: q.code, requete64: base64(requete) }).then(function (r) {
 			boutonVerifier.disabled = false;
 			resultat.innerHTML = r.html;
+			// La dernière vérification est gardée pour la copie
+			var statut = resultat.querySelector('.statut'), correct = resultat.querySelector('[data-correct]');
+			noteQuestion(q, { verification: { date: Date.now(), requete: requete, ok: !!r.ok,
+				correct: correct ? correct.dataset.correct === '1' : null,
+				message: statut ? statut.textContent.trim().slice(0, 300) : '' } });
 			if (resultat.querySelector('[data-correct="1"]')) {
 				noteQuestion(q, { reussie: true });
 				var b = panneau.querySelector('[data-question="' + exercice.index + '"]');
@@ -523,7 +533,7 @@
 			bouton.disabled = false;
 			zone.innerHTML = r.html;
 			if (r.ok) {
-				noteQuestion(q, { comparee: true });
+				noteQuestion(q, { comparee: true, comparaison: { date: Date.now(), texte: texte } });
 				var b = panneau.querySelector('[data-question="' + exercice.index + '"]');
 				if (b) b.classList.add('faite');
 				majCartes();
@@ -531,6 +541,128 @@
 		});
 	}
 
+	//------------------------------------------------------
+	// Copie de l'étudiant, comme dans SQLSandbox : ses réponses à l'exercice et ce qu'il en
+	// a fait (vérifications, comparaisons d'intention), à imprimer ou enregistrer en PDF
+	//------------------------------------------------------
+	var sectionEditeur = document.querySelector('.post.editeur');
+	var cleNom = 'sparqlsandbox-nom';
+	var titreAvantImpression = null;
+
+	function modeCopie(oui) {
+		document.body.classList.toggle('mode-copie', oui);
+		sectionEditeur.hidden = oui;
+	}
+	function dateLisible(ms) {
+		var d = new Date(ms);
+		return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+	}
+	function pluriel(n, mot) { return n + ' ' + mot + (n > 1 ? 's' : ''); }
+	// Une réponse compte si elle n'est pas vide et diffère du modèle donné au départ
+	function repondue(q, e) {
+		if (q.attendu === 'I') return typeof e.intention === 'string' && e.intention.trim() !== '';
+		return typeof e.reponse === 'string' && e.reponse.trim() !== '' && e.reponse.trim() !== (q.modele || '').trim();
+	}
+
+	function copieVerification(e) {
+		var v = e.verification;
+		if (!v) return '<p class="copie-etat attention">Réponse jamais vérifiée.</p>';
+		var h = '<p class="copie-etat' + (v.correct === true ? ' juste' : (v.correct === false || !v.ok) ? ' attention' : '') + '">'
+			+ 'Dernière vérification, le ' + dateLisible(v.date) + ' : ' + echappe(v.message || (v.ok ? 'requête exécutée.' : 'erreur.')) + '</p>';
+		if ((e.reponse || '').trim() !== (v.requete || '').trim())
+			h += '<p class="copie-etat attention">La réponse a été modifiée depuis cette vérification.</p>';
+		return h;
+	}
+	function copieComparaison(e) {
+		var c = e.comparaison;
+		if (!c) return e.comparee ? '<p class="copie-etat">Intention comparée à celle de l\'enseignant (auto-évaluation).</p>'
+			: '<p class="copie-etat">Comparaison non demandée.</p>';
+		var h = '<p class="copie-etat">Comparée à l\'intention de l\'enseignant le ' + dateLisible(c.date) + ' (auto-évaluation).</p>';
+		if ((e.intention || '').trim() !== (c.texte || '').trim())
+			h += '<p class="copie-etat attention">L\'intention a été modifiée après cette comparaison.</p>';
+		return h;
+	}
+
+	function afficheCopie() {
+		var qs = exercice.questions, s = suivi(exercice.code);
+		var nbRep = 0, nbJustes = 0, nbComp = 0;
+		qs.forEach(function (q) {
+			var e = s[q.code] || {};
+			if (repondue(q, e)) nbRep++;
+			if (q.attendu === 'R' && e.reussie) nbJustes++;
+			if (q.attendu === 'I' && e.comparee) nbComp++;
+		});
+		var nom = lit(cleNom, '');
+		var h = '<div class="sans-impression"><div class="boutons">'
+			+ '<button type="button" class="btn" data-action="imprimer">🖨️ Imprimer ou enregistrer en PDF</button>'
+			+ '<button type="button" class="btn secondaire" data-action="retour">⬅️ Retour à l\'exercice</button></div>'
+			+ '<p class="astuce">Dans la fenêtre d\'impression, choisissez « Enregistrer au format PDF » comme imprimante.</p></div>';
+		h += '<article class="copie"><header class="copie-entete"><h2>Copie — exercice ' + echappe(exercice.code) + '</h2>'
+			+ '<p><label for="copie-nom">Nom et prénom :</label> <input type="text" id="copie-nom" maxlength="100" autocomplete="name" value="'
+			+ echappe(typeof nom === 'string' ? nom : '') + '"></p>'
+			+ '<p>Jeu de données <strong>' + echappe(donnees.titre_jeu || donnees.jeu) + '</strong> · copie établie le ' + dateLisible(Date.now())
+			+ ' · ' + echappe(donnees.appli || 'SPARQL Sandbox') + ' ' + echappe(donnees.version || '') + '</p>'
+			+ '<p class="copie-bilan">' + nbRep + ' / ' + pluriel(qs.length, 'question') + ' avec une réponse';
+		if (qs.some(function (q) { return q.attendu === 'R'; }))
+			h += ' · ' + pluriel(nbJustes, 'requête') + ' vérifiée' + (nbJustes > 1 ? 's' : '') + ' juste' + (nbJustes > 1 ? 's' : '');
+		if (qs.some(function (q) { return q.attendu === 'I'; }))
+			h += ' · ' + pluriel(nbComp, 'intention') + ' comparée' + (nbComp > 1 ? 's' : '') + ' à celle de l\'enseignant';
+		h += '</p><p class="copie-avertissement">« Juste » veut dire que, lors de la vérification, la requête donnait sur la copie '
+			+ 'du jeu de données de l\'étudiant le même résultat que la solution.</p></header>';
+		qs.forEach(function (q) {
+			var e = s[q.code] || {};
+			h += '<section class="copie-question"><h3>Question ' + q.numero + ' <span class="type">' + echappe(q.libelle || '') + '</span></h3>';
+			if (q.instructions) h += '<p class="copie-consigne">' + echappe(q.instructions) + '</p>';
+			if (q.attendu === 'I') h += '<p class="libelle">Requête donnée :</p><pre class="cm-s-default copie-sparql">' + coloreSparql(q.requete) + '</pre>';
+			else h += '<p class="copie-enonce">' + echappe(q.intention) + '</p>';
+			h += '<p class="libelle">' + (q.attendu === 'I' ? 'Intention rédigée' : 'Requête proposée') + ' :</p>';
+			if (!repondue(q, e)) h += '<p class="copie-vide">Non traitée.</p>';
+			else if (q.attendu === 'I')
+				h += '<blockquote class="copie-texte">' + echappe(e.intention).replace(/\n/g, '<br>') + '</blockquote>' + copieComparaison(e);
+			else h += '<pre class="cm-s-default copie-sparql">' + coloreSparql(e.reponse) + '</pre>' + copieVerification(e);
+			h += '</section>';
+		});
+		h += '<footer class="copie-pied">Copie établie par le navigateur de l\'étudiant à partir de ce qu\'il y a saisi et vérifié.</footer></article>';
+
+		quitteTrous();
+		modeCopie(true);
+		panneau.innerHTML = h;
+		panneau.hidden = false;
+		boutonVerifier.hidden = true;
+		resultat.innerHTML = '';
+		var champNom = document.getElementById('copie-nom');
+		champNom.addEventListener('input', function () { ecrit(cleNom, champNom.value); });
+		panneau.querySelector('[data-action="imprimer"]').addEventListener('click', function () {
+			if (champNom.value.trim() === '') {
+				alert('Indiquez votre nom et votre prénom en haut de la copie.');
+				champNom.focus();
+				return;
+			}
+			window.print();
+		});
+		panneau.querySelector('[data-action="retour"]').addEventListener('click', function () { afficheQuestion(exercice.index); });
+		panneau.scrollIntoView({ block: 'start' });
+	}
+
+	// Nom proposé pour le fichier PDF : les navigateurs reprennent le titre de la page. Il est
+	// posé juste avant l'impression et rendu après (« Martin Élise - cinema-tp1 »).
+	function nomFichierCopie() {
+		var propre = function (x) { return x.replace(/[\/\\:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim(); };
+		var champ = document.getElementById('copie-nom'), nom = propre(champ ? champ.value : '').slice(0, 80);
+		return (nom ? nom + ' - ' : '') + propre(exercice.code);
+	}
+	window.addEventListener('beforeprint', function () {
+		if (!exercice || !document.getElementById('copie-nom') || titreAvantImpression !== null) return;
+		titreAvantImpression = document.title;
+		document.title = nomFichierCopie();
+	});
+	window.addEventListener('afterprint', function () {
+		if (titreAvantImpression === null) return;
+		document.title = titreAvantImpression;
+		titreAvantImpression = null;
+	});
+
+	// Cartes des exercices
 	document.querySelectorAll('.carte-exercice').forEach(function (c) {
 		c.addEventListener('click', function () { ouvreExercice(c.dataset.exercice); });
 	});

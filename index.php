@@ -37,6 +37,9 @@ $prefixes = is_null($jeu) ? array() : array_merge(array('rdf' => PREFIXES_STANDA
 $donnees_js = array(
 	'csrf' => $_SESSION['csrf'],
 	'duree_session' => DUREE_SESSION,
+	'appli' => $nom_appli,
+	'version' => $version,
+	'titre_jeu' => is_null($jeu) ? null : $jeux[$jeu]['titre'],
 	'jeu' => $jeu,
 	'prefixes' => $prefixes,
 	'exemples' => is_null($jeu) ? array() : $jeux[$jeu]['exemples'],

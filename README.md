@@ -178,6 +178,13 @@ comparée : la mise à jour est exécutée et l'étudiant vérifie son effet.
 **Intentions** (`…->I`) : auto-évaluation. Une fois son intention rédigée, l'étudiant la voit à
 côté de celle de l'enseignant. (La correction par IA de SQLSandbox n'est pas encore reprise.)
 
+**Copie de l'étudiant** : comme dans SQLSandbox, « 📄 Ma copie » (en tête de l'exercice) présente
+ses réponses, prêtes à imprimer ou à enregistrer en PDF par le navigateur : nom et prénom (gardés
+dans le navigateur), bilan, puis pour chaque question la requête proposée et sa dernière
+vérification, ou l'intention rédigée et sa comparaison, en signalant une réponse modifiée depuis.
+Seule la copie est imprimée, et le nom du fichier PDF proposé reprend celui de l'étudiant et le
+code de l'exercice.
+
 Le navigateur ne reçoit jamais la solution d'une question `…->R` ni l'intention attendue d'une
 question `…->I` : le serveur les relit dans le fichier. La table attendue (types `…T…`) est
 calculée sur le jeu d'**origine**, avec les mêmes protections que les requêtes des étudiants, et
