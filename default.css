@@ -186,3 +186,52 @@ table.resultat { width: 100%; border-collapse: collapse; font-size: .92em; }
 	.entete h1 { font-size: 1.6em; }
 	.post { padding: 14px; }
 }
+
+/* Exercices */
+.cartes-exercices { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.carte-exercice {
+	display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 10px 12px;
+	border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-md);
+	background: var(--sb-surface-2); font: inherit; text-align: left; cursor: pointer;
+}
+.carte-exercice:hover { border-color: var(--sb-accent); background: var(--sb-accent-soft); }
+.carte-exercice:focus-visible { outline: 3px solid var(--sb-accent-ring); outline-offset: 2px; }
+.carte-titre { font-weight: 600; }
+.carte-detail { color: var(--sb-ink-soft); font-size: .88em; }
+.carte-suivi { color: var(--sb-ok); font-size: .88em; }
+.carte-suivi:empty { display: none; }
+
+.exercice { border-color: var(--sb-accent); box-shadow: 0 0 0 3px var(--sb-accent-ring), var(--sb-shadow-card); }
+.exercice-entete { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.exercice-entete .title { margin-bottom: 8px; }
+.sorte {
+	display: inline-block; margin-left: 6px; padding: 1px 10px; border-radius: 999px;
+	background: var(--sb-accent-soft); color: var(--sb-accent); font-size: .7em; font-weight: 400; vertical-align: middle;
+}
+.numeros { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.numero {
+	min-width: 34px; height: 34px; border: 1px solid var(--sb-border-strong); border-radius: 50%;
+	background: var(--sb-surface); color: var(--sb-ink); font: inherit; cursor: pointer;
+}
+.numero:hover { border-color: var(--sb-accent); }
+.numero.faite { background: var(--sb-ok-soft); border-color: var(--sb-ok-border); color: var(--sb-ok); }
+.numero.courant { background: var(--sb-accent); border-color: var(--sb-accent); color: #fff; font-weight: 600; }
+.enonce { font-size: 1.08em; font-weight: 600; margin: 8px 0; }
+.instructions { color: var(--sb-ink-soft); font-style: italic; }
+details.attendu, details.aide { margin: 10px 0; }
+details > summary { cursor: pointer; color: var(--sb-accent); font-weight: 600; }
+details.attendu .defile { margin-top: 8px; max-height: 40vh; }
+.libelle { display: block; margin-top: 10px; font-weight: 600; }
+#intention {
+	width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--sb-border-strong);
+	border-radius: var(--sb-radius-sm); font-family: inherit; font-size: 1em; resize: vertical;
+}
+#intention:focus { outline: none; border-color: var(--sb-accent); box-shadow: 0 0 0 3px var(--sb-accent-ring); }
+.comparaison { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.comparaison h4 { margin: 4px 0; }
+.comparaison blockquote { margin: 0; padding: 8px 12px; border-left: 4px solid var(--sb-accent); background: var(--sb-surface-2); }
+@media (max-width: 700px) { .comparaison { grid-template-columns: 1fr; } }
+.navigation { justify-content: space-between; }
+.statut.neutre { color: var(--sb-ink); background: var(--sb-surface-2); border-color: var(--sb-border-strong); }
+.compte-lignes { color: var(--sb-ink-soft); font-size: .88em; margin: 6px 0 0; }
+.CodeMirror.cm-lecture { background: var(--sb-surface-2); }

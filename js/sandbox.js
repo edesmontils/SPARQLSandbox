@@ -13,8 +13,8 @@
 		tabSize: 2,
 		lineWrapping: true,
 		extraKeys: {
-			'Ctrl-Enter': function () { executer(); },
-			'Cmd-Enter': function () { executer(); }
+			'Ctrl-Enter': function () { raccourci(); },
+			'Cmd-Enter': function () { raccourci(); }
 		}
 	});
 
@@ -30,7 +30,10 @@
 	var brouillon = lit(cleBrouillon, null);
 	editeur.setValue(typeof brouillon === 'string' && brouillon !== '' ? brouillon
 		: (donnees.exemples.length ? donnees.exemples[0][1] : 'SELECT * WHERE { ?s ?p ?o } LIMIT 20'));
-	editeur.on('change', function () { ecrit(cleBrouillon, editeur.getValue()); });
+	editeur.on('change', function () {
+		if (!exercice) ecrit(cleBrouillon, editeur.getValue());
+		else if (questionCourante().attendu === 'R') noteQuestion(questionCourante(), { reponse: editeur.getValue() });
+	});
 
 	// Texte UTF-8 en base64 (un pare-feu applicatif peut refuser une requête en clair)
 	function base64(texte) {
@@ -55,6 +58,12 @@
 			.catch(function () {
 				return { ok: false, html: "<p class='statut ko'>❌ Le serveur ne répond pas.</p>" };
 			});
+	}
+
+	function echappe(t) {
+		return String(t).replace(/[&<>"']/g, function (c) {
+			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+		});
 	}
 
 	var resultat = document.getElementById('resultat');
@@ -175,4 +184,179 @@
 		afficheMemoire();
 	});
 	afficheMemoire();
+
+	//======================================================
+	// Exercices au format QueryCraft
+	//======================================================
+	// exercice : { code, questions, index } pendant un exercice, null sinon. Les réponses,
+	// intentions et réussites sont gardées dans ce navigateur, par exercice.
+	var exercice = null;
+	var texteLibre = null; // contenu de l'éditeur avant l'ouverture de l'exercice
+	var panneau = document.getElementById('exercice');
+	var boutonVerifier = document.getElementById('verifier');
+	var titreEditeur = document.getElementById('titre-editeur');
+	var titreLibre = titreEditeur.textContent;
+
+	function questionCourante() { return exercice.questions[exercice.index]; }
+	// Éditeur en lecture seule (requête donnée d'une question d'intention)
+	function lecture(oui) {
+		editeur.setOption('readOnly', oui);
+		editeur.getWrapperElement().classList.toggle('cm-lecture', oui);
+	}
+	function raccourci() {
+		if (exercice && questionCourante().attendu === 'R') verifier(); else executer();
+	}
+	function cleSuivi(code) { return 'sparqlsandbox-exercice-' + donnees.jeu + '-' + code; }
+	function suivi(code) {
+		var s = lit(cleSuivi(code), {});
+		return s && typeof s === 'object' && !Array.isArray(s) ? s : {};
+	}
+	function etatQuestion(q) { return suivi(exercice.code)[q.code] || {}; }
+	function noteQuestion(q, champs) {
+		var s = suivi(exercice.code), e = s[q.code] || {};
+		Object.keys(champs).forEach(function (k) { e[k] = champs[k]; });
+		s[q.code] = e;
+		ecrit(cleSuivi(exercice.code), s);
+	}
+	function faite(e) { return !!(e && (e.reussie || e.comparee)); }
+
+	// Progression affichée sur les cartes des exercices
+	function majCartes() {
+		document.querySelectorAll('.carte-exercice').forEach(function (c) {
+			var s = suivi(c.dataset.exercice), n = 0;
+			Object.keys(s).forEach(function (k) { if (faite(s[k])) n++; });
+			var zone = c.querySelector('.carte-suivi');
+			zone.textContent = n ? '✓ ' + n + '/' + zone.dataset.total + ' faite' + (n > 1 ? 's' : '') : '';
+		});
+	}
+
+	function adresse(code) {
+		try {
+			history.replaceState(null, '', '?jeu=' + encodeURIComponent(donnees.jeu)
+				+ (code ? '&exercice=' + encodeURIComponent(code) : ''));
+		} catch (e) { /* adresse inchangée */ }
+	}
+
+	function ouvreExercice(code) {
+		appel('exercice', { exercice: code }).then(function (r) {
+			if (!r.ok) { resultat.innerHTML = r.html; return; }
+			if (!exercice) texteLibre = editeur.getValue();
+			exercice = { code: code, questions: r.exercice.questions, index: 0 };
+			// reprise à la première question pas encore faite
+			var s = suivi(code), i = 0;
+			while (i < exercice.questions.length - 1 && faite(s[exercice.questions[i].code])) i++;
+			afficheQuestion(i);
+			adresse(code);
+			panneau.scrollIntoView({ block: 'start' });
+		});
+	}
+
+	function quitteExercice() {
+		exercice = null;
+		panneau.hidden = true;
+		panneau.innerHTML = '';
+		boutonVerifier.hidden = true;
+		titreEditeur.textContent = titreLibre;
+		lecture(false);
+		editeur.setValue(texteLibre !== null ? texteLibre : '');
+		resultat.innerHTML = '';
+		adresse(null);
+	}
+
+	function afficheQuestion(i) {
+		exercice.index = i;
+		var q = questionCourante(), e = etatQuestion(q), n = exercice.questions.length, s = suivi(exercice.code);
+		var h = '<div class="exercice-entete"><h2 class="title">📝 ' + echappe(exercice.code) + ' · question ' + q.numero + '/' + n
+			+ ' <span class="sorte">' + echappe(q.libelle) + '</span></h2>'
+			+ '<button type="button" class="btn secondaire" data-action="quitter">✖ Quitter l\'exercice</button></div>';
+		h += '<nav class="numeros" aria-label="Questions">';
+		exercice.questions.forEach(function (x, k) {
+			h += '<button type="button" class="numero' + (k === i ? ' courant' : '') + (faite(s[x.code]) ? ' faite' : '')
+				+ '" data-question="' + k + '"' + (k === i ? ' aria-current="step"' : '') + '>' + x.numero + '</button>';
+		});
+		h += '</nav>';
+		h += q.attendu === 'R'
+			? '<p class="enonce">' + echappe(q.intention) + '</p>'
+			: '<p class="enonce">Que recherche la requête ci-dessous ? Exécutez-la si besoin, puis rédigez son intention.</p>';
+		if (q.instructions) h += '<p class="instructions">' + echappe(q.instructions) + '</p>';
+		// table calculée et échappée par le serveur
+		if (q.table) h += '<details class="attendu" open><summary>Résultat ' + (q.attendu === 'R' ? 'attendu' : 'de la requête') + '</summary>' + q.table + '</details>';
+		if (q.aide) h += '<details class="aide"><summary>💡 Indice</summary><p>' + echappe(q.aide) + '</p></details>';
+		if (q.attendu === 'I') {
+			h += '<label for="intention" class="libelle">Votre intention :</label>'
+				+ '<textarea id="intention" rows="3" placeholder="Cette requête recherche…"></textarea>'
+				+ '<div class="boutons"><button type="button" class="btn" data-action="comparer">✅ Comparer avec l\'intention attendue</button></div>'
+				+ '<div id="correction"></div>';
+		}
+		h += '<div class="boutons navigation">'
+			+ '<button type="button" class="btn secondaire" data-action="precedente"' + (i === 0 ? ' disabled' : '') + '>◀ Précédente</button>'
+			+ '<button type="button" class="btn secondaire" data-action="suivante"' + (i === n - 1 ? ' disabled' : '') + '>Suivante ▶</button></div>';
+		panneau.innerHTML = h;
+		panneau.hidden = false;
+		resultat.innerHTML = '';
+
+		if (q.attendu === 'R') {
+			titreEditeur.textContent = '✏️ Votre réponse';
+			boutonVerifier.hidden = false;
+			lecture(false);
+			editeur.setValue(typeof e.reponse === 'string' ? e.reponse : (q.modele || ''));
+		} else {
+			titreEditeur.textContent = '🔎 Requête à comprendre';
+			boutonVerifier.hidden = true;
+			lecture(true);
+			editeur.setValue(q.requete);
+			var zone = document.getElementById('intention');
+			zone.value = typeof e.intention === 'string' ? e.intention : '';
+			zone.addEventListener('input', function () { noteQuestion(q, { intention: zone.value }); });
+		}
+
+		panneau.querySelectorAll('[data-question]').forEach(function (b) {
+			b.addEventListener('click', function () { afficheQuestion(+b.dataset.question); });
+		});
+		panneau.querySelector('[data-action="quitter"]').addEventListener('click', quitteExercice);
+		panneau.querySelector('[data-action="precedente"]').addEventListener('click', function () { afficheQuestion(i - 1); });
+		panneau.querySelector('[data-action="suivante"]').addEventListener('click', function () { afficheQuestion(i + 1); });
+		var comparer = panneau.querySelector('[data-action="comparer"]');
+		if (comparer) comparer.addEventListener('click', function () { compareIntention(q, comparer); });
+	}
+
+	function verifier() {
+		var q = questionCourante();
+		boutonVerifier.disabled = true;
+		resultat.innerHTML = "<p class='astuce'>⏳ Vérification…</p>";
+		appel('verifier', { exercice: exercice.code, question: q.code, requete64: base64(editeur.getValue()) }).then(function (r) {
+			boutonVerifier.disabled = false;
+			resultat.innerHTML = r.html;
+			if (resultat.querySelector('[data-correct="1"]')) {
+				noteQuestion(q, { reussie: true });
+				var b = panneau.querySelector('[data-question="' + exercice.index + '"]');
+				if (b) b.classList.add('faite');
+				majCartes();
+			}
+		});
+	}
+	boutonVerifier.addEventListener('click', verifier);
+
+	function compareIntention(q, bouton) {
+		var texte = document.getElementById('intention').value;
+		var zone = document.getElementById('correction');
+		bouton.disabled = true;
+		appel('intention', { exercice: exercice.code, question: q.code, intention: texte }).then(function (r) {
+			bouton.disabled = false;
+			zone.innerHTML = r.html;
+			if (r.ok) {
+				noteQuestion(q, { comparee: true });
+				var b = panneau.querySelector('[data-question="' + exercice.index + '"]');
+				if (b) b.classList.add('faite');
+				majCartes();
+			}
+		});
+	}
+
+	document.querySelectorAll('.carte-exercice').forEach(function (c) {
+		c.addEventListener('click', function () { ouvreExercice(c.dataset.exercice); });
+	});
+	majCartes();
+	if (donnees.exercice && document.querySelector('.carte-exercice[data-exercice="' + CSS.escape(donnees.exercice) + '"]'))
+		ouvreExercice(donnees.exercice);
 })();

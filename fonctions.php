@@ -429,7 +429,7 @@ function purge_copies($seuil) {
 			else $total += taille_dossier($c);
 		} elseif (preg_match('/\.(tmp\d*|maj\d+|vieux\d+)$/', $f) && $age > 600) {
 			supprime_dossier($c); // restes d'une requête interrompue
-		} elseif (strpos($f, 'verrou_ip_') === 0 && $age > $seuil) {
+		} elseif ((strpos($f, 'verrou_ip_') === 0 || strpos($f, 'table_') === 0) && $age > $seuil) {
 			@unlink($c);
 		}
 	}
@@ -485,28 +485,36 @@ function execute_sparql($jeu, $requete) {
 	if (is_null($v)) { libere($place); $res['message'] = "Une autre de vos requêtes est en cours sur ce jeu : réessayez dans un instant."; return $res; }
 	try {
 		if ($a['forme'] === 'UPDATE') return execute_mise_a_jour($copie, $requete, $res);
-		$format = in_array($a['forme'], array('CONSTRUCT', 'DESCRIBE')) ? 'nt' : 'json';
-		$r = lance_oxigraph(array('query', '--location', $copie, '--results-format', $format), $requete);
-		if (!is_null($m = message_execution($r))) { $res['message'] = $m; return $res; }
-		if ($format === 'nt') {
-			$res['resultat'] = lit_ntriples($r['sortie']);
-		} else {
-			$j = json_decode($r['sortie'], true);
-			if (!is_array($j)) { $res['message'] = "Réponse d'Oxigraph illisible."; return $res; }
-			if (array_key_exists('boolean', $j)) { $res['forme'] = 'ASK'; $res['resultat'] = (bool)$j['boolean']; }
-			else {
-				$lignes = $j['results']['bindings'] ?? array();
-				$res['resultat'] = array('variables' => $j['head']['vars'] ?? array(),
-					'lignes' => array_slice($lignes, 0, MAX_LIGNES), 'tronque' => count($lignes) > MAX_LIGNES);
-			}
-		}
-		$res['ok'] = true;
-		return $res;
+		return interroge_store($copie, $requete, $a);
 	} finally {
 		@touch($copie);
 		libere($v);
 		libere($place);
 	}
+}
+
+// Interrogation (pas de mise à jour) du store $store, déjà analysée ($a, analyse_sparql()) ;
+// renvoie le même tableau qu'execute_sparql(). Le store n'est pas modifié.
+function interroge_store($store, $requete, $a) {
+	$res = array('ok' => false, 'message' => '', 'forme' => $a['forme'], 'resultat' => null, 'prefixes' => $a['prefixes']);
+	$format = in_array($a['forme'], array('CONSTRUCT', 'DESCRIBE')) ? 'nt' : 'json';
+	$r = lance_oxigraph(array('query', '--location', $store, '--results-format', $format), $requete);
+	if (!is_null($m = message_execution($r))) { $res['message'] = $m; return $res; }
+	if ($format === 'nt') {
+		$res['resultat'] = lit_ntriples($r['sortie']);
+	} else {
+		$j = json_decode($r['sortie'], true);
+		if (!is_array($j)) { $res['message'] = "Réponse d'Oxigraph illisible."; return $res; }
+		if (array_key_exists('boolean', $j)) { $res['forme'] = 'ASK'; $res['resultat'] = (bool)$j['boolean']; }
+		else {
+			$res['forme'] = 'SELECT';
+			$lignes = $j['results']['bindings'] ?? array();
+			$res['resultat'] = array('variables' => $j['head']['vars'] ?? array(),
+				'lignes' => array_slice($lignes, 0, MAX_LIGNES), 'tronque' => count($lignes) > MAX_LIGNES);
+		}
+	}
+	$res['ok'] = true;
+	return $res;
 }
 
 // Message d'échec d'un appel à Oxigraph, ou null s'il a réussi
@@ -600,41 +608,54 @@ function affiche_terme($t, $prefixes) {
 // Résultat d'execute_sparql() en HTML
 function affiche_resultat($r, $prefixes) {
 	if (!$r['ok']) return "<p class='statut ko'>❌ ".nl2br(html($r['message']))."</p>";
-	$prefixes = array_merge(PREFIXES_STANDARD, $prefixes, $r['prefixes']);
+	$statut = $r['forme'] === 'UPDATE' ? '✅ Mise à jour effectuée' : '✅ Requête réussie';
+	return "<p class='statut ok'>$statut</p>".affiche_corps($r, $prefixes);
+}
+
+// Résultat réussi sans la ligne de statut : réponse d'un ASK, effet d'une mise à jour, ou
+// tableau (SELECT ; sujet, prédicat, objet pour CONSTRUCT et DESCRIBE) suivi de sa taille.
+// Préfixes utilisés pour abréger les IRI : standard, du jeu ($prefixes), de la requête.
+function affiche_corps($r, $prefixes) {
+	$prefixes = array_merge(PREFIXES_STANDARD, $prefixes, $r['prefixes'] ?? array());
 	$x = $r['resultat'];
 	switch ($r['forme']) {
 	case 'ASK':
-		return "<p class='statut ok'>✅ Requête réussie</p><p class='booleen'>Réponse : <strong>".($x ? 'vrai (true)' : 'faux (false)')."</strong></p>";
+		return "<p class='booleen'>Réponse : <strong>".($x ? 'vrai (true)' : 'faux (false)')."</strong></p>";
 	case 'UPDATE':
-		$h = "<p class='statut ok'>✅ Mise à jour effectuée</p>";
-		if (!is_null($x['avant']) && !is_null($x['apres'])) {
-			$d = $x['apres'] - $x['avant'];
-			$h .= "<p>Votre copie contient maintenant <strong>".$x['apres']."</strong> triplet".($x['apres'] > 1 ? 's' : '')
-			     ." (".($d > 0 ? '+' : '').$d.").</p>";
-		}
-		return $h;
+		if (is_null($x['avant']) || is_null($x['apres'])) return '';
+		$d = $x['apres'] - $x['avant'];
+		return "<p>Votre copie contient maintenant <strong>".$x['apres']."</strong> triplet".($x['apres'] > 1 ? 's' : '')
+		      ." (".($d > 0 ? '+' : '').$d.").</p>";
 	case 'CONSTRUCT': case 'DESCRIBE':
-		$n = count($x['triplets']);
-		$h = "<p class='statut ok'>✅ Requête réussie : $n triplet".($n > 1 ? 's' : '').($x['tronque'] ? ' (seuls les '.MAX_LIGNES.' premiers sont affichés)' : '')."</p>";
-		if ($n == 0) return $h;
-		$h .= "<div class='defile'><table class='resultat'><thead><tr><th>Sujet</th><th>Prédicat</th><th>Objet</th></tr></thead><tbody>\n";
-		foreach ($x['triplets'] as $t)
-			$h .= "<tr><td>".affiche_terme($t[0], $prefixes)."</td><td>".affiche_terme($t[1], $prefixes)."</td><td>".affiche_terme($t[2], $prefixes)."</td></tr>\n";
-		return $h."</tbody></table></div>";
+		$entetes = array('Sujet', 'Prédicat', 'Objet');
+		$lignes = array();
+		foreach ($x['triplets'] as $t) $lignes[] = $t;
+		$unite = 'triplet';
+		break;
 	default: // SELECT
-		$n = count($x['lignes']);
-		$h = "<p class='statut ok'>✅ Requête réussie : $n ligne".($n > 1 ? 's' : '').($x['tronque'] ? ' (seules les '.MAX_LIGNES.' premières sont affichées)' : '')."</p>";
-		if (!$x['variables']) return $h;
-		$h .= "<div class='defile'><table class='resultat'><thead><tr>";
-		foreach ($x['variables'] as $v) $h .= "<th>?".html($v)."</th>";
-		$h .= "</tr></thead><tbody>\n";
+		$entetes = array();
+		foreach ($x['variables'] as $v) $entetes[] = '?'.$v;
+		$lignes = array();
 		foreach ($x['lignes'] as $l) {
-			$h .= "<tr>";
-			foreach ($x['variables'] as $v) $h .= "<td>".(isset($l[$v]) ? affiche_terme($l[$v], $prefixes) : "<span class='non-lie'>—</span>")."</td>";
-			$h .= "</tr>\n";
+			$c = array();
+			foreach ($x['variables'] as $v) $c[] = $l[$v] ?? null;
+			$lignes[] = $c;
 		}
-		return $h."</tbody></table></div>";
+		$unite = 'ligne';
 	}
+	$n = count($lignes);
+	$compte = "<p class='compte-lignes'>$n $unite".($n > 1 ? 's' : '')
+	         .($x['tronque'] ? ' (seul'.($unite === 'ligne' ? 'es les ' : 's les ').MAX_LIGNES.' premi'.($unite === 'ligne' ? 'ères' : 'ers').' sont affiché'.($unite === 'ligne' ? 'e' : '').'s)' : '')."</p>";
+	if ($n == 0 || !$entetes) return $compte;
+	$h = "<div class='defile'><table class='resultat'><thead><tr>";
+	foreach ($entetes as $e) $h .= "<th>".html($e)."</th>";
+	$h .= "</tr></thead><tbody>\n";
+	foreach ($lignes as $l) {
+		$h .= "<tr>";
+		foreach ($l as $t) $h .= "<td>".(is_null($t) ? "<span class='non-lie'>—</span>" : affiche_terme($t, $prefixes))."</td>";
+		$h .= "</tr>\n";
+	}
+	return $h."</tbody></table></div>".$compte;
 }
 
 // Aperçu de la copie de session : nombre de triplets, classes et propriétés utilisées

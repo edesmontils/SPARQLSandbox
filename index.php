@@ -1,6 +1,7 @@
 <?php
 require __DIR__.'/session.php';
 require_once __DIR__.'/fonctions.php';
+require_once __DIR__.'/exercices.php';
 
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
 if ($session_ok) session_regenerate_id(true);
@@ -38,7 +39,10 @@ $donnees_js = array(
 	'jeu' => $jeu,
 	'prefixes' => $prefixes,
 	'exemples' => is_null($jeu) ? array() : $jeux[$jeu]['exemples'],
+	// Exercice à ouvrir au chargement (?jeu=…&exercice=…)
+	'exercice' => (is_null($jeu) || !is_string(param('exercice'))) ? null : param('exercice'),
 );
+$exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -89,11 +93,14 @@ $donnees_js = array(
   </section>
 
   <div class="colonnes">
+    <div class="principale">
+    <section class="post exercice" id="exercice" hidden aria-live="polite"></section>
     <section class="post editeur">
-      <h2 class="title">✏️ Interroger ce jeu de données</h2>
+      <h2 class="title" id="titre-editeur">✏️ Interroger ce jeu de données</h2>
       <label for="requete" class="visuellement-cache">Requête SPARQL</label>
       <textarea id="requete" spellcheck="false"></textarea>
       <div class="boutons">
+        <button type="button" class="btn" id="verifier" hidden title="Ctrl+Entrée (Cmd+Entrée sur Mac)">✅ Vérifier ma réponse</button>
         <button type="button" class="btn" id="executer" title="Ctrl+Entrée (Cmd+Entrée sur Mac)">▶️ Exécuter</button>
         <button type="button" class="btn secondaire" id="prefixes">🏷️ Insérer les préfixes</button>
         <button type="button" class="btn secondaire" id="memoriser">🧺 Mémoriser</button>
@@ -101,8 +108,26 @@ $donnees_js = array(
       </div>
       <div id="resultat" aria-live="polite"></div>
     </section>
+    </div>
 
     <aside class="laterale">
+<?php if ($exercices) { ?>
+      <section class="post">
+        <h2 class="title">📝 Exercices</h2>
+        <ul class="cartes-exercices">
+<?php foreach ($exercices as $code => $exo) {
+	$sortes = array();
+	foreach ($exo['questions'] as $q) $sortes[libelle_type($q[3])] = true;
+	$nb = count($exo['questions']); ?>
+          <li><button type="button" class="carte-exercice" data-exercice="<?php echo html($code); ?>">
+            <span class="carte-titre"><?php echo html($code); ?></span>
+            <span class="carte-detail"><?php echo $nb.' question'.($nb > 1 ? 's' : '').' · '.html(implode(', ', array_keys($sortes))); ?></span>
+            <span class="carte-suivi" data-total="<?php echo $nb; ?>"></span>
+          </button></li>
+<?php } ?>
+        </ul>
+      </section>
+<?php } ?>
 <?php if ($j['exemples']) { ?>
       <section class="post">
         <h2 class="title">💡 Exemples</h2>
