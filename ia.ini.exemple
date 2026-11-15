@@ -1,0 +1,21 @@
+; Correction des intentions par IA (voir ia.php), comme dans SQL Sandbox.
+; À copier HORS du site, à côté de la racine web, sous le nom sparqlsandbox-ia.ini
+; (~/sparqlsandbox-ia.ini chez OVH), avec des droits restreints (chmod 600), ou indiquer
+; son emplacement dans la variable d'environnement SPARQLSANDBOX_IA_INI.
+; Sans ce fichier, l'étudiant compare son intention à celle de l'enseignant (auto-évaluation).
+; Ne jamais mettre la vraie clé dans le dépôt.
+
+; Point d'entrée de ProxyIAg (HTTPS obligatoire, sauf pour localhost)
+url = "https://<hôte>/proxyiag/v1"
+; Clé propre à l'application (créée avec : proxyiag-keys add --name SPARQLSandbox ...)
+cle = "sk-..."
+; Alias du modèle
+modele = "proxyiag/gemma-4-31b"
+
+; Réglages facultatifs (valeurs par défaut indiquées)
+; par_session_intention = 30 ; corrections d'intention par session et par jour
+; delai = 5              ; secondes minimum entre deux corrections d'une session
+; par_ip = 250           ; appels par adresse IP et par jour (0 = sans limite)
+; plafond_global = 500   ; appels par jour pour toute l'application (0 = sans limite)
+; max_tokens = 1500      ; longueur maximale de la réponse
+; delai_appel = 60       ; secondes d'attente de la réponse

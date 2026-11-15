@@ -62,6 +62,8 @@ Un hébergement mutualisé qui interdit `proc_open` ou l'exécution de binaires 
 3. Facultatif : copier `sparqlsandbox.ini.exemple` hors du site sous le nom `sparqlsandbox.ini`
    (ou l'indiquer par la variable `SPARQLSANDBOX_INI`) pour régler le chemin d'Oxigraph, la durée
    des sessions et les plafonds d'espace disque.
+4. Facultatif : copier `ia.ini.exemple` hors du site sous le nom `sparqlsandbox-ia.ini` pour
+   activer la correction des intentions par IA (voir plus bas).
 
 Un message « Problème d'installation » s'affiche si aucun dossier de travail n'est utilisable ou
 si Oxigraph est introuvable.
@@ -175,8 +177,10 @@ Le message dit si la forme de requête, le nombre de colonnes ou de lignes, l'or
 diffère, sans montrer la solution. Une question dont la solution est une mise à jour n'est pas
 comparée : la mise à jour est exécutée et l'étudiant vérifie son effet.
 
-**Intentions** (`…->I`) : auto-évaluation. Une fois son intention rédigée, l'étudiant la voit à
-côté de celle de l'enseignant. (La correction par IA de SQLSandbox n'est pas encore reprise.)
+**Intentions** (`…->I`) : corrigées par une IA quand elle est activée (section suivante), sinon
+auto-évaluation : une fois son intention rédigée, l'étudiant la voit à côté de celle de
+l'enseignant. Avec l'IA, l'intention de l'enseignant n'est jamais montrée, et une question
+d'intention ne compte comme faite que si l'IA la juge correcte.
 
 **Copie de l'étudiant** : comme dans SQLSandbox, « 📄 Ma copie » (en tête de l'exercice) présente
 ses réponses, prêtes à imprimer ou à enregistrer en PDF par le navigateur : nom et prénom (gardés
@@ -193,6 +197,44 @@ réussies sont gardées dans le navigateur ; l'adresse `?jeu=cinema&exercice=cin
 directement un exercice.
 
 Les tests vérifient que chaque solution est reconnue comme bonne réponse.
+
+## Correction des intentions par IA
+
+Comme dans SQLSandbox, « ✅ Faire corriger mon intention » fait évaluer l'intention rédigée pour une
+question `R->I` ou `RT->I` par un modèle de langage, qui rend un verdict (correcte, partiellement
+correcte, incorrecte) et un retour bref, sans donner l'intention attendue ni de SPARQL. La
+correction est gardée dans le navigateur et figure sur la copie de l'étudiant.
+
+La fonction passe par un ProxyIAg (proxy compatible
+OpenAI qui garde les vraies clés des providers et applique des quotas) et **n'existe que si le
+fichier de réglages est présent**. Copier `ia.ini.exemple` **hors du site**, à côté de la racine
+web, sous le nom `sparqlsandbox-ia.ini` (`~/sparqlsandbox-ia.ini` chez OVH, droits `600`), et y
+renseigner l'URL du proxy (HTTPS obligatoire hors `localhost`), une clé `sk-…` propre à
+l'application et l'alias du modèle. La variable d'environnement `SPARQLSANDBOX_IA_INI` permet de
+placer le fichier ailleurs. Prérequis : les extensions `curl` et `mbstring` de PHP ; sans elles,
+la fonction est désactivée.
+
+- **Prompt** : `templates/intention_prompt.md`, adapté de celui de SQLSandbox et QueryCraft. Le
+  serveur y place la requête et l'intention de l'enseignant, relues dans le fichier de
+  l'exercice (jamais reçues du navigateur), et l'intention de l'étudiant. Le message système
+  décrit le jeu de données : sa description (`config.xml`) et le contenu de ses fichiers
+  (ontologie et instances, 20 000 caractères au plus).
+- **Injections** : l'intention de l'étudiant est placée entre balises `<intention_etudiant>`
+  (qu'il ne peut pas refermer lui-même), et le modèle a pour consigne de ne suivre aucune
+  demande qu'elle contient. Si l'explication renvoyée recopie malgré tout l'intention de
+  référence (entière, ou six de ses mots à la suite), elle est remplacée par un message
+  invitant à reformuler, et l'incident est noté dans le journal de PHP.
+- **Quotas** : la clé étant unique, le quota de ProxyIAg est commun à tous les étudiants.
+  L'application limite donc chaque session (`par_session_intention`, 30 corrections par jour,
+  `delai` de 5 secondes entre deux), chaque adresse IP (`par_ip`, 250 appels par jour, fichier
+  `ia_ip` du dossier de travail ; assez large pour une salle de TP derrière une même adresse)
+  et l'installation entière (`plafond_global`, 500 par jour, fichier `ia_compteur`). Un appel
+  qui échoue côté service est rendu au quota.
+- **Erreurs** : les messages du proxy ne sont jamais montrés aux étudiants ; ils vont dans le
+  journal d'erreurs de PHP. La session est libérée pendant l'appel, pour que les autres
+  requêtes de l'étudiant n'attendent pas.
+
+Les tests (`tests/run.php`) utilisent un faux ProxyIAg (`tests/faux_proxy.php`).
 
 ## Cohérence de la base de connaissances
 

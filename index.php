@@ -2,6 +2,7 @@
 require __DIR__.'/session.php';
 require_once __DIR__.'/fonctions.php';
 require_once __DIR__.'/exercices.php';
+require_once __DIR__.'/ia.php';
 
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
 if ($session_ok) session_regenerate_id(true);
@@ -45,6 +46,8 @@ $donnees_js = array(
 	'exemples' => is_null($jeu) ? array() : $jeux[$jeu]['exemples'],
 	// Exercice à ouvrir au chargement (?jeu=…&exercice=…)
 	'exercice' => (is_null($jeu) || !is_string(param('exercice'))) ? null : param('exercice'),
+	// Correction des intentions par IA (ia.php) : sinon, auto-évaluation
+	'ia' => !is_null(ia_config()),
 );
 $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
 ?><!DOCTYPE html>

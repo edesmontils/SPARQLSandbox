@@ -233,6 +233,11 @@ details.attendu .defile { margin-top: 8px; max-height: 40vh; }
 .comparaison h4 { margin: 4px 0; }
 .comparaison blockquote { margin: 0; padding: 8px 12px; border-left: 4px solid var(--sb-accent); background: var(--sb-surface-2); }
 @media (max-width: 700px) { .comparaison { grid-template-columns: 1fr; } }
+/* Correction d'une intention par IA (ia.php) */
+.correction-ia { margin: 0; padding: 8px 12px; border-left: 4px solid var(--sb-accent); background: var(--sb-surface-2); }
+.correction-ia p { margin: 4px 0; }
+.correction-ia code { font-family: var(--sb-mono); font-size: .92em; }
+.copie-correction p { margin: 2px 0; }
 .navigation { justify-content: space-between; }
 .statut.neutre { color: var(--sb-ink); background: var(--sb-surface-2); border-color: var(--sb-border-strong); }
 .compte-lignes { color: var(--sb-ink-soft); font-size: .88em; margin: 6px 0 0; }

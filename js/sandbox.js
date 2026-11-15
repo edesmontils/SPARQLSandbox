@@ -385,13 +385,17 @@
 		return s && typeof s === 'object' && !Array.isArray(s) ? s : {};
 	}
 	function etatQuestion(q) { return suivi(exercice.code)[q.code] || {}; }
-	function noteQuestion(q, champs) {
-		var s = suivi(exercice.code), e = s[q.code] || {};
+	// codeEx : exercice de la question, quand il a pu être quitté entre-temps (réponse tardive)
+	function noteQuestion(q, champs, codeEx) {
+		codeEx = codeEx || exercice.code;
+		var s = suivi(codeEx), e = s[q.code] || {};
 		Object.keys(champs).forEach(function (k) { e[k] = champs[k]; });
 		s[q.code] = e;
-		ecrit(cleSuivi(exercice.code), s);
+		ecrit(cleSuivi(codeEx), s);
 	}
-	function faite(e) { return !!(e && (e.reussie || e.comparee)); }
+	// Faite : requête vérifiée juste, intention jugée correcte par l'IA, ou comparée à celle de
+	// l'enseignant (auto-évaluation)
+	function faite(e) { return !!(e && (e.reussie || (e.comparee && !(e.comparaison && e.comparaison.ia)))); }
 
 	// Progression affichée sur les cartes des exercices
 	function majCartes() {
@@ -462,7 +466,8 @@
 		if (q.attendu === 'I') {
 			h += '<label for="intention" class="libelle">Votre intention :</label>'
 				+ '<textarea id="intention" rows="3" placeholder="Cette requête recherche…"></textarea>'
-				+ '<div class="boutons"><button type="button" class="btn" data-action="comparer">✅ Comparer avec l\'intention attendue</button></div>'
+				+ '<div class="boutons"><button type="button" class="btn" data-action="comparer">'
+					+ (donnees.ia ? '✅ Faire corriger mon intention' : '✅ Comparer avec l\'intention attendue') + '</button></div>'
 				+ '<div id="correction"></div>';
 		}
 		h += '<div class="boutons navigation">'
@@ -528,15 +533,25 @@
 	function compareIntention(q, bouton) {
 		var texte = document.getElementById('intention').value;
 		var zone = document.getElementById('correction');
+		var codeEx = exercice.code;
 		bouton.disabled = true;
+		if (donnees.ia) zone.innerHTML = "<p class='astuce'>⏳ Correction en cours…</p>";
 		appel('intention', { exercice: exercice.code, question: q.code, intention: texte }).then(function (r) {
+			// l'étudiant a pu changer de question pendant la correction
+			if (r.ok) {
+				var c = { date: Date.now(), texte: texte };
+				if (r.ia) { c.ia = true; c.verdict = r.ia.verdict || ''; c.explication = r.ia.explication || ''; c.modele = r.ia.modele || ''; }
+				noteQuestion(q, { comparee: true, comparaison: c }, codeEx);
+				// une intention corrigée par l'IA ne compte comme faite que si elle est jugée correcte
+				if (!r.ia || r.ia.verdict === 'correct') noteQuestion(q, { reussie: true }, codeEx);
+				majCartes();
+			}
+			if (!exercice || exercice.code !== codeEx || questionCourante() !== q || !document.getElementById('correction')) return;
 			bouton.disabled = false;
 			zone.innerHTML = r.html;
-			if (r.ok) {
-				noteQuestion(q, { comparee: true, comparaison: { date: Date.now(), texte: texte } });
+			if (r.ok && (!r.ia || r.ia.verdict === 'correct')) {
 				var b = panneau.querySelector('[data-question="' + exercice.index + '"]');
 				if (b) b.classList.add('faite');
-				majCartes();
 			}
 		});
 	}
@@ -557,6 +572,14 @@
 		var d = new Date(ms);
 		return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 	}
+	// Texte de l'IA (Markdown simple) en HTML sûr, comme ia_texte_html() du serveur : échappé,
+	// puis code, gras, italique et retours à la ligne
+	function texteIa(t) {
+		return echappe(t).replace(/`([^`\n]+)`/g, '<code>$1</code>')
+			.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+			.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, '$1<em>$2</em>')
+			.replace(/\n/g, '<br>');
+	}
 	function pluriel(n, mot) { return n + ' ' + mot + (n > 1 ? 's' : ''); }
 	// Une réponse compte si elle n'est pas vide et diffère du modèle donné au départ
 	function repondue(q, e) {
@@ -576,8 +599,15 @@
 	function copieComparaison(e) {
 		var c = e.comparaison;
 		if (!c) return e.comparee ? '<p class="copie-etat">Intention comparée à celle de l\'enseignant (auto-évaluation).</p>'
-			: '<p class="copie-etat">Comparaison non demandée.</p>';
-		var h = '<p class="copie-etat">Comparée à l\'intention de l\'enseignant le ' + dateLisible(c.date) + ' (auto-évaluation).</p>';
+			: '<p class="copie-etat">' + (donnees.ia ? 'Correction' : 'Comparaison') + ' non demandée.</p>';
+		var h;
+		if (c.ia) {
+			var libelles = { correct: 'intention correcte', partiel: 'intention partiellement correcte', incorrect: 'intention incorrecte' };
+			h = '<div class="copie-correction"><p class="copie-etat' + (c.verdict === 'correct' ? ' juste' : ' attention') + '">'
+				+ 'Corrigée par une IA (' + echappe(c.modele || '') + ') le ' + dateLisible(c.date) + ' : <strong>'
+				+ echappe(libelles[c.verdict] || 'sans verdict') + '</strong></p>'
+				+ (c.explication ? '<p>' + texteIa(c.explication) + '</p>' : '') + '</div>';
+		} else h = '<p class="copie-etat">Comparée à l\'intention de l\'enseignant le ' + dateLisible(c.date) + ' (auto-évaluation).</p>';
 		if ((e.intention || '').trim() !== (c.texte || '').trim())
 			h += '<p class="copie-etat attention">L\'intention a été modifiée après cette comparaison.</p>';
 		return h;
@@ -606,7 +636,9 @@
 		if (qs.some(function (q) { return q.attendu === 'R'; }))
 			h += ' · ' + pluriel(nbJustes, 'requête') + ' vérifiée' + (nbJustes > 1 ? 's' : '') + ' juste' + (nbJustes > 1 ? 's' : '');
 		if (qs.some(function (q) { return q.attendu === 'I'; }))
-			h += ' · ' + pluriel(nbComp, 'intention') + ' comparée' + (nbComp > 1 ? 's' : '') + ' à celle de l\'enseignant';
+			h += ' · ' + pluriel(nbComp, 'intention') + (donnees.ia
+				? ' soumise' + (nbComp > 1 ? 's' : '') + ' à correction'
+				: ' comparée' + (nbComp > 1 ? 's' : '') + ' à celle de l\'enseignant');
 		h += '</p><p class="copie-avertissement">« Juste » veut dire que, lors de la vérification, la requête donnait sur la copie '
 			+ 'du jeu de données de l\'étudiant le même résultat que la solution.</p></header>';
 		qs.forEach(function (q) {
