@@ -23,6 +23,9 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   `owl:inverseOf`), traduction d'un sous-ensemble de SHACL en SPARQL pour se passer de pyshacl
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
+- **Copie de l'étudiant** (« 📄 Ma copie »), comme dans SQLSandbox : présenter les réponses d'un
+  exercice (requêtes, résultats des vérifications, intentions rédigées et comparées), prêtes à
+  imprimer ou à enregistrer en PDF par le navigateur.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
 - **Requêtes fédérées** encadrées : liste blanche de points d'accès (Wikidata, DBpedia) pour
   `SERVICE`, désactivée par défaut.
