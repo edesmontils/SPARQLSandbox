@@ -1,0 +1,65 @@
+# Jeu de données « Amis » de SPARQL Sandbox : un petit réseau social décrit avec FOAF.
+# Personnes fictives. foaf:knows est orienté : « A connaît B » ne dit pas que B connaît A.
+
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex:   <http://example.org/amis/> .
+
+ex:alice a foaf:Person ;
+    foaf:name "Alice Martin" ; foaf:nick "alice44" ; foaf:age 21 ;
+    foaf:mbox <mailto:alice@example.org> ;
+    ex:ville "Nantes" ;
+    foaf:topic_interest ex:musique, ex:escalade ;
+    foaf:knows ex:bruno, ex:chloe .
+
+ex:bruno a foaf:Person ;
+    foaf:name "Bruno Lefèvre" ; foaf:age 23 ;
+    ex:ville "Rezé" ;
+    foaf:topic_interest ex:jeux ;
+    foaf:knows ex:alice, ex:david .
+
+ex:chloe a foaf:Person ;
+    foaf:name "Chloé Bernard" ; foaf:nick "clo" ; foaf:age 20 ;
+    foaf:mbox <mailto:chloe@example.org> ;
+    ex:ville "Nantes" ;
+    foaf:topic_interest ex:musique, ex:cinema ;
+    foaf:knows ex:emma .
+
+ex:david a foaf:Person ;
+    foaf:name "David Nguyen" ; foaf:age 25 ;
+    ex:ville "Saint-Nazaire" ;
+    foaf:topic_interest ex:escalade, ex:jeux ;
+    foaf:knows ex:farid .
+
+ex:emma a foaf:Person ;
+    foaf:name "Emma Petit" ; foaf:age 22 ;
+    ex:ville "Nantes" ;
+    foaf:topic_interest ex:cinema ;
+    foaf:knows ex:chloe, ex:farid, ex:gabriel .
+
+ex:farid a foaf:Person ;
+    foaf:name "Farid Haddad" ; foaf:nick "fh" ;
+    ex:ville "Angers" ;
+    foaf:topic_interest ex:musique .
+
+ex:gabriel a foaf:Person ;
+    foaf:name "Gabriel Rousseau" ; foaf:age 19 ;
+    foaf:knows ex:hana .
+
+ex:hana a foaf:Person ;
+    foaf:name "Hana Sato" ; foaf:age 24 ;
+    ex:ville "Nantes" ;
+    foaf:topic_interest ex:escalade, ex:cinema .
+
+# Centres d'intérêt
+ex:musique rdfs:label "Musique"@fr, "Music"@en .
+ex:escalade rdfs:label "Escalade"@fr, "Climbing"@en .
+ex:jeux rdfs:label "Jeux de société"@fr, "Board games"@en .
+ex:cinema rdfs:label "Cinéma"@fr, "Cinema"@en .
+
+# Un groupe
+ex:club a foaf:Group ;
+    foaf:name "Club d'escalade de l'université" ;
+    foaf:member ex:alice, ex:david, ex:hana .

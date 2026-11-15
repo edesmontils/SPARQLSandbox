@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jeu nom="cinema">
+	<titre>Cinéma</titre>
+	<fichier nom="cinema.ttl"/>
+	<référence></référence>
+	<description>
+		<p>Des films français, leurs acteurs et réalisateurs, et le programme (fictif) de trois cinémas
+			de l'agglomération nantaise. Le vocabulaire <code>cine:</code> est décrit en RDFS dans le jeu
+			lui-même :</p>
+		<ul>
+			<li><b>cine:Film</b> : <code>cine:titre</code> (en français et souvent en anglais),
+				<code>cine:annee</code>, <code>cine:genre</code>, <code>cine:realisePar</code> ;</li>
+			<li><b>cine:Acteur</b> et <b>cine:Realisateur</b>, sous-classes de <code>cine:Personne</code>
+				(elle-même sous-classe de <code>foaf:Person</code>) : <code>foaf:name</code> ;</li>
+			<li><b>cine:Role</b> (nœuds anonymes) : <code>cine:acteur</code>, <code>cine:film</code>,
+				<code>cine:personnage</code> ;</li>
+			<li><b>cine:Cinema</b> : <code>rdfs:label</code>, <code>cine:ville</code> ;</li>
+			<li><b>cine:Projection</b> : <code>cine:film</code>, <code>cine:cinema</code>,
+				<code>cine:date</code> (<code>xsd:date</code>).</li>
+		</ul>
+		<p>Les ressources sont nommées dans l'espace <code>ex:</code> (<code>ex:amelie</code>,
+			<code>ex:reno</code>…).</p>
+	</description>
+	<exemples>
+		<exemple titre="Tous les films et leur année">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			SELECT ?film ?annee
+			WHERE {
+			  ?film a cine:Film ;
+			        cine:annee ?annee .
+			}
+			ORDER BY ?annee
+		</exemple>
+		<exemple titre="Titres en français (filtre sur la langue)">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			SELECT ?titre
+			WHERE {
+			  ?film cine:titre ?titre .
+			  FILTER (lang(?titre) = "fr")
+			}
+		</exemple>
+		<exemple titre="Acteurs et personnages d'un film">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			PREFIX ex:   &lt;http://example.org/cinema/&gt;
+			SELECT ?nom ?personnage
+			WHERE {
+			  ?role cine:film ex:cleopatre ;
+			        cine:acteur ?acteur ;
+			        cine:personnage ?personnage .
+			  ?acteur foaf:name ?nom .
+			}
+		</exemple>
+		<exemple titre="Titre anglais s'il existe (OPTIONAL)">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			SELECT ?film ?anglais
+			WHERE {
+			  ?film a cine:Film .
+			  OPTIONAL { ?film cine:titre ?anglais . FILTER (lang(?anglais) = "en") }
+			}
+		</exemple>
+		<exemple titre="Nombre de films par réalisateur (GROUP BY)">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			SELECT ?nom (COUNT(?film) AS ?films)
+			WHERE {
+			  ?film cine:realisePar ?r .
+			  ?r foaf:name ?nom .
+			}
+			GROUP BY ?nom
+			ORDER BY DESC(?films) ?nom
+		</exemple>
+		<exemple titre="Films jamais projetés (FILTER NOT EXISTS)">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			SELECT ?film
+			WHERE {
+			  ?film a cine:Film .
+			  FILTER NOT EXISTS { ?p a cine:Projection ; cine:film ?film }
+			}
+		</exemple>
+		<exemple titre="Toutes les personnes, grâce à rdfs:subClassOf*">
+			PREFIX rdf:  &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt;
+			PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			SELECT DISTINCT ?nom
+			WHERE {
+			  ?p rdf:type/rdfs:subClassOf* foaf:Person ;
+			     foaf:name ?nom .
+			}
+			ORDER BY ?nom
+		</exemple>
+		<exemple titre="Ajouter un film (INSERT DATA)">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			PREFIX ex:   &lt;http://example.org/cinema/&gt;
+			INSERT DATA {
+			  ex:taxi a cine:Film ;
+			          cine:titre "Taxi"@fr ;
+			          cine:annee 1998 ;
+			          cine:genre "Comédie" .
+			}
+		</exemple>
+		<exemple titre="Construire un graphe acteur → film (CONSTRUCT)">
+			PREFIX cine: &lt;http://example.org/cinema/vocab#&gt;
+			CONSTRUCT { ?acteur cine:aJoueDans ?film }
+			WHERE { ?role cine:acteur ?acteur ; cine:film ?film }
+		</exemple>
+	</exemples>
+</jeu>

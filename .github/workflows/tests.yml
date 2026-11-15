@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.1', '8.3']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: simplexml, dom, mbstring, curl
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer Oxigraph
+        run: |
+          pip install oxigraph
+          oxigraph --version
+      - run: php tests/run.php

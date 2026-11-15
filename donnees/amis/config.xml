@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jeu nom="amis">
+	<titre>Amis (FOAF)</titre>
+	<fichier nom="amis.ttl"/>
+	<référence>http://xmlns.com/foaf/spec/</référence>
+	<description>
+		<p>Un petit réseau social de personnes fictives, décrit avec le vocabulaire
+			<a href="http://xmlns.com/foaf/spec/">FOAF</a> (<i>Friend of a Friend</i>) :</p>
+		<ul>
+			<li><b>foaf:Person</b> : <code>foaf:name</code>, <code>foaf:nick</code>, <code>foaf:age</code>,
+				<code>foaf:mbox</code>, <code>ex:ville</code>, <code>foaf:topic_interest</code>, et
+				<code>foaf:knows</code> vers les personnes qu'elle connaît ;</li>
+			<li><b>foaf:Group</b> : <code>foaf:name</code>, <code>foaf:member</code>.</li>
+		</ul>
+		<p>Toutes les personnes n'ont pas toutes les propriétés : c'est l'occasion d'utiliser
+			<code>OPTIONAL</code>. <code>foaf:knows</code> est orienté : « A connaît B » ne dit pas que
+			B connaît A. Les chemins de propriétés (<code>foaf:knows+</code>) suivent les relations
+			sur plusieurs étapes.</p>
+	</description>
+	<exemples>
+		<exemple titre="Les personnes et leur âge">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			SELECT ?nom ?age
+			WHERE {
+			  ?p a foaf:Person ;
+			     foaf:name ?nom ;
+			     foaf:age ?age .
+			}
+			ORDER BY ?age
+		</exemple>
+		<exemple titre="Âge s'il est connu (OPTIONAL)">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			SELECT ?nom ?age
+			WHERE {
+			  ?p a foaf:Person ; foaf:name ?nom .
+			  OPTIONAL { ?p foaf:age ?age }
+			}
+		</exemple>
+		<exemple titre="Qui connaît qui ?">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			SELECT ?nom1 ?nom2
+			WHERE {
+			  ?a foaf:knows ?b .
+			  ?a foaf:name ?nom1 .
+			  ?b foaf:name ?nom2 .
+			}
+		</exemple>
+		<exemple titre="Connaissances mutuelles">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			SELECT ?nom1 ?nom2
+			WHERE {
+			  ?a foaf:knows ?b .
+			  ?b foaf:knows ?a .
+			  ?a foaf:name ?nom1 .
+			  ?b foaf:name ?nom2 .
+			  FILTER (?nom1 &lt; ?nom2)
+			}
+		</exemple>
+		<exemple titre="Toutes les personnes accessibles depuis Alice (foaf:knows+)">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			PREFIX ex:   &lt;http://example.org/amis/&gt;
+			SELECT DISTINCT ?nom
+			WHERE {
+			  ex:alice foaf:knows+ ?p .
+			  ?p foaf:name ?nom .
+			}
+		</exemple>
+		<exemple titre="Âge moyen par ville (agrégats)">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			PREFIX ex:   &lt;http://example.org/amis/&gt;
+			SELECT ?ville (COUNT(?p) AS ?nombre) (AVG(?age) AS ?ageMoyen)
+			WHERE {
+			  ?p ex:ville ?ville ; foaf:age ?age .
+			}
+			GROUP BY ?ville
+			ORDER BY DESC(?nombre)
+		</exemple>
+		<exemple titre="Y a-t-il quelqu'un à Angers ? (ASK)">
+			PREFIX ex: &lt;http://example.org/amis/&gt;
+			ASK { ?p ex:ville "Angers" }
+		</exemple>
+		<exemple titre="Tout ce que l'on sait d'Emma (DESCRIBE)">
+			PREFIX ex: &lt;http://example.org/amis/&gt;
+			DESCRIBE ex:emma
+		</exemple>
+		<exemple titre="Gabriel connaît maintenant Alice (INSERT DATA)">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			PREFIX ex:   &lt;http://example.org/amis/&gt;
+			INSERT DATA { ex:gabriel foaf:knows ex:alice }
+		</exemple>
+		<exemple titre="Tout le monde vieillit d'un an (DELETE / INSERT)">
+			PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+			DELETE { ?p foaf:age ?age }
+			INSERT { ?p foaf:age ?nouvel }
+			WHERE  { ?p foaf:age ?age . BIND (?age + 1 AS ?nouvel) }
+		</exemple>
+	</exemples>
+</jeu>
