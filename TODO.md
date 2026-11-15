@@ -31,5 +31,3 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   diagramme du vocabulaire.
 - **Peuplement d'une ontologie par IA** (ProxyIAg) : générer des instances conformes à l'ontologie
   (et aux formes SHACL) d'un jeu, comme la génération de données de SQLSandbox.
-- **Validation des intentions par IA** (ProxyIAg) : vérifier qu'une requête correspond à
-  l'intention donnée (`…->I`), comme dans SQLSandbox.

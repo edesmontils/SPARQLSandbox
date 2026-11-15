@@ -3,6 +3,8 @@ tmp/*
 !tmp/index.html
 !tmp/readme.txt
 sparqlsandbox.ini
+ia.ini
+*-ia.ini
 bin/
 .DS_Store
 .idea/

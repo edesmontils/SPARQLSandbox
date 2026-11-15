@@ -10,7 +10,8 @@
 // Types de question : à gauche de la flèche ce que reçoit l'étudiant, à droite ce qu'il
 // produit. I : intention, R : requête, r : requête à trous (6e élément), T : table résultat
 // affichée d'emblée. …->R : écrire la requête ; …->I : rédiger l'intention de la requête
-// donnée (auto-évaluation : l'intention de l'enseignant est montrée après la rédaction).
+// donnée, corrigée par IA quand elle est activée (ia.php), sinon auto-évaluation :
+// l'intention de l'enseignant est montrée après la rédaction.
 //
 // Le navigateur ne reçoit jamais la solution d'une question …->R ni l'intention attendue
 // d'une question …->I : le serveur les relit ici.
