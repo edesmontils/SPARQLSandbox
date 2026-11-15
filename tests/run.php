@@ -306,7 +306,6 @@ function http($url, $post = null) {
 	if (!is_null($post)) curl_setopt($c, CURLOPT_POSTFIELDS, http_build_query($post));
 	$corps = curl_exec($c);
 	$code = curl_getinfo($c, CURLINFO_RESPONSE_CODE);
-	curl_close($c);
 	return array($code, (string)$corps);
 }
 if (function_exists('curl_init')) {

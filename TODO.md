@@ -23,4 +23,10 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
 - **Requêtes fédérées** encadrées : liste blanche de points d'accès (Wikidata, DBpedia) pour
   `SERVICE`, désactivée par défaut.
-- Correction des intentions (`…->I`) et génération de données par IA (ProxyIAg), comme dans SQLSandbox.
+- **Éditeur d'ontologie** avec une vue en graphe : créer et modifier classes et propriétés
+  (`rdfs:subClassOf`, `rdfs:domain`, `rdfs:range`…) dans la copie de session, en prolongeant le
+  diagramme du vocabulaire.
+- **Peuplement d'une ontologie par IA** (ProxyIAg) : générer des instances conformes à l'ontologie
+  (et aux formes SHACL) d'un jeu, comme la génération de données de SQLSandbox.
+- **Validation des intentions par IA** (ProxyIAg) : vérifier qu'une requête correspond à
+  l'intention donnée (`…->I`), comme dans SQLSandbox.
