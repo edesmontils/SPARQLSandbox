@@ -18,7 +18,7 @@ function reponse($ok, $html, $code = 200) {
 if (!$session_ok || $_SERVER['REQUEST_METHOD'] !== 'POST')
 	reponse(false, "<p class='statut ko'>❌ Requête invalide.</p>", 400);
 if (!jeton_valide())
-	reponse(false, "<p class='statut ko'>❌ Session expirée (plus de ".round(DUREE_SESSION / 3600, 1)." h d'inactivité, "
+	reponse(false, "<p class='statut ko'>❌ Session expirée (plus de ".libelle_duree(DUREE_SESSION)." d'inactivité, "
 		."ou application ouverte dans un autre onglet) : rechargez la page pour continuer.</p>", 403);
 
 $jeux = liste_jeux();

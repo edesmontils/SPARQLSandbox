@@ -2,6 +2,31 @@
 (function () {
 	'use strict';
 	var donnees = JSON.parse(document.getElementById('donnees').textContent);
+
+	// Temps restant avant l'expiration de la session (pied de page) ; chaque appel au
+	// serveur la prolonge de toute sa durée
+	var tempsSession = document.getElementById('temps-session');
+	var finSession = Date.now() + donnees.duree_session * 1000;
+	function libelleDuree(s) {
+		var min = Math.max(1, Math.ceil(s / 60)), h = Math.floor(min / 60), m = min % 60;
+		if (h === 0) return m + ' minute' + (m > 1 ? 's' : '');
+		return h + ' h ' + (m < 10 ? '0' : '') + m;
+	}
+	function afficheTempsSession() {
+		if (!tempsSession) return;
+		var reste = (finSession - Date.now()) / 1000;
+		if (reste <= 0) {
+			tempsSession.textContent = '⌛ Session expirée : rechargez la page pour continuer.';
+			tempsSession.classList.add('bientot');
+			return;
+		}
+		tempsSession.textContent = '⏳ Session : ' + libelleDuree(reste) + ' restante' + (reste > 60 ? 's' : '');
+		tempsSession.classList.toggle('bientot', reste <= 10 * 60);
+	}
+	afficheTempsSession();
+	setInterval(afficheTempsSession, 15000);
+	function prolongeSession() { finSession = Date.now() + donnees.duree_session * 1000; afficheTempsSession(); }
+
 	if (!donnees.jeu) return;
 
 	var zone = document.getElementById('requete');
@@ -50,6 +75,7 @@
 		Object.keys(champs || {}).forEach(function (k) { corps.set(k, champs[k]); });
 		return fetch('controler.php', { method: 'POST', body: corps, credentials: 'same-origin' })
 			.then(function (r) {
+				if (r.headers.get('X-SPARQLSandbox') && r.status !== 403) prolongeSession();
 				if (!r.headers.get('X-SPARQLSandbox'))
 					return { ok: false, html: "<p class='statut ko'>❌ La requête a été bloquée avant d'atteindre l'application " +
 						"(pare-feu ou proxy, code " + r.status + ").</p>" };

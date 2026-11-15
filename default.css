@@ -176,6 +176,8 @@ table.resultat { width: 100%; border-collapse: collapse; font-size: .92em; }
 
 .pied { padding: 14px 30px; border-top: 1px solid var(--sb-border); color: var(--sb-ink-soft); font-size: .88em; text-align: center; }
 .pied p { margin: 0; }
+.pied .temps-session { margin-top: 4px; color: var(--sb-ink-faint); }
+.pied .temps-session.bientot { color: var(--sb-ink-soft); font-weight: bold; }
 .separateur { margin: 0 6px; color: var(--sb-ink-faint); }
 
 @media (max-width: 600px) {

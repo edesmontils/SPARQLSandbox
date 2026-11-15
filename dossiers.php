@@ -57,3 +57,12 @@ function duree_vie() {
 		return max(60, (int)$r['duree_session_min'] * 60);
 	return 3 * 60 * 60;
 }
+
+// Durée en clair, arrondie à la minute : « 3 heures », « 1 heure 30 », « 45 minutes »
+function libelle_duree($secondes) {
+	$min = max(1, (int)round($secondes / 60));
+	$h = intdiv($min, 60);
+	$m = $min % 60;
+	if ($h == 0) return $m.' minute'.($m > 1 ? 's' : '');
+	return $h.' heure'.($h > 1 ? 's' : '').($m ? ' '.sprintf('%02d', $m) : '');
+}

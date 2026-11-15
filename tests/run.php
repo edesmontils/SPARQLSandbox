@@ -26,6 +26,15 @@ echo "Oxigraph : ".(chemin_oxigraph() ?? 'introuvable')."\n";
 if (is_null(chemin_oxigraph())) { echo "Oxigraph est nécessaire aux tests.\n"; exit(1); }
 
 //------------------------------------------------------------
+// Durée de session en clair
+//------------------------------------------------------------
+verifie(libelle_duree(3 * 3600) === '3 heures', 'durée : 3 heures');
+verifie(libelle_duree(3600) === '1 heure', 'durée : 1 heure');
+verifie(libelle_duree(5400) === '1 heure 30', 'durée : 1 heure 30');
+verifie(libelle_duree(45 * 60) === '45 minutes', 'durée : 45 minutes');
+verifie(libelle_duree(60) === '1 minute', 'durée : 1 minute');
+
+//------------------------------------------------------------
 // Analyse des requêtes
 //------------------------------------------------------------
 $refus = array(
@@ -339,6 +348,8 @@ if (function_exists('curl_init')) {
 	verifie(strpos($page, 'data-exercice="amis-tp1"') !== false, 'page : carte de l\'exercice');
 	list($code, $page) = http("http://127.0.0.1:$port/");
 	verifie($code == 200 && strpos($page, 'Bienvenue') !== false, "page d'accueil servie");
+	verifie(strpos($page, '{duree_session}') === false && strpos($page, 'conservées '.libelle_duree(duree_vie()).' après') !== false, "page d'accueil : durée réelle");
+	verifie(strpos($page, 'id="temps-session"') !== false, 'pied de page : temps de session');
 } else echo "(extension curl absente : tests HTTP sautés)\n";
 proc_terminate($serveur);
 proc_close($serveur);

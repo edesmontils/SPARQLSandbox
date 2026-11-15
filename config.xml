@@ -12,7 +12,7 @@
 					<strong>sa propre copie</strong> des jeux de données : vous pouvez tout essayer
 					(<code>SELECT</code>, <code>ASK</code>, <code>CONSTRUCT</code>, mais aussi
 					<code>INSERT DATA</code>, <code>DELETE WHERE</code>…), les données d'origine restent intactes.</p>
-				<p>Vos modifications sont conservées trois heures après votre dernière action, même si vous
+				<p>Vos modifications sont conservées {duree_session} après votre dernière action, même si vous
 					rechargez la page ou fermez le navigateur.</p>
 			</div>
 		</section>

@@ -36,6 +36,7 @@ $prefixes = is_null($jeu) ? array() : array_merge(array('rdf' => PREFIXES_STANDA
 	'xsd' => PREFIXES_STANDARD['xsd']), prefixes_jeu($jeu));
 $donnees_js = array(
 	'csrf' => $_SESSION['csrf'],
+	'duree_session' => DUREE_SESSION,
 	'jeu' => $jeu,
 	'prefixes' => $prefixes,
 	'exemples' => is_null($jeu) ? array() : $jeux[$jeu]['exemples'],
@@ -81,7 +82,8 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
 <main id="contenu">
 <?php foreach ($erreurs as $e) echo "<p class='statut ko'>❌ ".html($e)."</p>\n"; ?>
 <?php if (is_null($jeu)) {
-	echo $config ? contenu_xml($config->accueil) : '';
+	// {duree_session} : durée réelle, réglée dans sparqlsandbox.ini
+	echo $config ? str_replace('{duree_session}', html(libelle_duree(DUREE_SESSION)), contenu_xml($config->accueil)) : '';
 } else { $j = $jeux[$jeu]; ?>
   <section class="post">
     <h2 class="title"><?php echo html($j['titre']); ?></h2>
@@ -164,7 +166,8 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
 <footer class="pied"><p><?php echo html($nom_appli); ?> <?php echo html($version); ?>
   <span class="separateur">·</span> © 2026 E. Desmontils, Nantes Université
   <span class="separateur">·</span> Logiciel libre sous licence GPL v3
-  <span class="separateur">·</span> Moteur SPARQL <a href="https://github.com/oxigraph/oxigraph">Oxigraph</a></p></footer>
+  <span class="separateur">·</span> Moteur SPARQL <a href="https://github.com/oxigraph/oxigraph">Oxigraph</a></p>
+  <p class="temps-session" id="temps-session" title="La session et vos copies sont effacées après <?php echo html(libelle_duree(DUREE_SESSION)); ?> sans activité">⏳ Session valable <?php echo html(libelle_duree(DUREE_SESSION)); ?> après la dernière action</p></footer>
 </div>
 </body>
 </html>
