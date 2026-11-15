@@ -4,6 +4,8 @@
 	<!-- L'ontologie et les instances sont dans deux fichiers, chargés ensemble -->
 	<fichier nom="ontologie.ttl"/>
 	<fichier nom="cinema.ttl"/>
+	<!-- Formes SHACL facultatives, vérifiées avec les contrôles RDFS (coherence.php) -->
+	<formes nom="formes.ttl"/>
 	<référence></référence>
 	<description>
 		<p>Des films français, leurs acteurs et réalisateurs, et le programme (fictif) de trois cinémas

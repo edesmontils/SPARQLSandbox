@@ -1,0 +1,29 @@
+# Formes SHACL du jeu « Amis » : FOAF ne donne ni cardinalités ni bornes, elles sont
+# exprimées ici. Vérifiées par pyshacl au chargement du jeu et après chaque mise à jour.
+
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex:   <http://example.org/amis/> .
+@prefix forme: <http://example.org/amis/formes#> .
+
+forme:Personne a sh:NodeShape ;
+    sh:targetClass foaf:Person ;
+    sh:property [ sh:path foaf:name ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "Une personne a exactement un nom (foaf:name)."@fr ] ;
+    sh:property [ sh:path foaf:age ; sh:maxCount 1 ; sh:datatype xsd:integer ;
+        sh:minInclusive 0 ; sh:maxInclusive 130 ;
+        sh:message "Une personne a au plus un âge : un entier entre 0 et 130."@fr ] ;
+    sh:property [ sh:path foaf:knows ; sh:class foaf:Person ;
+        sh:message "On ne connaît (foaf:knows) que des personnes (foaf:Person)."@fr ] ;
+    sh:property [ sh:path foaf:mbox ; sh:nodeKind sh:IRI ; sh:pattern "^mailto:" ;
+        sh:message "Une adresse électronique (foaf:mbox) est une IRI mailto:."@fr ] ;
+    sh:property [ sh:path ex:ville ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "Une personne habite au plus une ville."@fr ] .
+
+forme:Groupe a sh:NodeShape ;
+    sh:targetClass foaf:Group ;
+    sh:property [ sh:path foaf:name ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "Un groupe a exactement un nom."@fr ] ;
+    sh:property [ sh:path foaf:member ; sh:minCount 1 ; sh:class foaf:Person ;
+        sh:message "Un groupe a au moins un membre, de type foaf:Person."@fr ] .

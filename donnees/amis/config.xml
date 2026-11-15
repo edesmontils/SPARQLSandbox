@@ -2,6 +2,7 @@
 <jeu nom="amis">
 	<titre>Amis (FOAF)</titre>
 	<fichier nom="amis.ttl"/>
+	<formes nom="formes.ttl"/>
 	<référence>http://xmlns.com/foaf/spec/</référence>
 	<description>
 		<p>Un petit réseau social de personnes fictives, décrit avec le vocabulaire

@@ -16,6 +16,10 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   exercices (qui interrogent le graphe par défaut), ou proposer les deux présentations du jeu.
 - **Inférence RDFS** : Oxigraph n'en fait pas ; proposer en option une version « saturée » d'un jeu
   (`rdfs:subClassOf`, `rdfs:subPropertyOf`, `rdfs:domain`, `rdfs:range`) pour comparer.
+- **Cohérence** : contrôles OWL simples (`owl:disjointWith`, `owl:FunctionalProperty`,
+  `owl:inverseOf`), traduction d'un sous-ensemble de SHACL en SPARQL pour se passer de pyshacl
+  sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
+  incohérente.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
 - **Requêtes fédérées** encadrées : liste blanche de points d'accès (Wikidata, DBpedia) pour
   `SERVICE`, désactivée par défaut.

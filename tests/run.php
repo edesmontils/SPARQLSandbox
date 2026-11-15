@@ -240,6 +240,56 @@ list($ok, $h) = intention_reference('cinema', 'cinema-tp1', 'c6', str_repeat('a'
 verifie(!$ok, 'intention trop longue refusée');
 
 //------------------------------------------------------------
+// Cohérence (coherence.php)
+//------------------------------------------------------------
+$_SESSION = array();
+$avecShacl = !is_null(chemin_programme('pyshacl'));
+if (!$avecShacl) echo "(pyshacl absent : contrôles SHACL non testés)\n";
+foreach (array('cinema', 'amis') as $jeu) {
+	$r = coherence_origine($jeu);
+	verifie(!is_null($r) && $r['anomalies'] === array(), "$jeu : aucune incohérence au chargement : ".json_encode($r['anomalies'] ?? null, JSON_UNESCAPED_UNICODE));
+	verifie($r['shacl'] === $avecShacl, "$jeu : formes SHACL ".($avecShacl ? 'vérifiées' : 'signalées comme non vérifiées'));
+	if (!$avecShacl) verifie(strpos(implode(' ', $r['notes']), 'pyshacl') !== false, "$jeu : absence de pyshacl signalée");
+}
+$P = "PREFIX cine: <http://example.org/cinema/vocab#>\nPREFIX ex: <http://example.org/cinema/>\nPREFIX xsd: <http://www.w3.org/2001/XMLSchema#>\n";
+$r = execute_sparql('cinema', $P.'INSERT DATA { ex:taxi a cine:Film ; cine:titre "Taxi"@fr ; cine:annee "mille"^^xsd:integer ; cine:genre "Comédie" . '
+	.'ex:x a cine:Flim . ex:reno cine:titre "Oups" . ex:leon cine:realisePar "Besson" . ex:p1 cine:date "demain" . ex:chabat cine:titree "X" }');
+verifie($r['ok'] && isset($r['coherence']), 'mise à jour incohérente appliquée (avertir, pas refuser)');
+list($nouvelles, $corrigees) = difference_coherence($r['coherence']['avant'], $r['coherence']['apres']);
+$textes = implode("\n", array_map(function ($a) { return $a['source'].' '.$a['message']; }, $nouvelles));
+foreach (array(
+	"RDFS cine:Flim est utilisée comme classe" => 'classe non déclarée',
+	"RDFS cine:titree est utilisée comme propriété" => 'propriété non déclarée',
+	"RDFS ex:reno a la propriété cine:titre, dont le domaine est cine:Film" => 'rdfs:domain',
+	"RDFS ex:leon cine:realisePar \"Besson\" : la valeur devrait être une ressource de type cine:Realisateur" => 'rdfs:range (classe)',
+	"RDFS ex:p1 cine:date \"demain\" : la valeur devrait être un littéral de type xsd:date" => 'rdfs:range (type de données)',
+	"RDFS ex:taxi cine:annee : \"mille\" n'est pas une valeur valide de xsd:integer" => 'littéral mal formé',
+) as $extrait => $libelle) verifie(strpos($textes, $extrait) !== false, "cohérence : $libelle détecté");
+if ($avecShacl) {
+	verifie(strpos($textes, 'SHACL ex:taxi cine:realisePar : Un film a au moins un réalisateur') !== false, 'SHACL : cardinalité minimale (message de la forme)');
+	verifie(strpos($textes, 'SHACL ex:p1 cine:date') !== false, 'SHACL : cardinalité maximale et type');
+}
+verifie($corrigees === array(), 'rien de corrigé par une mise à jour fautive');
+$h = affiche_resultat($r, prefixes_jeu('cinema'));
+verifie(strpos($h, 'rend votre copie incohérente') !== false && strpos($h, 'cine:Flim') !== false, 'incohérences affichées sous la mise à jour');
+$r = execute_sparql('cinema', $P.'DELETE DATA { ex:x a cine:Flim . ex:chabat cine:titree "X" }');
+list($nouvelles, $corrigees) = difference_coherence($r['coherence']['avant'], $r['coherence']['apres']);
+verifie(!$nouvelles && count($corrigees) == 2, 'correction reconnue (2 anomalies en moins)');
+verifie(strpos(affiche_resultat($r, prefixes_jeu('cinema')), 'corrige 2 anomalies') !== false, 'correction affichée');
+list($apercu, $coh) = explore_jeu('cinema');
+verifie(strpos($coh, 'incohérence') !== false && strpos($coh, 'cine:realisePar') !== false, 'panneau Cohérence : anomalies restantes de la copie');
+reinitialise_jeu('cinema');
+list($apercu, $coh) = explore_jeu('cinema');
+verifie(strpos($coh, 'Aucune incohérence') !== false, 'panneau Cohérence : copie revenue à l\'origine');
+$r = execute_sparql('cinema', $P.'INSERT DATA { ex:katorza cine:ville "Nantes centre" }');
+verifie(!$avecShacl || strpos(affiche_resultat($r, array()), 'exactement une ville') !== false, 'SHACL : maxCount d\'une mise à jour');
+reinitialise_jeu('cinema');
+$a = array('anomalies' => array(anomalie('RDFS', 'a'), anomalie('RDFS', 'b')));
+$b = array('anomalies' => array(anomalie('RDFS', 'b'), anomalie('SHACL', 'a')));
+list($n, $c) = difference_coherence($a, $b);
+verifie(count($n) == 1 && $n[0]['source'] === 'SHACL' && count($c) == 1 && $c[0]['message'] === 'a', 'différence entre deux rapports');
+
+//------------------------------------------------------------
 // Application servie par PHP (contrôleur, jeton)
 //------------------------------------------------------------
 $port = 18000 + getmypid() % 1000;
@@ -275,6 +325,8 @@ if (function_exists('curl_init')) {
 	verifie($code == 400, 'contrôleur : jeu inconnu refusé');
 	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'explorer', 'jeu' => 'cinema', 'csrf' => $jeton));
 	verifie($code == 200 && strpos($corps, 'cine:Film') !== false, 'contrôleur : exploration');
+	$j = json_decode($corps, true);
+	verifie(strpos($j['coherence'] ?? '', 'incohérence') !== false, 'contrôleur : rapport de cohérence');
 	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'exercice', 'jeu' => 'cinema', 'csrf' => $jeton, 'exercice' => 'cinema-tp1'));
 	$j = json_decode($corps, true);
 	verifie($code == 200 && count($j['exercice']['questions'] ?? array()) == 8 && strpos($corps, 'cine:annee ?a') === false, 'contrôleur : exercice sans solutions');
