@@ -19,8 +19,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Installer Oxigraph
+      - name: Installer Oxigraph et pyshacl
         run: |
-          pip install oxigraph
+          pip install oxigraph pyshacl
           oxigraph --version
+          pyshacl --version
       - run: php tests/run.php

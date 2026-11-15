@@ -122,6 +122,9 @@ function liste_jeux() {
 		$jeux[$nom] = array(
 			'titre' => (string)$x->titre !== '' ? (string)$x->titre : $nom,
 			'fichiers' => $fichiers,
+			// formes SHACL facultatives (coherence.php)
+			'formes' => array_values(array_filter(array_map(function ($f) use ($conf) {
+				return dirname($conf).'/'.basename((string)$f['nom']); }, iterator_to_array($x->formes, false)), 'is_file')),
 			'référence' => (string)$x->référence,
 			'description' => contenu_xml($x->description),
 			'exemples' => $exemples,
@@ -229,29 +232,41 @@ function analyse_sparql($q) {
 // Chemin de l'exécutable oxigraph : réglage « oxigraph » de sparqlsandbox.ini, variable
 // d'environnement SPARQLSANDBOX_OXIGRAPH, bin/oxigraph du site, puis le PATH
 function chemin_oxigraph() {
-	static $chemin = false;
-	if ($chemin !== false) return $chemin;
+	return chemin_programme('oxigraph');
+}
+
+// Chemin d'un exécutable ($nom : oxigraph, pyshacl) : réglage du même nom dans
+// sparqlsandbox.ini, variable d'environnement SPARQLSANDBOX_<NOM>, bin/<nom> du site,
+// puis le PATH ; null s'il est introuvable
+function chemin_programme($nom) {
+	static $chemins = array();
+	if (array_key_exists($nom, $chemins)) return $chemins[$nom];
 	$r = reglages();
 	$candidats = array();
-	if (!empty($r['oxigraph'])) $candidats[] = $r['oxigraph'];
-	if (getenv('SPARQLSANDBOX_OXIGRAPH')) $candidats[] = getenv('SPARQLSANDBOX_OXIGRAPH');
-	$candidats[] = __DIR__.'/bin/oxigraph';
+	if (!empty($r[$nom])) $candidats[] = $r[$nom];
+	if (getenv('SPARQLSANDBOX_'.strtoupper($nom))) $candidats[] = getenv('SPARQLSANDBOX_'.strtoupper($nom));
+	$candidats[] = __DIR__.'/bin/'.$nom;
 	$path = (string)getenv('PATH');
 	foreach (array_merge(explode(':', $path), array('/usr/local/bin', '/usr/bin', getenv('HOME').'/.local/bin')) as $d)
-		if ($d !== '') $candidats[] = rtrim($d, '/').'/oxigraph';
-	$chemin = null;
-	foreach ($candidats as $c) if (@is_file($c) && @is_executable($c)) { $chemin = $c; break; }
-	return $chemin;
+		if ($d !== '') $candidats[] = rtrim($d, '/').'/'.$nom;
+	$chemins[$nom] = null;
+	foreach ($candidats as $c) if (@is_file($c) && @is_executable($c)) { $chemins[$nom] = $c; break; }
+	return $chemins[$nom];
 }
 
 // Lance Oxigraph avec les arguments donnés et $entree sur son entrée standard, en
 // limitant sa durée ($delai secondes), sa mémoire et la taille de sa sortie.
 // Renvoie [code, sortie, erreur, delai_depasse, sortie_trop_longue].
 function lance_oxigraph(array $args, $entree = '', $delai = DELAI_MAX) {
+	return lance_programme('oxigraph', $args, $entree, $delai);
+}
+
+// Même chose pour un exécutable quelconque trouvé par chemin_programme()
+function lance_programme($nom, array $args, $entree = '', $delai = DELAI_MAX) {
 	$res = array('code' => null, 'sortie' => '', 'erreur' => '', 'delai' => false, 'trop' => false);
-	$bin = chemin_oxigraph();
+	$bin = chemin_programme($nom);
 	if (is_null($bin) || !function_exists('proc_open')) {
-		$res['erreur'] = "Oxigraph est introuvable (ou proc_open est désactivé) : voir l'installation dans le README.";
+		$res['erreur'] = "$nom est introuvable (ou proc_open est désactivé) : voir l'installation dans le README.";
 		error_log('SPARQLSandbox : '.$res['erreur']);
 		return $res;
 	}
@@ -259,7 +274,7 @@ function lance_oxigraph(array $args, $entree = '', $delai = DELAI_MAX) {
 	$env = array('PATH' => '/usr/local/bin:/usr/bin:/bin', 'RUST_BACKTRACE' => '0', 'LANG' => 'C.UTF-8',
 	             'HOME' => (string)DOSSIER_TMP);
 	$p = @proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('pipe', 'w')), $tubes, DOSSIER_TMP, $env);
-	if (!is_resource($p)) { $res['erreur'] = "Impossible de lancer Oxigraph."; return $res; }
+	if (!is_resource($p)) { $res['erreur'] = "Impossible de lancer $nom."; return $res; }
 	if ($entree !== '') fwrite($tubes[0], $entree);
 	fclose($tubes[0]);
 	stream_set_blocking($tubes[1], false);
@@ -409,13 +424,16 @@ function store_copie($jeu, &$erreur = null) {
 		return null;
 	}
 	$_SESSION['copies'][$jeu] = $copie;
+	// une copie neuve a la cohérence du jeu d'origine
+	$rapport = coherence_origine($jeu);
+	if (!is_null($rapport)) note_coherence($jeu, $copie, $rapport);
 	return $copie;
 }
 
 // Revient au jeu d'origine : la copie est supprimée, la suivante sera refaite
 function reinitialise_jeu($jeu) {
 	$copie = $_SESSION['copies'][$jeu] ?? null;
-	unset($_SESSION['copies'][$jeu]);
+	unset($_SESSION['copies'][$jeu], $_SESSION['coherence'][$jeu]);
 	if (is_string($copie) && dirname($copie) === DOSSIER_TMP) {
 		$v = verrou('copie_'.basename($copie));
 		supprime_dossier($copie);
@@ -491,7 +509,7 @@ function execute_sparql($jeu, $requete) {
 	$v = verrou('copie_'.basename($copie));
 	if (is_null($v)) { libere($place); $res['message'] = "Une autre de vos requêtes est en cours sur ce jeu : réessayez dans un instant."; return $res; }
 	try {
-		if ($a['forme'] === 'UPDATE') return execute_mise_a_jour($copie, $requete, $res);
+		if ($a['forme'] === 'UPDATE') return execute_mise_a_jour($jeu, $copie, $requete, $res);
 		return interroge_store($copie, $requete, $a);
 	} finally {
 		@touch($copie);
@@ -534,8 +552,9 @@ function message_execution($r) {
 
 // Mise à jour : faite sur une copie temporaire du store, qui ne remplace celui de la session
 // que si elle réussit et ne dépasse pas la taille permise (toutes les opérations, ou aucune)
-function execute_mise_a_jour($copie, $requete, $res) {
+function execute_mise_a_jour($jeu, $copie, $requete, $res) {
 	$avant = compte_triplets($copie);
+	$coherenceAvant = coherence_copie($jeu, $copie);
 	$tmp = $copie.'.maj'.getmypid();
 	supprime_dossier($tmp);
 	if (!copie_dossier($copie, $tmp)) { supprime_dossier($tmp); $res['message'] = "Copie de travail impossible."; return $res; }
@@ -556,6 +575,10 @@ function execute_mise_a_jour($copie, $requete, $res) {
 	supprime_dossier($vieux);
 	$res['ok'] = true;
 	$res['resultat'] = array('avant' => $avant, 'apres' => compte_triplets($copie));
+	// cohérence après la mise à jour, comparée à celle d'avant (coherence.php)
+	$coherenceApres = controle_coherence($jeu, $copie);
+	note_coherence($jeu, $copie, $coherenceApres);
+	$res['coherence'] = array('avant' => $coherenceAvant, 'apres' => $coherenceApres);
 	return $res;
 }
 
@@ -632,7 +655,8 @@ function affiche_corps($r, $prefixes) {
 		if (is_null($x['avant']) || is_null($x['apres'])) return '';
 		$d = $x['apres'] - $x['avant'];
 		return "<p>Votre copie contient maintenant <strong>".$x['apres']."</strong> triplet".($x['apres'] > 1 ? 's' : '')
-		      ." (".($d > 0 ? '+' : '').$d.").</p>";
+		      ." (".($d > 0 ? '+' : '').$d.").</p>"
+		      .(isset($r['coherence']) ? affiche_effet_coherence($r['coherence']['avant'], $r['coherence']['apres']) : '');
 	case 'CONSTRUCT': case 'DESCRIBE':
 		$entetes = array('Sujet', 'Prédicat', 'Objet');
 		$lignes = array();
@@ -665,12 +689,13 @@ function affiche_corps($r, $prefixes) {
 	return $h."</tbody></table></div>".$compte;
 }
 
-// Aperçu de la copie de session : nombre de triplets, classes et propriétés utilisées
+// Aperçu de la copie de session : nombre de triplets, classes et propriétés utilisées ;
+// renvoie array(HTML de l'aperçu, HTML du rapport de cohérence)
 function explore_jeu($jeu) {
 	$copie = store_copie($jeu, $erreur);
-	if (is_null($copie)) return "<p class='statut ko'>❌ ".html($erreur)."</p>";
+	if (is_null($copie)) return array("<p class='statut ko'>❌ ".html($erreur)."</p>", '');
 	$place = reserve_execution();
-	if (is_null($place)) return "<p class='statut ko'>❌ Trop de requêtes en cours depuis votre poste : réessayez dans un instant.</p>";
+	if (is_null($place)) return array("<p class='statut ko'>❌ Trop de requêtes en cours depuis votre poste : réessayez dans un instant.</p>", '');
 	$v = verrou('copie_'.basename($copie));
 	$requetes = array(
 		'classes' => 'SELECT ?x (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?x } GROUP BY ?x ORDER BY DESC(?n) ?x',
@@ -683,6 +708,7 @@ function explore_jeu($jeu) {
 		$donnees[$cle] = $j['results']['bindings'] ?? array();
 	}
 	$total = compte_triplets($copie);
+	$coherence = affiche_coherence(coherence_copie($jeu, $copie));
 	libere($v);
 	libere($place);
 	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
@@ -699,5 +725,7 @@ function explore_jeu($jeu) {
 		}
 		$h .= "</ul>\n";
 	}
-	return $h;
+	return array($h, $coherence);
 }
+
+require_once __DIR__.'/coherence.php';

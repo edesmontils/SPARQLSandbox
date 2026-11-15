@@ -109,6 +109,7 @@
 
 	// Contenu de la copie ; un clic sur une classe ou une propriété en fait une requête
 	var zoneExplorer = document.getElementById('explorer');
+	var zoneCoherence = document.getElementById('coherence');
 	function prefixesUtiles(nom) {
 		var p = nom.indexOf(':') > 0 ? nom.slice(0, nom.indexOf(':')) : null;
 		var lignes = [];
@@ -119,6 +120,7 @@
 	function explorer() {
 		appel('explorer').then(function (r) {
 			zoneExplorer.innerHTML = r.html;
+			zoneCoherence.innerHTML = r.coherence || '';
 			zoneExplorer.querySelectorAll('ul[data-sorte] button').forEach(function (b) {
 				b.addEventListener('click', function () {
 					var sorte = b.closest('ul').dataset.sorte, nom = b.dataset.nom;

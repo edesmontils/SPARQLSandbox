@@ -1,0 +1,72 @@
+# Formes SHACL du jeu « Cinéma » : contraintes que RDFS ne sait pas exprimer
+# (cardinalités, langue, valeurs permises). Vérifiées par pyshacl au chargement du jeu et
+# après chaque mise à jour (voir coherence.php).
+
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix cine: <http://example.org/cinema/vocab#> .
+@prefix forme: <http://example.org/cinema/formes#> .
+
+forme:Film a sh:NodeShape ;
+    sh:targetClass cine:Film ;
+    sh:property [
+        sh:path cine:titre ;
+        sh:qualifiedValueShape [ sh:languageIn ( "fr" ) ] ;
+        sh:qualifiedMinCount 1 ;
+        sh:message "Un film doit avoir un titre en français."@fr
+    ] ;
+    sh:property [
+        sh:path cine:annee ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 1895 ;
+        sh:message "Un film a exactement une année de sortie : un entier, à partir de 1895."@fr
+    ] ;
+    sh:property [
+        sh:path cine:genre ;
+        sh:maxCount 1 ;
+        sh:in ( "Comédie" "Comédie dramatique" "Drame" "Policier" "Western" "Épouvante" "Science-fiction" "Animation" "Autres" ) ;
+        sh:message "Un film a au plus un genre, choisi dans la liste des genres permis."@fr
+    ] ;
+    sh:property [
+        sh:path cine:realisePar ;
+        sh:minCount 1 ;
+        sh:class cine:Realisateur ;
+        sh:message "Un film a au moins un réalisateur, de type cine:Realisateur."@fr
+    ] .
+
+forme:Personne a sh:NodeShape ;
+    sh:targetClass cine:Personne ;
+    sh:property [
+        sh:path foaf:name ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "Une personne a exactement un nom (foaf:name)."@fr
+    ] .
+
+forme:Role a sh:NodeShape ;
+    sh:targetClass cine:Role ;
+    sh:property [ sh:path cine:acteur ; sh:minCount 1 ; sh:maxCount 1 ; sh:class cine:Acteur ;
+        sh:message "Un rôle relie exactement un acteur (cine:Acteur)."@fr ] ;
+    sh:property [ sh:path cine:film ; sh:minCount 1 ; sh:maxCount 1 ; sh:class cine:Film ;
+        sh:message "Un rôle porte sur exactement un film (cine:Film)."@fr ] ;
+    sh:property [ sh:path cine:personnage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "Un rôle a exactement un personnage."@fr ] .
+
+forme:Cinema a sh:NodeShape ;
+    sh:targetClass cine:Cinema ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:message "Un cinéma a exactement un nom (rdfs:label)."@fr ] ;
+    sh:property [ sh:path cine:ville ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "Un cinéma est dans exactement une ville."@fr ] .
+
+forme:Projection a sh:NodeShape ;
+    sh:targetClass cine:Projection ;
+    sh:property [ sh:path cine:film ; sh:minCount 1 ; sh:maxCount 1 ; sh:class cine:Film ;
+        sh:message "Une projection porte sur exactement un film."@fr ] ;
+    sh:property [ sh:path cine:cinema ; sh:minCount 1 ; sh:maxCount 1 ; sh:class cine:Cinema ;
+        sh:message "Une projection a lieu dans exactement un cinéma."@fr ] ;
+    sh:property [ sh:path cine:date ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:date ;
+        sh:message "Une projection a exactement une date (xsd:date)."@fr ] .

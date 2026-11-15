@@ -47,7 +47,9 @@ case 'intention':
 	list($ok, $h) = intention_reference($jeu, param('exercice'), param('question'), param('intention'));
 	reponse($ok, $h);
 case 'explorer':
-	reponse(true, explore_jeu($jeu));
+	list($h, $coherence) = explore_jeu($jeu);
+	echo json_encode(array('ok' => true, 'html' => $h, 'coherence' => $coherence), JSON_UNESCAPED_UNICODE);
+	exit;
 case 'reinitialiser':
 	reinitialise_jeu($jeu);
 	reponse(true, "<p class='statut ok'>↩️ Votre copie a été remise dans l'état d'origine.</p>");

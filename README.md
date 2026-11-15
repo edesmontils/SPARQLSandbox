@@ -25,6 +25,8 @@ réserve le droit de supprimer toute instance à tout moment.
   (avec leur nombre) ; un clic en fait une requête.
 - **Exemples** : chaque jeu de données propose des requêtes commentées (`config.xml` du jeu).
 - **Exercices** au format QueryCraft, avec vérification des requêtes (voir plus bas).
+- **Cohérence** : la base de connaissances est contrôlée au chargement et après chaque mise à
+  jour, par rapport à son ontologie (RDFS) et à ses formes SHACL (voir plus bas).
 - **Mémoire** : les requêtes mémorisées et le brouillon en cours sont gardés dans le navigateur
   (`localStorage`), par jeu de données.
 
@@ -39,6 +41,11 @@ réserve le droit de supprimer toute instance à tout moment.
 
   L'application le cherche dans le réglage `oxigraph` de `sparqlsandbox.ini`, la variable
   d'environnement `SPARQLSANDBOX_OXIGRAPH`, `bin/oxigraph`, puis le `PATH`.
+
+- facultatif : [pyshacl](https://github.com/RDFLib/pySHACL) (`pip install pyshacl`, testé avec
+  la version 0.40), pour vérifier les formes SHACL des jeux qui en ont. Il est cherché comme
+  Oxigraph (réglage `pyshacl`, variable `SPARQLSANDBOX_PYSHACL`, `bin/pyshacl`, `PATH`). Sans
+  lui, seuls les contrôles RDFS sont faits, et la page le signale.
 
 Un hébergement mutualisé qui interdit `proc_open` ou l'exécution de binaires ne convient pas.
 
@@ -101,6 +108,7 @@ Créer un dossier dans `donnees/` avec :
 	<titre>Mon jeu</titre>
 	<fichier nom="ontologie.ttl"/>    <!-- un ou plusieurs fichiers -->
 	<fichier nom="monjeu.ttl"/>
+	<formes nom="formes.ttl"/>        <!-- facultatif : formes SHACL -->
 	<référence>https://…</référence>  <!-- facultatif -->
 	<description><p>Description en HTML…</p></description>
 	<exemples>
@@ -169,6 +177,34 @@ réussies sont gardées dans le navigateur ; l'adresse `?jeu=cinema&exercice=cin
 directement un exercice.
 
 Les tests vérifient que chaque solution est reconnue comme bonne réponse.
+
+## Cohérence de la base de connaissances
+
+La base de connaissances d'un jeu est contrôlée **au chargement** (store d'origine : le rapport est
+gardé en cache dans le dossier de travail, et les anomalies sont notées dans le journal de PHP
+pour l'enseignant) et **après chaque mise à jour** d'un étudiant. Une incohérence n'est jamais
+refusée — RDF est en monde ouvert, et se tromper fait partie de l'apprentissage — mais elle est
+signalée :
+
+- sous le résultat de la mise à jour : les anomalies qu'elle **introduit**, et celles qu'elle
+  **corrige** ;
+- dans le panneau « 🩺 Cohérence » : toutes les anomalies de la copie.
+
+**Contrôles RDFS** (tous les jeux), qui lisent l'ontologie comme des contraintes en monde fermé :
+
+- classe ou propriété utilisée dans l'espace de noms de l'ontologie sans y être déclarée (faute
+  de frappe : `cine:Flim`) ;
+- `rdfs:domain` : le sujet doit être du type indiqué, sous-classes comprises ;
+- `rdfs:range` : l'objet doit être une ressource du type indiqué, ou un littéral du type de
+  données indiqué ;
+- littéral mal formé pour son type (`"mille"^^xsd:integer`, `"2026-13-45"^^xsd:date`).
+
+**Formes SHACL** (jeux qui déclarent `<formes nom="…"/>`), validées par pyshacl : cardinalités,
+langues, listes de valeurs, bornes… que RDFS ne sait pas exprimer. Les messages des formes
+(`sh:message`, en français) sont ceux que voient les étudiants. Les deux jeux fournis en ont un
+(`donnees/cinema/formes.ttl`, `donnees/amis/formes.ttl`).
+
+Les tests vérifient que chaque jeu est cohérent au chargement.
 
 ## Tests
 

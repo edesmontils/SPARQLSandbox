@@ -235,3 +235,13 @@ details.attendu .defile { margin-top: 8px; max-height: 40vh; }
 .statut.neutre { color: var(--sb-ink); background: var(--sb-surface-2); border-color: var(--sb-border-strong); }
 .compte-lignes { color: var(--sb-ink-soft); font-size: .88em; margin: 6px 0 0; }
 .CodeMirror.cm-lecture { background: var(--sb-surface-2); }
+
+/* Cohérence */
+.statut.avertissement { color: #8a5a06; background: #fdf2da; border-color: #f0d99a; }
+.anomalies { margin: 6px 0 10px; padding-left: 0; list-style: none; font-size: .9em; }
+.anomalies li { margin: 4px 0; padding: 4px 8px; border-left: 3px solid #f0d99a; background: var(--sb-surface-2); overflow-wrap: anywhere; }
+.anomalies li.violation { border-left-color: var(--sb-danger-border); }
+.anomalies .source {
+	display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: 4px;
+	background: var(--sb-accent-soft); color: var(--sb-accent); font-family: var(--sb-mono); font-size: .8em;
+}

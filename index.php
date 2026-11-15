@@ -148,6 +148,12 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
         </div>
       </section>
       <section class="post">
+        <h2 class="title">🩺 Cohérence</h2>
+        <p class="astuce">Votre copie comparée à l'ontologie du jeu (RDFS)<?php echo $j['formes'] ? ' et à ses formes SHACL' : ''; ?>.
+          Une incohérence est signalée, jamais refusée.</p>
+        <div id="coherence" aria-live="polite"><p class="astuce">Chargement…</p></div>
+      </section>
+      <section class="post">
         <h2 class="title">🧺 Mémoire</h2>
         <ul id="memoire" class="exemples"><li class="astuce">Aucune requête mémorisée.</li></ul>
       </section>
