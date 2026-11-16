@@ -117,7 +117,7 @@ main { padding: 24px 30px; }
 .post h3 { font-size: 1.02em; margin: 16px 0 8px; }
 .accueil { max-width: 980px; margin-left: auto; margin-right: auto; }
 
-.colonnes { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 22px; align-items: start; }
+.colonnes { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
 .laterale .post { padding: 16px 18px; }
 @media (max-width: 1000px) { .colonnes { grid-template-columns: minmax(0, 1fr); } }
 
@@ -311,7 +311,7 @@ pre.copie-sparql {
 	body.mode-copie { padding: 0; background: #fff; font-size: 10pt; line-height: 1.35; }
 	body.mode-copie .container { box-shadow: none; border: none; border-radius: 0; max-width: none; }
 	body.mode-copie .entete, body.mode-copie nav.jeux, body.mode-copie .pied, body.mode-copie .laterale,
-	body.mode-copie main > .post, body.mode-copie main > .statut, body.mode-copie .sans-impression { display: none !important; }
+	body.mode-copie main > .post, body.mode-copie .vocabulaire-section, body.mode-copie main > .statut, body.mode-copie .sans-impression { display: none !important; }
 	body.mode-copie main { padding: 0; }
 	body.mode-copie .colonnes { display: block; }
 	body.mode-copie .exercice { padding: 0; border: none; box-shadow: none; }
@@ -346,14 +346,8 @@ sup a { text-decoration: none; }
 @media (max-width: 600px) { .carte-auteur { flex-direction: column; text-align: center; } }
 
 /* Diagramme du vocabulaire (js/vocabulaire.js) */
-#vocabulaire {
-	width: min(1200px, 96vw); max-height: 92vh; padding: 20px 24px; border: 0;
-	border-radius: var(--sb-radius-lg); background: var(--sb-surface); color: var(--sb-ink);
-	box-shadow: var(--sb-shadow-page);
-}
-#vocabulaire::backdrop { background: rgba(29, 39, 48, .55); }
-.entete-dialogue { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.entete-dialogue .title { margin: 0; }
+#vocabulaire > summary { cursor: pointer; margin: 0; }
+#vocabulaire[open] > summary { margin-bottom: 8px; }
 .legende-vocabulaire { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 6px 0 12px; font-size: .9em; color: var(--sb-ink-soft); }
 .legende-vocabulaire svg { vertical-align: middle; overflow: visible; }
 .schema-vocabulaire { overflow: auto; max-height: 68vh; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); background: var(--sb-surface-2); }
@@ -382,9 +376,9 @@ sup a { text-decoration: none; }
 .voc-clic:focus-visible, .voc-etiquette:focus-visible { outline: 3px solid var(--sb-accent-ring); }
 
 /* Résultat à droite du diagramme : le diagramme reste ouvert */
-.corps-vocabulaire { display: flex; gap: 14px; align-items: flex-start; }
-.corps-vocabulaire .schema-vocabulaire { flex: 1 1 0; min-width: 0; }
-.panneau-vocabulaire { flex: 0 0 min(46%, 560px); max-height: 68vh; overflow: auto; padding: 10px 12px; font-size: .8em; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); }
+.corps-vocabulaire { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.corps-vocabulaire .schema-vocabulaire { flex: 1 1 380px; min-width: 0; }
+.panneau-vocabulaire { flex: 1 1 300px; max-height: 68vh; overflow: auto; padding: 10px 12px; font-size: .8em; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); }
 .panneau-vocabulaire[hidden] { display: none; }
 .panneau-vocabulaire .entete-panneau { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 6px; font-family: var(--sb-mono); }
 .panneau-vocabulaire .defile { max-height: none; overflow: visible; border: 0; }
@@ -393,4 +387,3 @@ sup a { text-decoration: none; }
 .voc-clic.voc-choisi .voc-entete { fill: var(--sb-accent); }
 .voc-clic.voc-choisi .voc-nom { fill: #fff; }
 .voc-etiquette.voc-choisi text { font-weight: 700; text-decoration: underline; }
-@media (max-width: 900px) { .corps-vocabulaire { flex-direction: column; } .panneau-vocabulaire { flex: none; width: 100%; max-height: 40vh; } }

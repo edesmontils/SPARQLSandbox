@@ -25,13 +25,13 @@ réserve le droit de supprimer toute instance à tout moment.
   requête ; la langue ou le type des littéraux est indiqué.
 - **Exploration** : « 🧩 Contenu de votre copie » liste les classes et les propriétés utilisées
   (avec leur nombre) ; un clic en fait une requête.
-- **Diagramme du vocabulaire** (bouton « 🗺️ Diagramme du vocabulaire ») : classes avec leurs
+- **Diagramme du vocabulaire** (section repliable « 🗺️ Vocabulaire de votre copie », au-dessus de l'éditeur) : classes avec leurs
   attributs, sous-classes (`rdfs:subClassOf`) et propriétés entre classes. Il réunit ce que
   l'ontologie déclare (`rdfs:domain`, `rdfs:range`) et ce que les données montrent (classe du sujet
   et de l'objet de chaque triplet), donc il fonctionne aussi pour un jeu sans ontologie. Trait
   plein : observé ; pointillé : déclaré mais jamais observé. Il suit les mises à jour de la copie.
   Un clic sur une classe ou une propriété affiche ses instances (avec une colonne par attribut) ou ses triplets à droite du
-  diagramme, qui reste ouvert (lien « Dans l'éditeur » pour reprendre la requête).
+  diagramme (dessous si la place manque) (lien « Dans l'éditeur » pour reprendre la requête).
   Le modèle est construit par `vocabulaire.php`, le dessin (SVG) par `js/vocabulaire.js`.
 - **Exemples** : chaque jeu de données propose des requêtes commentées (`config.xml` du jeu).
 - **Exercices** au format QueryCraft, avec vérification des requêtes (voir plus bas).

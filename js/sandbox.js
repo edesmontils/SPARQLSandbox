@@ -154,6 +154,7 @@
 	}
 	function terme(nom) { return nom.charAt(0) === '<' || nom.indexOf(':') > 0 ? nom : '<' + nom + '>'; }
 	function explorer() {
+		actualiseVocabulaire();
 		appel('explorer').then(function (r) {
 			zoneExplorer.innerHTML = r.html;
 			zoneCoherence.innerHTML = r.coherence || '';
@@ -179,7 +180,7 @@
 	explorer();
 
 	// Diagramme du vocabulaire de la copie (js/vocabulaire.js)
-	var dialogueVoc = document.getElementById('vocabulaire');
+	var sectionVoc = document.getElementById('vocabulaire'), perimeVoc = true;
 	var zoneVoc = document.getElementById('schema-vocabulaire');
 	// Instances d'une classe avec leurs attributs (une colonne par propriété à valeur littérale ;
 	// plusieurs valeurs d'une même propriété sont réunies dans la cellule)
@@ -219,7 +220,6 @@
 		});
 	}
 	document.getElementById('reprendre-vocabulaire').addEventListener('click', function () {
-		dialogueVoc.close();
 		quitteTrous();
 		editeur.setValue(requeteVoc);
 		resultat.innerHTML = '';
@@ -234,13 +234,13 @@
 			window.dessineVocabulaire(r.modele, zoneVoc, interrogeVocabulaire);
 		});
 	}
-	document.getElementById('voir-vocabulaire').addEventListener('click', function () {
-		if (typeof dialogueVoc.showModal !== 'function') { alert('Votre navigateur ne sait pas afficher ce diagramme.'); return; }
-		dialogueVoc.showModal();
-		metsAJourVocabulaire();
-	});
-	document.getElementById('fermer-vocabulaire').addEventListener('click', function () { dialogueVoc.close(); });
-	dialogueVoc.addEventListener('click', function (e) { if (e.target === dialogueVoc) dialogueVoc.close(); });
+	// Le diagramme suit la copie : redessiné à chaque actualisation, ou à l'ouverture s'il est replié
+	function actualiseVocabulaire() {
+		if (!sectionVoc) return;
+		if (sectionVoc.open) { perimeVoc = false; metsAJourVocabulaire(); } else perimeVoc = true;
+	}
+	sectionVoc.addEventListener('toggle', function () { if (sectionVoc.open && perimeVoc) actualiseVocabulaire(); });
+	actualiseVocabulaire();
 
 	// Mémoire : requêtes gardées dans ce navigateur, par jeu de données
 	var listeMemoire = document.getElementById('memoire');
