@@ -495,6 +495,9 @@ if (function_exists('curl_init')) {
 	verifie(strpos($page, 'href="services.php"') !== false, 'lien vers les services en pied de page');
 	list($code, $sp) = http("http://127.0.0.1:$port/services.php");
 	verifie($code == 200 && strpos($sp, 'Wikidata') !== false && strpos($sp, 'note-ia') === false, 'page des services servie, sans note IA pour les services connus');
+	verifie(strpos($page, 'href="credits.php"') !== false, 'lien vers les crédits en pied de page');
+	list($code, $cr) = http("http://127.0.0.1:$port/credits.php");
+	verifie($code == 200 && strpos($cr, 'Oxigraph') !== false && strpos($cr, 'GNU GPL') !== false, 'page des crédits servie');
 	preg_match('/"csrf":"([0-9a-f]+)"/', $page, $m);
 	$jeton = $m[1] ?? '';
 	verifie($jeton !== '', 'jeton dans la page');

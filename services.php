@@ -84,7 +84,8 @@ header('Cache-Control: no-store');
 </main>
 <footer class="pied"><p><?php echo html($nom_appli); ?> <?php echo html($version); ?>
   <span class="separateur">·</span> © 2026 E. Desmontils, Nantes Université
-  <span class="separateur">·</span> Logiciel libre sous licence GPL v3</p></footer>
+  <span class="separateur">·</span> Logiciel libre sous licence GPL v3
+  <span class="separateur">·</span> <a href="credits.php">🙏 Crédits</a></p></footer>
 </div>
 </body>
 </html>

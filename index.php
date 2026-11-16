@@ -173,7 +173,8 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
   <span class="separateur">·</span> © 2026 E. Desmontils, Nantes Université
   <span class="separateur">·</span> Logiciel libre sous licence GPL v3
   <span class="separateur">·</span> Moteur SPARQL <a href="https://github.com/oxigraph/oxigraph">Oxigraph</a>
-  <span class="separateur">·</span> <a href="services.php">Services fédérés</a></p>
+  <span class="separateur">·</span> <a href="services.php">Services fédérés</a>
+  <span class="separateur">·</span> <a href="credits.php">🙏 Crédits</a></p>
   <p class="temps-session" id="temps-session" title="La session et vos copies sont effacées après <?php echo html(libelle_duree(DUREE_SESSION)); ?> sans activité">⏳ Session valable <?php echo html(libelle_duree(DUREE_SESSION)); ?> après la dernière action</p></footer>
 </div>
 </body>
