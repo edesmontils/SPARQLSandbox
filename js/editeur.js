@@ -7,7 +7,7 @@
 
 	var donnees = JSON.parse(document.getElementById('donnees').textContent);
 	var XSD = 'http://www.w3.org/2001/XMLSchema#', RDFS = 'http://www.w3.org/2000/01/rdf-schema#', RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
-	var LARGEUR = 170, ECART_X = 50, ECART_Y = 90, PAR_RANGEE = 5;
+	var LARGEUR = 170, ECART_Y = 90;
 
 	function $(s) { return document.querySelector(s); }
 	function echappe(t) {
@@ -41,7 +41,7 @@
 	//--------------------------------------------------------------------------
 	// État : le brouillon
 	//--------------------------------------------------------------------------
-	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', sel: null, pos: {} };
+	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', sel: null, pos: {}, routes: {} };
 	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null;
 	var vue = 'graphe', lien = null, drag = null, dernier = { t: 0, k: '' }, quitte = false, enCours = false;
 
@@ -96,51 +96,179 @@
 	function attributs(iri) { return E.props.filter(function (p) { return p.domain === iri && p.range && litteral(p.range); }); }
 	function hauteur(c) { return 32 + attributs(c.iri).length * 15; }
 
-	function dispose() {
+	// Disposition en couches (méthode de Sugiyama, version courte) :
+	// 1. couches : une super-classe et un domaine au-dessus de leurs sous-classes et de leurs portées
+	//    (cycles retournés, concepts sans entrée rapprochés de ce qu'ils pointent) ;
+	// 2. les flèches qui traversent des couches reçoivent un point de passage par couche (pour ne
+	//    pas passer sur un concept) ; 3. ordre dans chaque couche par barycentres, en gardant le
+	//    meilleur nombre de croisements ; 4. abscisses au plus près des voisins sans chevauchement ;
+	// 5. concepts isolés rangés en bas. Renvoie array(positions des concepts, points de passage des flèches).
+	function calculeDisposition() {
+		var MARGE = 24, SEP = 34, LARGEUR_PASSAGE = 14, ECART_PASSAGE = 44;
 		var cs = E.classes, n = cs.length, idx = {}, i;
 		cs.forEach(function (c, k) { idx[c.iri] = k; });
-		var suiv = [], etat = [], pred = [];
-		for (i = 0; i < n; i++) { suiv.push([]); etat.push(0); pred.push([]); }
-		function arete(a, b) { if (a !== undefined && b !== undefined && a !== b) suiv[a].push(b); }
-		cs.forEach(function (c) { if (c.parent) arete(idx[c.parent], idx[c.iri]); });
-		E.props.forEach(function (p) { if (p.domain && p.range && !litteral(p.range)) arete(idx[p.domain], idx[p.range]); });
-		var arriere = {};
+		var H = cs.map(hauteur);
+		var L = [];    // arêtes u (au-dessus) -> v (en dessous)
+		cs.forEach(function (c, k) { if (c.parent && idx[c.parent] !== undefined && idx[c.parent] !== k) L.push({ u: idx[c.parent], v: k, cle: 'classe:' + c.iri }); });
+		E.props.forEach(function (p) {
+			if (p.domain && p.range && !litteral(p.range) && idx[p.domain] !== undefined && idx[p.range] !== undefined && p.domain !== p.range)
+				L.push({ u: idx[p.domain], v: idx[p.range], cle: 'prop:' + p.iri });
+		});
+		// 1. cycles : on retourne les arêtes de retour
+		var sortantes = [], etat = [];
+		for (i = 0; i < n; i++) { sortantes.push([]); etat.push(0); }
+		L.forEach(function (e, k) { sortantes[e.u].push(k); });
 		function visite(u) {
 			etat[u] = 1;
-			suiv[u].forEach(function (v) { if (etat[v] === 1) arriere[u + '>' + v] = true; else if (etat[v] === 0) visite(v); });
+			sortantes[u].forEach(function (k) {
+				var e = L[k];
+				if (etat[e.v] === 1) { var t = e.u; e.u = e.v; e.v = t; }
+				else if (etat[e.v] === 0) visite(e.v);
+			});
 			etat[u] = 2;
 		}
 		for (i = 0; i < n; i++) if (etat[i] === 0) visite(i);
-		var entrants = [], couche = [];
-		for (i = 0; i < n; i++) { entrants.push(0); couche.push(0); suiv[i] = suiv[i].filter(function (v) { return !arriere[i + '>' + v]; }); }
-		for (i = 0; i < n; i++) suiv[i].forEach(function (v) { entrants[v]++; pred[v].push(i); });
-		var file = [];
-		for (i = 0; i < n; i++) if (entrants[i] === 0) file.push(i);
+		// couches : plus long chemin, puis les concepts sans entrée descendent vers ce qu'ils pointent
+		var entrants = [], sorties = [], couche = [], deg = [];
+		for (i = 0; i < n; i++) { entrants.push(0); sorties.push([]); couche.push(0); deg.push(0); }
+		L.forEach(function (e) { sorties[e.u].push(e.v); entrants[e.v]++; deg[e.u]++; deg[e.v]++; });
+		var restant = entrants.slice(), file = [];
+		for (i = 0; i < n; i++) if (restant[i] === 0 && deg[i] > 0) file.push(i);
 		while (file.length) {
 			var u = file.shift();
-			suiv[u].forEach(function (v) { if (couche[v] < couche[u] + 1) couche[v] = couche[u] + 1; if (--entrants[v] === 0) file.push(v); });
+			sorties[u].forEach(function (v) { if (couche[v] < couche[u] + 1) couche[v] = couche[u] + 1; if (--restant[v] === 0) file.push(v); });
 		}
+		for (i = 0; i < n; i++) if (entrants[i] === 0 && sorties[i].length)
+			couche[i] = Math.min.apply(null, sorties[i].map(function (v) { return couche[v]; })) - 1;
+		// 2. éléments (concepts et points de passage) et voisins
+		var items = [], noeud = {};
+		function item(nn, c) { var it = { n: nn, w: nn >= 0 ? LARGEUR : LARGEUR_PASSAGE, h: nn >= 0 ? H[nn] : 0, couche: c, up: [], down: [], tous: [], x: 0, ordre: 0 }; items.push(it); return it; }
+		for (i = 0; i < n; i++) if (deg[i] > 0) noeud[i] = item(i, couche[i]);
+		L.forEach(function (e) {
+			var chaine = [noeud[e.u]];
+			for (var l = couche[e.u] + 1; l < couche[e.v]; l++) chaine.push(item(-1, l));
+			chaine.push(noeud[e.v]);
+			e.chaine = chaine;
+			for (var k = 0; k + 1 < chaine.length; k++) {
+				chaine[k].down.push(chaine[k + 1]); chaine[k + 1].up.push(chaine[k]);
+				chaine[k].tous.push(chaine[k + 1]); chaine[k + 1].tous.push(chaine[k]);
+			}
+		});
+		var nbCouches = items.reduce(function (m, it) { return Math.max(m, it.couche + 1); }, 0);
 		var couches = [];
-		for (i = 0; i < n; i++) (couches[couche[i]] = couches[couche[i]] || []).push(i);
-		var rang = {};
-		var rangees = [];
-		couches.forEach(function (L, k) {
-			if (!L) return;
-			L.sort(function (a, b) {
-				function cle(u) { var p = pred[u].filter(function (v) { return rang[v] !== undefined; }); return p.length ? p.reduce(function (s, v) { return s + rang[v]; }, 0) / p.length : -1; }
-				return (cle(a) - cle(b)) || cs[a].nom.localeCompare(cs[b].nom);
+		for (i = 0; i < nbCouches; i++) couches.push([]);
+		items.forEach(function (it) { couches[it.couche].push(it); });
+		// 3. ordre dans les couches
+		function bary(it, v) { return v.length ? v.reduce(function (s, x) { return s + x.ordre; }, 0) / v.length : it.ordre; }
+		couches.forEach(function (C, l) {
+			C.sort(function (a, b) { return a.n >= 0 && b.n >= 0 ? cs[a.n].nom.localeCompare(cs[b.n].nom) : 0; });
+			C.forEach(function (it, k) { it.ordre = k; });
+			if (l > 0) { C.forEach(function (it) { it.bc = bary(it, it.up); }); C.sort(function (a, b) { return (a.bc - b.bc) || (a.ordre - b.ordre); }); C.forEach(function (it, k) { it.ordre = k; }); }
+		});
+		function trie(C, sens) {
+			C.forEach(function (it) { it.bc = bary(it, sens > 0 ? it.up : it.down); });
+			C.sort(function (a, b) { return (a.bc - b.bc) || (a.ordre - b.ordre); });
+			C.forEach(function (it, k) { it.ordre = k; });
+		}
+		function croisements() {
+			var tot = 0;
+			for (var l = 0; l + 1 < nbCouches; l++) {
+				var P = [];
+				couches[l].forEach(function (it) { it.down.forEach(function (v) { P.push([it.ordre, v.ordre]); }); });
+				for (var a = 0; a < P.length; a++) for (var b = a + 1; b < P.length; b++)
+					if ((P[a][0] - P[b][0]) * (P[a][1] - P[b][1]) < 0) tot++;
+			}
+			return tot;
+		}
+		var meilleur = croisements(), sauve = items.map(function (it) { return it.ordre; });
+		for (var tour = 0; tour < 14 && meilleur > 0; tour++) {
+			for (i = 1; i < nbCouches; i++) trie(couches[i], 1);
+			for (i = nbCouches - 2; i >= 0; i--) trie(couches[i], -1);
+			var c = croisements();
+			if (c < meilleur) { meilleur = c; sauve = items.map(function (it) { return it.ordre; }); }
+		}
+		items.forEach(function (it, k) { it.ordre = sauve[k]; });
+		couches.forEach(function (C) { C.sort(function (a, b) { return a.ordre - b.ordre; }); });
+		// 4. abscisses : au plus près de la moyenne des voisins (régression isotone), sans chevauchement
+		function sep(a, b) { return (a.w + b.w) / 2 + SEP; }
+		couches.forEach(function (C) {
+			var x = 0;
+			C.forEach(function (it, k) { if (k) x += sep(C[k - 1], it); it.x = x; });
+			C.forEach(function (it) { it.x -= x / 2; });
+		});
+		function place(C, cle) {
+			var d = [], decal = [], o = 0, blocs = [];
+			C.forEach(function (it, k) {
+				if (k) o += sep(C[k - 1], it);
+				decal.push(o);
+				var v = it[cle];
+				d.push((v.length ? v.reduce(function (s, x) { return s + x.x; }, 0) / v.length : it.x) - o);
 			});
-			L.forEach(function (u, j) { rang[u] = j / Math.max(1, L.length); });
-			for (var s = 0; s < L.length; s += PAR_RANGEE) rangees.push(L.slice(s, s + PAR_RANGEE));
+			d.forEach(function (val, k) {
+				blocs.push({ s: val, n: 1, de: k });
+				while (blocs.length > 1 && blocs[blocs.length - 2].s / blocs[blocs.length - 2].n > blocs[blocs.length - 1].s / blocs[blocs.length - 1].n) {
+					var b = blocs.pop(), a = blocs.pop();
+					blocs.push({ s: a.s + b.s, n: a.n + b.n, de: a.de });
+				}
+			});
+			blocs.forEach(function (b) { for (var k = b.de; k < b.de + b.n; k++) C[k].x = b.s / b.n + decal[k]; });
+		}
+		for (var r = 0; r < 8; r++) {
+			for (i = 1; i < nbCouches; i++) place(couches[i], 'up');
+			for (i = nbCouches - 2; i >= 0; i--) place(couches[i], 'down');
+		}
+		for (i = 0; i < nbCouches; i++) place(couches[i], 'tous');
+		var minX = items.reduce(function (m, it) { return Math.min(m, it.x - it.w / 2); }, Infinity);
+		var maxX = items.reduce(function (m, it) { return Math.max(m, it.x + it.w / 2); }, -Infinity);
+		var decalX = MARGE - (isFinite(minX) ? minX : 0);
+		// ordonnées : une couche mesure son concept le plus haut ; une couche de points de passage seuls est étroite
+		var y = MARGE, ys = [];
+		couches.forEach(function (C) {
+			var hm = C.reduce(function (m, it) { return Math.max(m, it.h); }, 0);
+			ys.push({ y: y, h: hm });
+			y += hm + (hm > 0 ? ECART_Y : ECART_PASSAGE);
 		});
-		var largeur = rangees.reduce(function (m, L) { return Math.max(m, L.length); }, 1) * (LARGEUR + ECART_X);
-		var y = 24;
-		E.pos = {};
-		rangees.forEach(function (L) {
-			var x0 = 24 + (largeur - L.length * (LARGEUR + ECART_X)) / 2;
-			L.forEach(function (u, j) { E.pos[cs[u].iri] = { x: x0 + j * (LARGEUR + ECART_X), y: y }; });
-			y += L.reduce(function (m, u) { return Math.max(m, hauteur(cs[u])); }, 0) + ECART_Y;
+		var pos = {}, routes = {};
+		items.forEach(function (it) { if (it.n >= 0) pos[cs[it.n].iri] = { x: it.x - it.w / 2 + decalX, y: ys[it.couche].y }; });
+		L.forEach(function (e) {
+			if (e.chaine.length < 3) return;
+			var haut = cs[e.u].iri, bas = cs[e.v].iri;
+			routes[e.cle] = { haut: { iri: haut, x: pos[haut].x, y: pos[haut].y }, bas: { iri: bas, x: pos[bas].x, y: pos[bas].y },
+				pts: e.chaine.slice(1, -1).map(function (it) { return { x: it.x + decalX, y: ys[it.couche].y + ys[it.couche].h / 2 }; }) };
 		});
+		// 5. concepts sans lien : en bas, par rangées
+		var bas = nbCouches ? y - (ys[nbCouches - 1].h > 0 ? ECART_Y : ECART_PASSAGE) + ECART_Y : MARGE;
+		var isoles = [];
+		for (i = 0; i < n; i++) if (deg[i] === 0) isoles.push(i);
+		isoles.sort(function (a, b) { return cs[a].nom.localeCompare(cs[b].nom); });
+		var largeurPrincipale = nbCouches ? maxX + decalX : 0;
+		var parRangee = Math.max(3, Math.min(6, Math.floor((largeurPrincipale || 5 * (LARGEUR + SEP)) / (LARGEUR + SEP))));
+		for (var k = 0; k < isoles.length; k += parRangee) {
+			var rangee = isoles.slice(k, k + parRangee);
+			rangee.forEach(function (u, j) { pos[cs[u].iri] = { x: MARGE + j * (LARGEUR + SEP), y: bas }; });
+			bas += rangee.reduce(function (m, u) { return Math.max(m, H[u]); }, 0) + SEP;
+		}
+		return { pos: pos, routes: routes };
+	}
+	// Première disposition (sans animation)
+	function dispose() { var d = calculeDisposition(); E.pos = d.pos; E.routes = d.routes; }
+	// « Réorganiser » : nouvelle disposition, les concepts glissent vers leur place
+	function reorganise() {
+		var cible = calculeDisposition(), de = {};
+		Object.keys(cible.pos).forEach(function (k) { de[k] = E.pos[k] ? { x: E.pos[k].x, y: E.pos[k].y } : cible.pos[k]; });
+		E.routes = cible.routes;
+		if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { E.pos = cible.pos; rendGraphe(); return; }
+		var t0 = null, DUREE = 450;
+		function pas(t) {
+			if (t0 === null) t0 = t;
+			var k = Math.min(1, (t - t0) / DUREE), f = 1 - Math.pow(1 - k, 3);
+			Object.keys(cible.pos).forEach(function (iri) {
+				E.pos[iri] = k >= 1 ? cible.pos[iri] : { x: de[iri].x + (cible.pos[iri].x - de[iri].x) * f, y: de[iri].y + (cible.pos[iri].y - de[iri].y) * f };
+			});
+			rendGraphe();
+			if (k < 1) requestAnimationFrame(pas);
+		}
+		requestAnimationFrame(pas);
 	}
 	function libre() {
 		for (var y = 24; y < 1200; y += 80) for (var x = 24; x < 1200; x += LARGEUR + 20) {
@@ -166,14 +294,38 @@
 	}
 	function court(t, n) { return t.length > n ? t.slice(0, n - 1) + '…' : t; }
 
+	// Points de passage d'une flèche, dans le sens a -> b ; null si les concepts ont bougé depuis la disposition
+	function passage(cle, a) {
+		var r = E.routes[cle];
+		if (!r) return null;
+		var h = E.pos[r.haut.iri], b = E.pos[r.bas.iri];
+		if (!h || !b || h.x !== r.haut.x || h.y !== r.haut.y || b.x !== r.bas.x || b.y !== r.bas.y) return null;
+		return a === r.haut.iri ? r.pts : r.pts.slice().reverse();
+	}
+	// Courbe lisse (Catmull-Rom en Bézier) par une suite de points
+	function courbe(P) {
+		var d = 'M' + P[0].x + ' ' + P[0].y;
+		for (var i = 0; i + 1 < P.length; i++) {
+			var p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+			d += ' C' + (p1.x + (p2.x - p0.x) / 6) + ' ' + (p1.y + (p2.y - p0.y) / 6) + ' ' + (p2.x - (p3.x - p1.x) / 6) + ' ' + (p2.y - (p3.y - p1.y) / 6) + ' ' + p2.x + ' ' + p2.y;
+		}
+		return d;
+	}
+
 	function traceArete(e, N, decalage) {
 		var A = N[e.a], B = N[e.b], x = e.x, t = e.k, st = statut(x, t === 'sub' ? 'classe' : 'prop');
 		var sel = e.k === 'prop' && E.sel && E.sel.t === 'prop' && E.sel.iri === x.iri;
 		var cls = 'ge ar' + (t === 'sub' ? ' sub' : '') + (st ? ' st-' + st : '') + (sel ? ' sel' : '');
-		var d, lx, ly;
+		var d, lx, ly, via;
 		if (e.a === e.b) {
 			var x0 = A.x + A.w, y0 = A.y + 10;
 			d = 'M' + x0 + ' ' + y0 + ' C' + (x0 + 60) + ' ' + (y0 - 28) + ' ' + (x0 + 60) + ' ' + (y0 + 48) + ' ' + x0 + ' ' + (y0 + 20); lx = x0 + 48; ly = y0 + 10;
+		} else if ((via = passage(t === 'sub' ? 'classe:' + x.iri : 'prop:' + x.iri, e.a))) {
+			// flèche qui traverse des couches : elle passe par les points réservés par la disposition
+			var Q0 = rectPt(A, via[0].x, via[0].y), Q2 = rectPt(B, via[via.length - 1].x, via[via.length - 1].y), P = [Q0].concat(via, [Q2]);
+			d = courbe(P);
+			var m = P.length;
+			if (m % 2) { lx = P[(m - 1) / 2].x; ly = P[(m - 1) / 2].y; } else { lx = (P[m / 2 - 1].x + P[m / 2].x) / 2; ly = (P[m / 2 - 1].y + P[m / 2].y) / 2; }
 		} else {
 			var ax = A.x + A.w / 2, ay = A.y + A.h / 2, bx = B.x + B.w / 2, by = B.y + B.h / 2, dx = bx - ax, dy = by - ay, len = Math.sqrt(dx * dx + dy * dy) || 1;
 			var cx = (ax + bx) / 2 + (-dy / len) * decalage, cy = (ay + by) / 2 + (dx / len) * decalage;
@@ -609,7 +761,7 @@
 		else if (id === 'add-prop') creeProp('', XSD + 'string', 'nouvelle propriété');
 		else if (id === 'v-graphe') { vue = 'graphe'; rendVue(); }
 		else if (id === 'v-liste') { vue = 'liste'; rendVue(); }
-		else if (id === 'reorg') { E.pos = {}; dispose(); rendGraphe(); }
+		else if (id === 'reorg') reorganise();
 		else if (id === 'b-enreg') enregistre();
 		else if (id === 'retour') {
 			if (!nbModifs()) { retour(); return; }
