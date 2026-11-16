@@ -53,6 +53,55 @@ SSH (`ssh-add --apple-use-keychain ~/.ssh/id_ed25519`), et l'hôte déjà connu 
 Côté serveur, seuls sont requis un shell POSIX et `cat`, `ls`, `cp`, `mv`, `rm`, `du`, `df` ;
 `curl` pour tester un point d'accès.
 
+### Exemple : configurer une machine de production
+
+L'application doit se connecter avec **le compte qui possède le site** (celui qui fait tourner
+PHP et qui est propriétaire de `donnees/`, des `.ini` et du dossier de travail), jamais avec
+`root` : une erreur ou une compromission n'a alors que les droits du site. Profil type, pour un
+site installé sous `/home/sparqlsandbox` :
+
+| Champ | Valeur |
+|---|---|
+| Hôte SSH | l'adresse ou l'alias de la machine |
+| Utilisateur | `sparqlsandbox` (le compte du site, pas `root`) |
+| Racine du site | `/home/sparqlsandbox/programmation/SPARQLSandbox` |
+| `sparqlsandbox.ini` | `/home/sparqlsandbox/sparqlsandbox.ini` |
+| `sparqlsandbox-ia.ini` | `/home/sparqlsandbox/sparqlsandbox-ia.ini` |
+| Dossier de travail | `/home/sparqlsandbox/sparqlsandbox-tmp` |
+| Adresse publique | l'URL publique du site |
+
+Mise en place sur le serveur, une seule fois (depuis une session `root`, ou avec `sudo`) :
+
+1. **Autoriser votre clé pour le compte du site** (sans doublon : `ssh-copy-id` s'en charge) :
+   ```sh
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub sparqlsandbox@<hôte>
+   ```
+   ou, si le compte n'accepte pas encore de connexion, avec `root` :
+   ```sh
+   cat ~/.ssh/id_ed25519.pub | ssh root@<hôte> 'install -d -m 700 -o sparqlsandbox -g sparqlsandbox /home/sparqlsandbox/.ssh \
+     && cat >> /home/sparqlsandbox/.ssh/authorized_keys \
+     && chown sparqlsandbox:sparqlsandbox /home/sparqlsandbox/.ssh/authorized_keys \
+     && chmod 600 /home/sparqlsandbox/.ssh/authorized_keys'
+   ```
+   (`>>` ajoute la clé à chaque exécution : ne la lancez qu'une fois, ou dédoublonnez ensuite avec
+   `sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys`.) Vérifiez : `ssh sparqlsandbox@<hôte> id -un`.
+2. **Garder une administration possible sans `root`** : le compte du site a un mot de passe
+   verrouillé par défaut, donc `sudo` y est inutilisable. Donnez-lui un mot de passe et le droit
+   `sudo` (`passwd sparqlsandbox` puis `usermod -aG sudo sparqlsandbox`), ou créez un compte
+   d'administration dédié. Évitez `NOPASSWD` : il donnerait `root` à quiconque compromet le compte
+   du site. Vérifiez avec `sudo -v` dans une session `sparqlsandbox`.
+3. **Interdire la connexion SSH de `root`**, seulement après les deux étapes précédentes, et en
+   gardant une session ouverte pour pouvoir annuler :
+   ```sh
+   cp -p /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+   sed -i -E 's/^\s*PermitRootLogin\s+.*/PermitRootLogin no/' /etc/ssh/sshd_config
+   sshd -t && systemctl reload ssh      # (sshd selon la distribution)
+   ```
+   Contrôle : `ssh root@<hôte>` doit être refusé, `ssh sparqlsandbox@<hôte>` accepté. Pour revenir
+   en arrière : restaurer la sauvegarde et recharger `ssh`.
+4. Dans l'application, « Machines… » → « Tester » : les sept contrôles du diagnostic doivent être
+   verts.
+
 ## Lancer
 
 ```sh

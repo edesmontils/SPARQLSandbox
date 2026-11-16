@@ -2,14 +2,15 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
+from .ui import theme
 from .ui.fenetre import Fenetre
-from .ui.style import FEUILLE
 
 
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("SPARQLSandbox Admin")
-    app.setStyleSheet(FEUILLE)
+    app.setFont(theme.police_interface())
+    app.setStyleSheet(theme.FEUILLE)
     fenetre = Fenetre()
     fenetre.show()
     return app.exec()

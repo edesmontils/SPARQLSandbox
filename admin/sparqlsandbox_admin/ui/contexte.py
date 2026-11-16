@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
 
 from ..jeux import Depot
 from ..profils import DepotProfils, Profil, dossier_donnees
@@ -59,8 +59,24 @@ class Contexte(QObject):
     def erreur(self, message: str) -> None:
         QMessageBox.critical(self.fenetre, "Erreur", message)
 
-    def confirme(self, titre: str, texte: str, detail: str = "") -> bool:
-        b = QMessageBox(QMessageBox.Warning, titre, texte, QMessageBox.Yes | QMessageBox.Cancel, self.fenetre)
-        b.setDefaultButton(QMessageBox.Cancel)
+    @property
+    def production(self) -> bool:
+        return bool(self.profil and self.profil.production)
+
+    def confirme(self, titre: str, texte: str, detail: str = "", mot: str = "", libelle: str = "Confirmer") -> bool:
+        """Demande confirmation. Sur une machine de production, ``mot`` (s'il est donné) doit être
+        recopié : c'est le garde-fou des actions qui touchent les étudiants ou détruisent des données."""
+        if self.production:
+            detail = ("⚠ Cette machine est la PRODUCTION : les étudiants le voient tout de suite.\n\n" + detail).strip()
+        b = QMessageBox(QMessageBox.Warning, titre, texte, QMessageBox.Cancel, self.fenetre)
+        ok = b.addButton(libelle, QMessageBox.DestructiveRole)
+        b.setDefaultButton(b.button(QMessageBox.Cancel))
         b.setInformativeText(detail)
-        return b.exec() == QMessageBox.Yes
+        b.exec()
+        if b.clickedButton() is not ok:
+            return False
+        if self.production and mot:
+            saisi, valide = QInputDialog.getText(
+                self.fenetre, titre, f"Pour confirmer sur la production, recopiez « {mot} » :")
+            return valide and saisi.strip() == mot
+        return True

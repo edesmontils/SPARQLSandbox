@@ -42,6 +42,9 @@ class Champ:
     type: str = "texte"      # texte, entier, secret
     defaut: object = ""
     aide: str = ""
+    unite: str = ""          # suffixe d'un entier : « min », « Mo »…
+    groupe: str = ""         # titre de la section du formulaire
+    exemple: str = ""        # texte grisé d'un champ vide
 
 
 class IniFile:
@@ -102,27 +105,37 @@ class IniFile:
 # --- Réglages de SPARQLSandbox -------------------------------------------------------
 
 CHAMPS_SPARQLSANDBOX = [
-    Champ("oxigraph", "Exécutable Oxigraph", "texte", "",
-          "Chemin complet ; vide : bin/oxigraph du site, puis le PATH."),
-    Champ("pyshacl", "Exécutable pyshacl", "texte", "",
-          "Pour vérifier les formes SHACL ; vide : bin/pyshacl du site, puis le PATH."),
-    Champ("duree_session_min", "Durée de vie des sessions et copies (minutes)", "entier", 180,
-          "Une copie inactive plus longtemps est purgée."),
-    Champ("occupation_max_mo", "Total maximal des copies (Mo)", "entier", 1024),
-    Champ("espace_libre_min_mo", "Espace disque libre à préserver (Mo)", "entier", 200,
-          "Aucune copie n'est faite s'il reste moins de place."),
+    Champ("duree_session_min", "Durée de vie des copies", "entier", 180,
+          "Une session, et sa copie des jeux, est supprimée après ce temps d'inactivité.",
+          "min", "Sessions des étudiants"),
+    Champ("occupation_max_mo", "Place maximale des copies", "entier", 1024,
+          "Total de toutes les copies de session. Au-delà, plus aucune copie n'est faite.",
+          "Mo", "Espace disque"),
+    Champ("espace_libre_min_mo", "Espace libre à préserver", "entier", 200,
+          "Aucune copie n'est faite s'il reste moins de place sur le disque.", "Mo", "Espace disque"),
+    Champ("oxigraph", "Oxigraph", "texte", "",
+          "Chemin complet de l'exécutable.", "", "Programmes", "automatique : bin/ du site, puis PATH"),
+    Champ("pyshacl", "pyshacl", "texte", "",
+          "Pour vérifier les formes SHACL. Sans lui, seuls les contrôles RDFS sont faits.", "", "Programmes",
+          "automatique : bin/ du site, puis PATH"),
 ]
 
 CHAMPS_IA = [
-    Champ("url", "URL de ProxyIAg", "texte", "", "HTTPS obligatoire, sauf pour localhost."),
-    Champ("cle", "Clé (sk-…)", "secret", "", "Clé propre à l'application, créée avec proxyiag-keys."),
-    Champ("modele", "Alias du modèle", "texte", "", "Par exemple proxyiag/gemma-4-31b."),
-    Champ("par_session_intention", "Corrections par session et par jour", "entier", 30),
-    Champ("delai", "Délai minimal entre deux corrections (s)", "entier", 5),
-    Champ("par_ip", "Appels par adresse IP et par jour (0 : sans limite)", "entier", 250),
-    Champ("plafond_global", "Appels par jour pour toute l'installation (0 : sans limite)", "entier", 500),
-    Champ("max_tokens", "Longueur maximale de la réponse (tokens)", "entier", 1500),
-    Champ("delai_appel", "Attente maximale de la réponse (s)", "entier", 60),
+    Champ("url", "Adresse de ProxyIAg", "texte", "", "HTTPS obligatoire, sauf pour localhost.", "",
+          "Connexion à ProxyIAg", "https://…/v1"),
+    Champ("cle", "Clé de l'application", "secret", "",
+          "Créée avec proxyiag-keys ; propre à SPARQLSandbox.", "", "Connexion à ProxyIAg", "sk-…"),
+    Champ("modele", "Modèle", "texte", "", "Alias du modèle, par exemple proxyiag/gemma-4-31b.", "",
+          "Connexion à ProxyIAg"),
+    Champ("par_session_intention", "Corrections par étudiant et par jour", "entier", 30, "", "",
+          "Limites d'usage"),
+    Champ("delai", "Délai entre deux corrections", "entier", 5, "", "s", "Limites d'usage"),
+    Champ("par_ip", "Appels par adresse IP et par jour", "entier", 250, "0 : sans limite.", "",
+          "Limites d'usage"),
+    Champ("plafond_global", "Appels par jour, tous étudiants", "entier", 500, "0 : sans limite.", "",
+          "Limites d'usage"),
+    Champ("max_tokens", "Longueur maximale de la réponse", "entier", 1500, "", "tokens", "Limites d'usage"),
+    Champ("delai_appel", "Attente maximale de la réponse", "entier", 60, "", "s", "Limites d'usage"),
 ]
 
 

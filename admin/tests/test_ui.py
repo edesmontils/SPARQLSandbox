@@ -40,53 +40,72 @@ class FenetreTest(unittest.TestCase):
         self.f = Fenetre(profils, QSettings(str(self.tmp / "reglages.ini"), QSettings.IniFormat))
         self.addCleanup(self.f.close)
 
-    def test_chargement_des_onglets(self):
+    def test_chargement_des_pages(self):
         jeux = self.f.pages[0][1]
         self.assertTrue(attend(lambda: jeux.liste.count() == 2))
         jeux.liste.setCurrentRow(1)  # cinema
         self.assertTrue(attend(lambda: jeux.jeu is not None and jeux.jeu.nom == "cinema"))
         self.assertEqual(jeux.table.rowCount(), 3)  # ontologie, instances, formes
         self.assertGreater(jeux.liste_ex.count(), 5)
+        self.assertFalse(jeux.sale)
         for i in range(1, len(self.f.pages)):
-            self.f.onglets.setCurrentIndex(i)
+            self.f.aller(i)
             app.processEvents()
         ex = self.f.pages[1][1]
         self.assertTrue(attend(lambda: ex.table.rowCount() == 2))
+        maint = self.f.pages[5][1]
+        self.assertTrue(attend(lambda: maint.resultats.count() >= 5))
+
+    def test_barre_de_modifications(self):
+        jeux = self.f.pages[0][1]
+        self.assertTrue(attend(lambda: jeux.liste.count() == 2))
+        jeux.liste.setCurrentRow(0)
+        self.assertTrue(attend(lambda: jeux.jeu is not None))
+        self.assertTrue(jeux.barre.isHidden())
+        jeux.titre_jeu.textEdited.emit("Autre titre")  # une saisie de l'utilisateur
+        self.assertTrue(jeux.sale)
+        self.assertFalse(jeux.barre.isHidden())
+        jeux.annule()
+        self.assertFalse(jeux.sale)
+        self.assertTrue(jeux.barre.isHidden())
+        self.assertEqual(jeux.titre_jeu.text(), "Amis (FOAF)")
 
     def test_changement_de_machine(self):
         # régression : changer de machine dans le sélecteur faisait planter l'application
-        self.f.ctx.profils.remplace(None, Profil("Autre", "local", racine=str(self.tmp / "site")))
-        self.f._remplit_choix()
-        self.assertEqual(self.f.choix.count(), 2)
-        for i in (1, 0, 1):
-            self.f.choix.setCurrentIndex(i)
-            self.f.choix.activated.emit(i)
-            self.assertTrue(attend(lambda: self.f.ctx.profil.nom == self.f.choix.itemText(i)))
-            self.assertEqual(self.f.choix.currentIndex(), i)
+        p = Profil("Prod", "local", racine=str(self.tmp / "site"), production=True)
+        self.f.ctx.profils.remplace(None, p)
+        self.assertTrue(self.f.bandeau.isHidden())
+        for nom in ("Prod", "Local", "Prod"):
+            self.f.plaque.choisit(nom)
+            self.assertTrue(attend(lambda: self.f.ctx.profil.nom == nom))
+            self.assertEqual(self.f.bandeau.isHidden(), nom != "Prod")
+            self.assertEqual(self.f.plaque.nom.text(), nom)
         jeux = self.f.pages[0][1]
         self.assertTrue(attend(lambda: jeux.liste.count() == 2))
-        self.assertEqual(self.f.reglages.value("profil"), "Autre")  # dernier choix mémorisé
+        self.assertEqual(self.f.reglages.value("profil"), "Prod")  # dernier choix mémorisé
 
     def test_enregistrement_et_services(self):
         jeux = self.f.pages[0][1]
         self.assertTrue(attend(lambda: jeux.liste.count() == 2))
         jeux.liste.setCurrentRow(0)
         self.assertTrue(attend(lambda: jeux.jeu is not None))
-        jeux.titre.setText("Amis modifiés")
+        jeux.titre_jeu.setText("Amis modifiés")
         jeux.enregistre()
         conf = self.tmp / "site/donnees/amis/config.xml"
         self.assertTrue(attend(lambda: "Amis modifiés" in conf.read_text(encoding="utf-8")))
 
         sites = self.f.pages[2][1]
-        self.f.onglets.setCurrentIndex(2)
+        self.f.aller(2)
         sites._ajoute("https://dbpedia.org/sparql")
+        self.assertTrue(sites.sale)
         sites.enregistre()
         ini = self.tmp / "sparqlsandbox.ini"
         self.assertTrue(attend(lambda: ini.exists()))
         self.assertIn("services_autorises", ini.read_text(encoding="utf-8"))
+        self.assertTrue(attend(lambda: not sites.sale))
 
         reg = self.f.pages[3][1]
-        self.f.onglets.setCurrentIndex(3)
+        self.f.aller(3)
         self.assertTrue(attend(lambda: reg.etat.text() != ""))
         reg.form.widgets["duree_session_min"].setValue(720)
         reg.enregistre()
