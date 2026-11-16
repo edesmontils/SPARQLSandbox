@@ -56,6 +56,28 @@ $permis = array(
 );
 foreach ($permis as $q) verifie(is_null(analyse_sparql($q)['refus']), "accepte : $q");
 
+// SERVICE : liste blanche de points d'accès (vide par défaut)
+$wd = 'https://query.wikidata.org/sparql';
+$bl = array($wd);
+foreach (array(
+	"SELECT * WHERE { SERVICE <$wd> { ?s ?p ?o } }",
+	"select * where { service silent <$wd> { ?s ?p ?o } }",
+	"PREFIX wd: <https://query.wikidata.org/>\nSELECT * WHERE { SERVICE wd:sparql { ?s ?p ?o } }",
+) as $q) {
+	$a = analyse_sparql($q, $bl);
+	verifie(is_null($a['refus']) && $a['services'] === $bl, "SERVICE autorisé : $q");
+	verifie(!is_null(analyse_sparql($q, array())['refus']), "SERVICE refusé sans liste : $q");
+}
+foreach (array(
+	'SELECT * WHERE { SERVICE <https://autre.org/sparql> { ?s ?p ?o } }',
+	"SELECT * WHERE { SERVICE <$wd/x> { ?s ?p ?o } }",
+	"SELECT * WHERE { ?s ?p 'a' . SERVICE ?x { ?s ?p ?o } }",
+	'SELECT * WHERE { SERVICE <sparql> { ?s ?p ?o } }',
+	"SELECT * WHERE { SERVICE <$wd> { ?s ?p ?o } SERVICE <http://x.org/s> { ?s ?p ?o } }",
+) as $q) verifie(!is_null(analyse_sparql($q, $bl)['refus']), "SERVICE hors liste refusé : $q");
+verifie(!is_null(analyse_sparql("LOAD <$wd>", $bl)['refus']), 'LOAD toujours refusé');
+verifie(services_autorises() === array(), 'aucun service autorisé par défaut');
+
 $formes = array(
 	'SELECT * WHERE { ?s ?p ?o }' => 'SELECT',
 	"PREFIX ex: <http://ex.org/select>\nBASE <http://b/>\nask { ?s ?p ?o }" => 'ASK',

@@ -198,19 +198,52 @@ function jetons_sparql($q) {
 	return $jetons;
 }
 
+// Points d'accès SPARQL que SERVICE peut interroger : réglage « services_autorises » de
+// sparqlsandbox.ini (liste séparée par des virgules ou des espaces, ou services_autorises[]
+// répété). Vide par défaut : toute requête fédérée est alors refusée. Seules les adresses
+// http(s) sont retenues, et la comparaison est exacte (aucun préfixe, aucun joker).
+function services_autorises() {
+	$r = reglages();
+	$brut = $r['services_autorises'] ?? array();
+	if (!is_array($brut)) $brut = array($brut);
+	$liste = array();
+	foreach ($brut as $b)
+		foreach (preg_split('/[\s,]+/', (string)$b, -1, PREG_SPLIT_NO_EMPTY) as $u)
+			if (preg_match('#^https?://[^\s<>"]+$#i', $u)) $liste[] = $u;
+	return array_values(array_unique($liste));
+}
+
 // Forme d'une requête (SELECT, ASK, CONSTRUCT, DESCRIBE, ou UPDATE pour une mise à jour),
 // préfixes qu'elle déclare, et refus éventuel (message) :
-// - SERVICE (requête fédérée) et LOAD feraient sortir le serveur vers le web.
-function analyse_sparql($q) {
-	$res = array('forme' => null, 'prefixes' => array(), 'refus' => null);
+// - LOAD ferait télécharger un document du web par le serveur : toujours refusé ;
+// - SERVICE (requête fédérée) ne l'est que vers un point d'accès de $services (par défaut,
+//   services_autorises()) : une variable, une IRI relative ou une adresse hors liste est refusée.
+function analyse_sparql($q, $services = null) {
+	if (is_null($services)) $services = services_autorises();
+	$res = array('forme' => null, 'prefixes' => array(), 'refus' => null, 'services' => array());
 	$jetons = jetons_sparql($q);
 	$n = count($jetons);
 	for ($i = 0; $i < $n; $i++) {
 		list($type, $val) = $jetons[$i];
 		if ($type !== 'mot') continue;
 		$mot = strtoupper($val);
-		if ($mot === 'SERVICE') $res['refus'] = "Les requêtes fédérées (SERVICE) ne sont pas permises dans SPARQL Sandbox : "
-			."elles feraient interroger d'autres serveurs par celui-ci.";
+		if ($mot === 'SERVICE') {
+			$j = $i + 1;
+			if ($j < $n && $jetons[$j][0] === 'mot' && strtoupper($jetons[$j][1]) === 'SILENT') $j++;
+			$cible = null;
+			if ($j < $n && $jetons[$j][0] === 'iri') $cible = substr($jetons[$j][1], 1, -1);
+			elseif ($j < $n && $jetons[$j][0] === 'pname' && isset($res['prefixes'][rtrim(strstr($jetons[$j][1], ':', true), ':')])) {
+				$p = strstr($jetons[$j][1], ':', true);
+				$cible = $res['prefixes'][$p].substr($jetons[$j][1], strlen($p) + 1);
+			}
+			if (!$services) $res['refus'] = "Les requêtes fédérées (SERVICE) ne sont pas permises dans SPARQL Sandbox : "
+				."elles feraient interroger d'autres serveurs par celui-ci.";
+			elseif (is_null($cible)) $res['refus'] = "SERVICE doit être suivi de l'IRI d'un point d'accès autorisé "
+				."(pas d'une variable) : ".implode(', ', $services).'.';
+			elseif (!in_array($cible, $services, true)) $res['refus'] = "Le point d'accès <$cible> n'est pas autorisé pour SERVICE. "
+				."Points d'accès autorisés : ".implode(', ', $services).'.';
+			else $res['services'][] = $cible;
+		}
 		elseif ($mot === 'LOAD') $res['refus'] = "LOAD n'est pas permis dans SPARQL Sandbox : il ferait télécharger un document "
 			."du web par le serveur. Ajoutez les triplets avec INSERT DATA.";
 		if (is_null($res['refus']) && $mot === 'PREFIX' && $i + 2 < $n && $jetons[$i + 1][0] === 'pname' && $jetons[$i + 2][0] === 'iri')

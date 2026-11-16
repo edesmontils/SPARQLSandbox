@@ -12,3 +12,8 @@
 ; Total des copies de session, et espace libre à garder sur le disque, en Mo
 ;occupation_max_mo = 1024
 ;espace_libre_min_mo = 200
+
+; Points d'accès SPARQL que SERVICE (requêtes fédérées) peut interroger : adresses http(s)
+; exactes, séparées par des virgules ou des espaces. Vide par défaut : SERVICE est refusé.
+; Le serveur interroge alors ces points d'accès pour le compte des étudiants (5 s maximum).
+;services_autorises = https://query.wikidata.org/sparql, https://dbpedia.org/sparql

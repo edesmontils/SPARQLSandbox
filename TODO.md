@@ -24,8 +24,6 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
-- **Requêtes fédérées** encadrées : liste blanche de points d'accès (Wikidata, DBpedia) pour
-  `SERVICE`, désactivée par défaut.
 - **Éditeur d'ontologie** avec une vue en graphe : créer et modifier classes et propriétés
   (`rdfs:subClassOf`, `rdfs:domain`, `rdfs:range`…) dans la copie de session, en prolongeant le
   diagramme du vocabulaire.

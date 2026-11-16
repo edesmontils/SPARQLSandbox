@@ -104,7 +104,8 @@ function exos_question($jeu, $code_ex, $code_q) {
 function exos_table_resultat($jeu, $requete) {
 	$indisponible = "<p class='astuce'>Table indisponible.</p>";
 	$a = analyse_sparql($requete);
-	if (!is_null($a['refus']) || $a['forme'] === 'UPDATE') return $indisponible;
+	// une table dépendant d'un service distant ne serait pas stable dans le cache
+	if (!is_null($a['refus']) || $a['forme'] === 'UPDATE' || $a['services']) return $indisponible;
 	$origine = store_origine($jeu);
 	if (is_null($origine)) return $indisponible;
 	$cache = DOSSIER_TMP.'/table_'.hash('sha256', $origine."\n".$requete).'.html';
