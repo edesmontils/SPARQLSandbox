@@ -1,7 +1,8 @@
 // Diagramme du vocabulaire d'un jeu : classes (avec leurs attributs), sous-classes et propriétés
 // entre classes. SVG dessiné ici, sans bibliothèque, à partir du modèle de vocabulaire.php.
 //   dessineVocabulaire(modele, conteneur, surClic)
-// surClic(sorte, nom) est appelé au clic sur une classe ('classes') ou une propriété ('proprietes').
+// surClic(sorte, nom, classe) est appelé au clic sur une classe ('classes', avec son objet du modèle)
+// ou une propriété ('proprietes').
 // Trait plein : observé dans les données ; pointillé : déclaré mais jamais observé.
 // Disposition en couches : une super-classe est au-dessus de ses sous-classes, le domaine d'une
 // propriété au-dessus de sa portée ; les liens qui traversent une couche peuvent passer sur un nœud.
@@ -256,11 +257,13 @@
 
 		conteneur.innerHTML = '<svg class="voc-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + largeur + ' ' + hauteur + '" width="' + largeur +
 			'" role="img" aria-label="Diagramme du vocabulaire">' + defs + dessin + noeudsSvg + etiquettes + '</svg>';
+		var parNom = {};
+		noeuds.forEach(function (c) { parNom[c.nom] = c; });
 		conteneur.querySelectorAll('[data-sorte]').forEach(function (g) {
 			function ouvre() {
 				conteneur.querySelectorAll('.voc-choisi').forEach(function (e) { e.classList.remove('voc-choisi'); });
 				g.classList.add('voc-choisi');
-				if (surClic) surClic(g.dataset.sorte, g.dataset.nom);
+				if (surClic) surClic(g.dataset.sorte, g.dataset.nom, parNom[g.dataset.nom]);
 			}
 			g.addEventListener('click', ouvre);
 			g.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvre(); } });

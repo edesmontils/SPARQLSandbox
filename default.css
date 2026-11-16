@@ -384,7 +384,7 @@ sup a { text-decoration: none; }
 /* Résultat à droite du diagramme : le diagramme reste ouvert */
 .corps-vocabulaire { display: flex; gap: 14px; align-items: flex-start; }
 .corps-vocabulaire .schema-vocabulaire { flex: 1 1 0; min-width: 0; }
-.panneau-vocabulaire { flex: 0 0 min(38%, 460px); max-height: 68vh; overflow: auto; padding: 10px 12px; font-size: .8em; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); }
+.panneau-vocabulaire { flex: 0 0 min(46%, 560px); max-height: 68vh; overflow: auto; padding: 10px 12px; font-size: .8em; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); }
 .panneau-vocabulaire[hidden] { display: none; }
 .panneau-vocabulaire .entete-panneau { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 6px; font-family: var(--sb-mono); }
 .panneau-vocabulaire .defile { max-height: none; overflow: visible; border: 0; }

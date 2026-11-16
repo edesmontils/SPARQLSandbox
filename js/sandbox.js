@@ -181,14 +181,35 @@
 	// Diagramme du vocabulaire de la copie (js/vocabulaire.js)
 	var dialogueVoc = document.getElementById('vocabulaire');
 	var zoneVoc = document.getElementById('schema-vocabulaire');
+	// Instances d'une classe avec leurs attributs (une colonne par propriété à valeur littérale ;
+	// plusieurs valeurs d'une même propriété sont réunies dans la cellule)
+	function requeteClasse(nom, classe) {
+		var attrs = [], vus = {}, vars = { s: true };
+		((classe && classe.attributs) || []).forEach(function (a) {
+			if (vus[a.nom]) return;
+			vus[a.nom] = true;
+			var v = a.nom.replace(/^.*[:#\/]/, '').replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1') || 'a', base = v, i = 2;
+			while (vars[v]) v = base + (i++);
+			vars[v] = true;
+			attrs.push({ nom: a.nom, v: v });
+		});
+		var prefixes = '', deja = {};
+		[nom].concat(attrs.map(function (a) { return a.nom; })).forEach(function (n) {
+			var p = n.indexOf(':') > 0 ? n.slice(0, n.indexOf(':')) : null;
+			if (p && donnees.prefixes[p] && !deja[p]) { deja[p] = true; prefixes += 'PREFIX ' + p + ': <' + donnees.prefixes[p] + '>\n'; }
+		});
+		if (!attrs.length) return prefixes + 'SELECT ?s\nWHERE {\n  ?s a ' + terme(nom) + ' .\n}\nLIMIT 50';
+		var colonnes = attrs.map(function (a) { return '(GROUP_CONCAT(DISTINCT STR(?_' + a.v + '); separator=" | ") AS ?' + a.v + ')'; }).join(' ');
+		var optionnels = attrs.map(function (a) { return '  OPTIONAL { ?s ' + terme(a.nom) + ' ?_' + a.v + ' }'; }).join('\n');
+		return prefixes + 'SELECT ?s ' + colonnes + '\nWHERE {\n  ?s a ' + terme(nom) + ' .\n' + optionnels + '\n}\nGROUP BY ?s\nORDER BY ?s\nLIMIT 50';
+	}
 	var panneauVoc = document.getElementById('panneau-vocabulaire');
 	var resultatVoc = document.getElementById('resultat-vocabulaire');
 	var requeteVoc = null, numeroVoc = 0;
 	// Un clic sur le diagramme exécute la requête et montre le résultat à côté, sans la requête
-	function interrogeVocabulaire(sorte, nom) {
-		requeteVoc = sorte === 'classes'
-			? prefixesUtiles(nom) + 'SELECT ?s\nWHERE {\n  ?s a ' + terme(nom) + ' .\n}\nLIMIT 50'
-			: prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
+	function interrogeVocabulaire(sorte, nom, classe) {
+		if (sorte === 'classes') requeteVoc = requeteClasse(nom, classe);
+		else requeteVoc = prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
 		var mon = ++numeroVoc;
 		document.getElementById('titre-panneau-vocabulaire').textContent = (sorte === 'classes' ? 'Instances de ' : 'Triplets de ') + nom;
 		resultatVoc.innerHTML = "<p class='astuce'>⏳ Exécution…</p>";
