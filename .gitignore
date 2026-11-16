@@ -8,3 +8,4 @@ ia.ini
 bin/
 .DS_Store
 .idea/
+admin/.venv/
