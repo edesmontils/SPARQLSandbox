@@ -325,3 +325,10 @@ pre.copie-sparql {
 	pre.copie-sparql { font-size: 9pt; line-height: 1.3; }
 	.copie-etat, .copie-avertissement, .copie-pied { font-size: 9pt; }
 }
+
+/* Page des services fédérés (services.php) */
+.exemple-service { margin: 8px 0; padding: 8px 12px; overflow-x: auto; background: var(--sb-surface-2); border-radius: var(--sb-radius-sm); font-family: var(--sb-mono); font-size: .88em; }
+.service details { margin-top: 8px; }
+.service summary { cursor: pointer; color: var(--sb-accent); }
+.note-ia { margin: 16px 0; padding: 8px 12px; border-left: 4px solid var(--sb-accent); background: var(--sb-surface-2); font-size: .92em; color: var(--sb-ink-soft); }
+sup a { text-decoration: none; }

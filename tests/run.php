@@ -11,6 +11,7 @@ require __DIR__.'/../dossiers.php';
 require __DIR__.'/../fonctions.php';
 require __DIR__.'/../exercices.php';
 require __DIR__.'/../ia.php';
+require __DIR__.'/../federation.php';
 $_SESSION = array();
 
 $succes = 0;
@@ -436,6 +437,32 @@ if (function_exists('curl_init')) {
 	@unlink(DOSSIER_TMP.'/ia_compteur');
 	@unlink(DOSSIER_TMP.'/ia_ip');
 
+	// Fiches de services (federation.php)
+	$f0 = fiches_services();
+	verifie(count($f0) == count(SERVICES_PAR_DEFAUT) && !array_filter($f0, function ($f) { return $f['ia'] || is_null($f['description']); }),
+		'services : fiches écrites à la main pour les services connus, sans IA');
+	$inconnu = 'https://sparql.exemple.org/sparql';
+	verifie(is_null(service_fiche_gardee($inconnu)), 'services : pas de fiche avant la demande');
+	faux(200, array('nom' => 'Exemple', 'description' => 'Données <b>fictives</b> du site exemple.'));
+	$f1 = service_fiche_ia($inconnu);
+	verifie(is_array($f1) && $f1['nom'] === 'Exemple' && $f1['modele'] === 'proxyiag/test', 'services : fiche demandée à l\'IA');
+	list(, $corps) = envoye();
+	verifie(strpos(json_encode($corps), 'sparql.exemple.org') !== false, 'services : adresse du service transmise à l\'IA');
+	faux(500, 'panne');
+	$f2 = service_fiche_gardee($inconnu);
+	verifie(is_array($f2) && $f2['description'] !== '', 'services : fiche gardée dans le dossier de travail');
+	verifie(service_fiche_ia($inconnu)['nom'] === 'Exemple', 'services : fiche gardée, pas de nouvel appel');
+	$autre = 'https://autre.exemple.org/sparql';
+	verifie(is_null(service_fiche_ia($autre)) && is_file(service_fichier($autre).'.echec'), 'services : échec de l\'IA noté, sans fiche');
+	faux(200, array('nom' => 'Autre', 'description' => 'Ne doit pas être demandé.'));
+	verifie(is_null(service_fiche_ia($autre)), 'services : pas de nouvel essai juste après un échec');
+	verifie(service_lit_fiche("Voici : {\"nom\": \"A\", \"description\": \"B\"} fin")['nom'] === 'A'
+		&& is_null(service_lit_fiche('{"nom": "", "description": "x"}')) && is_null(service_lit_fiche('pas du JSON')),
+		'services : lecture de la réponse du modèle');
+	foreach (glob(DOSSIER_TMP.'/service_*') ?: array() as $s) @unlink($s);
+	@unlink(DOSSIER_TMP.'/ia_compteur');
+	@unlink(DOSSIER_TMP.'/ia_ip');
+
 	verifie(strpos((string)@file_get_contents("$travail/php.log"), 'clé révoquée') !== false, 'intention IA : erreur du proxy notée dans le journal');
 	ini_set('error_log', (string)$journal_avant);
 	putenv('SPARQLSANDBOX_IA_INI'); // l'application servie plus bas reste en auto-évaluation
@@ -465,6 +492,9 @@ function http($url, $post = null) {
 if (function_exists('curl_init')) {
 	list($code, $page) = http("http://127.0.0.1:$port/?jeu=cinema");
 	verifie($code == 200 && strpos($page, 'Interroger ce jeu') !== false, 'page d\'un jeu servie');
+	verifie(strpos($page, 'href="services.php"') !== false, 'lien vers les services en pied de page');
+	list($code, $sp) = http("http://127.0.0.1:$port/services.php");
+	verifie($code == 200 && strpos($sp, 'Wikidata') !== false && strpos($sp, 'note-ia') === false, 'page des services servie, sans note IA pour les services connus');
 	preg_match('/"csrf":"([0-9a-f]+)"/', $page, $m);
 	$jeton = $m[1] ?? '';
 	verifie($jeton !== '', 'jeton dans la page');

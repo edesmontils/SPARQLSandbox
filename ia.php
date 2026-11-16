@@ -166,7 +166,12 @@ function ia_rouvre_session() {
 }
 
 // Rend l'appel réservé quand le service n'a pas pu répondre
-function ia_rend($conf) {
+function ia_rend($conf, $session = true) {
+	if (!$session) { // appel hors session (fiche d'un service) : seuls les compteurs communs
+		ia_compteur_ip(-1, $conf['par_ip']);
+		ia_compteur_global(-1, $conf['plafond_global']);
+		return;
+	}
 	ia_rouvre_session();
 	if (isset($_SESSION['ia_intention']['n']) && $_SESSION['ia_intention']['n'] > 0) $_SESSION['ia_intention']['n']--;
 	if (isset($_SESSION['ia_intention'])) $_SESSION['ia_intention']['dernier'] = 0;
@@ -274,7 +279,7 @@ function ia_post($conf, $corps) {
 // Demande la correction au modèle. Retourne array('texte' => ..., 'tokens' => n) ou une
 // erreur ia_erreur() ; la réservation est rendue si le service n'a pas pu répondre. Les
 // messages d'erreur du proxy ne sont jamais montrés aux étudiants : ils vont dans le journal.
-function ia_appel($conf, $messages) {
+function ia_appel($conf, $messages, $session = true) {
 	$corps = array('model' => $conf['modele'], 'messages' => $messages, 'temperature' => 0.2,
 	               'max_tokens' => $conf['max_tokens'], 'response_format' => array('type' => 'json_object'));
 	list($code, $texte, $err) = ia_post($conf, $corps);
@@ -284,17 +289,17 @@ function ia_appel($conf, $messages) {
 	}
 	if ($code == 0 || $code >= 500) {
 		error_log("SPARQLSandbox IA : proxy injoignable ou en erreur (code $code) $err ".substr($texte, 0, 200));
-		ia_rend($conf);
+		ia_rend($conf, $session);
 		return ia_erreur("Le service de correction est momentanément indisponible. Réessayez dans un instant.", 503);
 	}
 	if ($code == 429) {
-		ia_rend($conf);
+		ia_rend($conf, $session);
 		return ia_erreur("Le service de correction a atteint sa limite pour aujourd'hui ou est saturé. Réessayez plus tard.", 429);
 	}
 	if ($code != 200) {
 		// 401 (clé révoquée), 403 (modèle interdit), 400/422... : problème de configuration
 		error_log("SPARQLSandbox IA : refus du proxy (code $code) ".substr($texte, 0, 200));
-		ia_rend($conf);
+		ia_rend($conf, $session);
 		return ia_erreur("La correction par IA n'est pas disponible (erreur de configuration du serveur).", 503);
 	}
 	$d = json_decode($texte, true);
