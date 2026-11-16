@@ -136,6 +136,7 @@ main { padding: 24px 30px; }
 }
 .btn:hover { filter: brightness(1.08); }
 .btn:disabled { opacity: .6; cursor: wait; }
+.ed-barre .btn:disabled { cursor: not-allowed; }
 .btn.secondaire { background: var(--sb-surface); color: var(--sb-ink); border-color: var(--sb-border-strong); font-weight: 400; }
 .btn.secondaire:hover { border-color: var(--sb-accent); color: var(--sb-accent); }
 .btn.danger { background: var(--sb-surface); color: var(--sb-danger); border-color: var(--sb-danger-border); font-weight: 400; }

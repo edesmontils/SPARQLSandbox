@@ -1,6 +1,6 @@
 <?php
 // Éditeur d'ontologie : page où l'étudiant modifie, en graphe ou en liste, l'ontologie de sa
-// copie de session (js/editeur.js ; modèle et enregistrement dans ontologie.php).
+// copie de session (js/editeur.js, js/disposition.js ; modèle et enregistrement dans ontologie.php).
 require __DIR__.'/session.php';
 require_once __DIR__.'/fonctions.php';
 require_once __DIR__.'/ia.php';
@@ -36,6 +36,7 @@ header('Cache-Control: no-store');
   <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
   <link href="<?php echo url_fichier('default.css'); ?>" rel="stylesheet">
   <script type="application/json" id="donnees"><?php echo json_encode($donnees_js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?></script>
+  <script src="<?php echo url_fichier('js/disposition.js'); ?>" defer></script>
   <script src="<?php echo url_fichier('js/editeur.js'); ?>" defer></script>
 </head>
 <body>

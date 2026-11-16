@@ -22,57 +22,6 @@
 	function ligneAttribut(a) { return a.nom + ' : ' + a.type + (a.n > 0 ? ' (' + a.n + ')' : ''); }
 	function entete(c) { return c.nom + (c.n > 0 ? '  · ' + c.n : ''); }
 
-	// Couches : arêtes super-classe → sous-classe et domaine → portée, sans les cycles
-	function calculeCouches(noeuds, aretes) {
-		var n = noeuds.length, suivants = [], etat = [], i;
-		for (i = 0; i < n; i++) { suivants.push([]); etat.push(0); }
-		aretes.forEach(function (a) { if (a[0] !== a[1]) suivants[a[0]].push(a[1]); });
-		// Retire les arêtes de retour (DFS) pour obtenir un graphe sans cycle
-		var arriere = {};
-		function visite(u) {
-			etat[u] = 1;
-			suivants[u].forEach(function (v) {
-				if (etat[v] === 1) arriere[u + '>' + v] = true;
-				else if (etat[v] === 0) visite(v);
-			});
-			etat[u] = 2;
-		}
-		for (i = 0; i < n; i++) if (etat[i] === 0) visite(i);
-		var entrants = [], couche = [];
-		for (i = 0; i < n; i++) { entrants.push(0); couche.push(0); }
-		for (i = 0; i < n; i++) suivants[i] = suivants[i].filter(function (v) { return !arriere[i + '>' + v]; });
-		for (i = 0; i < n; i++) suivants[i].forEach(function (v) { entrants[v]++; });
-		var file = [];
-		for (i = 0; i < n; i++) if (entrants[i] === 0) file.push(i);
-		while (file.length) {
-			var u = file.shift();
-			suivants[u].forEach(function (v) {
-				if (couche[v] < couche[u] + 1) couche[v] = couche[u] + 1;
-				if (--entrants[v] === 0) file.push(v);
-			});
-		}
-		return couche;
-	}
-
-	// Ordre dans les couches : balayages (descendants puis montants) par barycentre des voisins
-	function ordonne(couches, voisins, rang) {
-		var coucheDe = {}, balayage;
-		couches.forEach(function (l, ci) { l.forEach(function (u) { coucheDe[u] = ci; }); });
-		function position(u) { return (rang[u] + 0.5) / couches[coucheDe[u]].length; }
-		for (balayage = 0; balayage < 6; balayage++) {
-			var ordre = couches.map(function (_, i) { return balayage % 2 === 0 ? i : couches.length - 1 - i; });
-			ordre.forEach(function (ci) {
-				var l = couches[ci], cle = {};
-				l.forEach(function (u) {
-					var vs = voisins[u];
-					cle[u] = vs.length ? vs.reduce(function (s, v) { return s + position(v); }, 0) / vs.length : position(u);
-				});
-				l.sort(function (x, y) { return cle[x] - cle[y]; });
-				l.forEach(function (u, i) { rang[u] = i; });
-			});
-		}
-	}
-
 	window.dessineVocabulaire = function (m, conteneur, surClic) {
 		var noeuds = m.classes.slice();
 		if (noeuds.length === 0) {
@@ -92,42 +41,20 @@
 			return { w: Math.max(150, Math.ceil(l * LARGEUR_CAR) + 28), h: HAUT_ENTETE + c.attributs.length * HAUT_LIGNE + 8, x: 0, y: 0 };
 		});
 
-		// Couches et ordre
-		var aretes = [], voisins = noeuds.map(function () { return []; });
-		sous.forEach(function (s) { aretes.push([index[s.vers], index[s.de]]); });
-		liens.forEach(function (l) { aretes.push([index[l.de], index[l.vers]]); });
-		aretes.forEach(function (a) { voisins[a[0]].push(a[1]); voisins[a[1]].push(a[0]); });
-		var couche = calculeCouches(noeuds, aretes);
-		var nbCouches = Math.max.apply(null, couche) + 1;
-		var couches = [], rang = {}, i;
-		for (i = 0; i < nbCouches; i++) couches.push([]);
-		noeuds.forEach(function (c, u) { couches[couche[u]].push(u); });
-		couches.forEach(function (l) { l.forEach(function (u, k) { rang[u] = k; }); });
-		ordonne(couches, voisins, rang);
-
-		// Positions : couches centrées
-		var largeurs = couches.map(function (l) {
-			return l.reduce(function (s, u) { return s + boites[u].w; }, 0) + Math.max(0, l.length - 1) * ECART_X;
-		});
-		var largeurMax = Math.max.apply(null, largeurs);
-		var y = MARGE, coucheY = [], coucheH = [];
-		couches.forEach(function (l, ci) {
-			var x = MARGE + (largeurMax - largeurs[ci]) / 2, hMax = 0;
-			coucheY[ci] = y;
-			l.forEach(function (u) {
-				boites[u].x = x; boites[u].y = y;
-				x += boites[u].w + ECART_X;
-				hMax = Math.max(hMax, boites[u].h);
-			});
-			coucheH[ci] = hMax;
-			y += hMax + ECART_Y;
-		});
-		var largeur = largeurMax + 2 * MARGE, hauteur = y - ECART_Y + MARGE;
+		// Disposition en couches (js/disposition.js) : une super-classe au-dessus de ses sous-classes,
+		// le domaine d'une propriété au-dessus de sa portée ; les classes sans lien sont rangées en bas
+		var aretes = [];
+		sous.forEach(function (s) { aretes.push({ u: index[s.vers], v: index[s.de] }); });
+		liens.forEach(function (l) { aretes.push({ u: index[l.de], v: index[l.vers] }); });
+		var D = window.dispositionCouches(boites.map(function (b, u) { return { w: b.w, h: b.h, nom: noeuds[u].nom }; }), aretes,
+			{ marge: MARGE, sep: ECART_X, ecartY: ECART_Y, ecartPassage: 56 });
+		boites.forEach(function (b, u) { b.x = D.x[u]; b.y = D.y[u]; });
+		var couche = D.couche, rang = D.rang, largeur = D.largeur, hauteur = D.hauteur;
 
 		// Arêtes à tracer : [source, cible, sorte, lien]
 		var traits = [];
-		sous.forEach(function (s) { traits.push({ a: index[s.de], b: index[s.vers], sorte: 'sous' }); });
-		liens.forEach(function (l) { traits.push({ a: index[l.de], b: index[l.vers], sorte: 'lien', lien: l }); });
+		sous.forEach(function (s, k) { traits.push({ a: index[s.de], b: index[s.vers], sorte: 'sous', arete: k }); });
+		liens.forEach(function (l, k) { traits.push({ a: index[l.de], b: index[l.vers], sorte: 'lien', lien: l, arete: sous.length + k }); });
 
 		// Place à droite pour les boucles (propriété d'une classe vers elle-même) et leur étiquette
 		if (traits.some(function (t) { return t.a === t.b; })) largeur += 170;
@@ -139,30 +66,11 @@
 			rangGroupe[k] = [cle, groupes[cle] - 1];
 		});
 
-		// Points de passage d'un lien qui franchit des couches : dans les espaces libres entre les
-		// nœuds de chaque couche traversée (ou au-delà des extrémités), au plus près de la droite
-		var occupe = {};
-		function passage(ci, cible) {
-			var l = couches[ci], candidats = [], k;
-			candidats.push({ id: 'g', x: boites[l[0]].x - ECART_X / 2 });
-			for (k = 0; k + 1 < l.length; k++)
-				candidats.push({ id: k, x: (boites[l[k]].x + boites[l[k]].w + boites[l[k + 1]].x) / 2 });
-			candidats.push({ id: 'd', x: boites[l[l.length - 1]].x + boites[l[l.length - 1]].w + ECART_X / 2 });
-			var meilleur = null;
-			candidats.forEach(function (c) { if (!meilleur || Math.abs(c.x - cible) < Math.abs(meilleur.x - cible)) meilleur = c; });
-			var cle = ci + ':' + meilleur.id, deja = occupe[cle] || 0;
-			occupe[cle] = deja + 1;
-			return meilleur.x + (deja % 2 ? 1 : -1) * Math.ceil(deja / 2) * 14;
-		}
 		function centreX(u) { return boites[u].x + boites[u].w / 2; }
+		// Points de passage : ceux de la disposition vont de u (au-dessus) vers v ; un trait « sous » est tracé de la sous-classe vers sa super-classe
 		traits.forEach(function (t) {
-			t.passages = [];
-			var ca = couche[t.a], cb = couche[t.b];
-			if (t.a === t.b || Math.abs(ca - cb) < 2) return;
-			var pas = ca < cb ? 1 : -1, n = Math.abs(cb - ca), xa = centreX(t.a), xb = centreX(t.b);
-			for (var ci = ca + pas, j = 1; ci !== cb; ci += pas, j++) {
-				t.passages.push({ x: passage(ci, xa + (xb - xa) * j / n), y: coucheY[ci] + coucheH[ci] / 2 });
-			}
+			var pts = D.passages[t.arete];
+			t.passages = t.sorte === 'sous' ? pts.slice().reverse() : pts;
 		});
 
 		// Côté d'attache et ports (répartis le long du côté, triés par abscisse de l'autre extrémité)
@@ -194,7 +102,7 @@
 			'<marker id="voc-fl-decl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="voc-pointe-decl"/></marker>' +
 			'<marker id="voc-fl-sous" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M1,1 L11,6 L1,11 z" class="voc-pointe-sous"/></marker>' +
 			'</defs>';
-		var dessin = '', etiquettes = '', boucles = {};
+		var dessin = '', etiquettes = '', boucles = {}, posees = [];
 		traits.forEach(function (t, k) {
 			var A = boites[t.a], B = boites[t.b], d, mx, my;
 			var classe = t.sorte === 'sous' ? 'voc-sous' : (t.lien.n > 0 ? 'voc-obs' : 'voc-decl');
@@ -226,6 +134,11 @@
 			}
 			var nbPar = groupes[rangGroupe[k][0]];
 			if (nbPar > 1 && !t.boucle) my += (rangGroupe[k][1] - (nbPar - 1) / 2) * 17;
+			if (t.sorte === 'lien') { // deux étiquettes voisines ne se chevauchent pas : la seconde descend d'une ligne
+				var larg = (t.lien.nom.length + 6) * 6;
+				for (var essai = 0; essai < 6 && posees.some(function (q) { return Math.abs(q.x - mx) < (q.l + larg) / 2 && Math.abs(q.y - my) < 14; }); essai++) my += 15;
+				posees.push({ x: mx, y: my, l: larg });
+			}
 			dessin += '<path d="' + d + '" class="voc-trait ' + classe + '" marker-end="url(#' + marqueur + ')"/>';
 			if (t.sorte === 'lien') {
 				var info = t.lien.n > 0 ? t.lien.n + ' triplet' + (t.lien.n > 1 ? 's' : '') + ' observé' + (t.lien.n > 1 ? 's' : '')

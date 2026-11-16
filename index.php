@@ -64,6 +64,7 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
   <script src="<?php echo url_fichier('js/codemirror/sparql.js'); ?>"></script>
   <script src="<?php echo url_fichier('js/codemirror/matchbrackets.js'); ?>"></script>
   <script type="application/json" id="donnees"><?php echo json_encode($donnees_js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?></script>
+  <script src="<?php echo url_fichier('js/disposition.js'); ?>" defer></script>
   <script src="<?php echo url_fichier('js/vocabulaire.js'); ?>" defer></script>
   <script src="<?php echo url_fichier('js/sandbox.js'); ?>" defer></script>
 </head>
