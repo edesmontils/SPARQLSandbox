@@ -1,7 +1,7 @@
 """Fenêtre principale."""
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, QUrl
+from PySide6.QtCore import QSettings, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (QComboBox, QLabel, QMainWindow, QProgressBar, QTabWidget, QToolBar, QWidget)
 
@@ -81,15 +81,17 @@ class Fenetre(QMainWindow):
 
     # --- machines
     def _remplit_choix(self):
-        self.choix.clear()
-        self.choix.addItems(self.ctx.profils.noms())
-        if self.ctx.profil:
-            self.choix.setCurrentText(self.ctx.profil.nom)
-        else:
-            self.choix.setCurrentIndex(-1)
+        noms = self.ctx.profils.noms()
+        self.choix.blockSignals(True)  # vider la liste pendant « activated » fait planter Qt
+        if noms != [self.choix.itemText(i) for i in range(self.choix.count())]:
+            self.choix.clear()
+            self.choix.addItems(noms)
+        self.choix.setCurrentIndex(noms.index(self.ctx.profil.nom) if self.ctx.profil in self.ctx.profils.profils else -1)
+        self.choix.blockSignals(False)
 
     def _choisi(self, i: int):
-        self.ctx.selectionne(self.choix.itemText(i))
+        nom = self.choix.itemText(i)
+        QTimer.singleShot(0, lambda: self.ctx.selectionne(nom))  # hors du signal du combo
 
     def _profil_change(self):
         self._remplit_choix()
