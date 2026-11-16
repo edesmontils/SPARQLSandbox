@@ -25,6 +25,12 @@ réserve le droit de supprimer toute instance à tout moment.
   requête ; la langue ou le type des littéraux est indiqué.
 - **Exploration** : « 🧩 Contenu de votre copie » liste les classes et les propriétés utilisées
   (avec leur nombre) ; un clic en fait une requête.
+- **Diagramme du vocabulaire** (bouton « 🗺️ Diagramme du vocabulaire ») : classes avec leurs
+  attributs, sous-classes (`rdfs:subClassOf`) et propriétés entre classes. Il réunit ce que
+  l'ontologie déclare (`rdfs:domain`, `rdfs:range`) et ce que les données montrent (classe du sujet
+  et de l'objet de chaque triplet), donc il fonctionne aussi pour un jeu sans ontologie. Trait
+  plein : observé ; pointillé : déclaré mais jamais observé. Il suit les mises à jour de la copie.
+  Le modèle est construit par `vocabulaire.php`, le dessin (SVG) par `js/vocabulaire.js`.
 - **Exemples** : chaque jeu de données propose des requêtes commentées (`config.xml` du jeu).
 - **Exercices** au format QueryCraft, avec vérification des requêtes (voir plus bas).
 - **Cohérence** : la base de connaissances est contrôlée au chargement et après chaque mise à

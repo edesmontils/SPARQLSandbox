@@ -765,3 +765,4 @@ function explore_jeu($jeu) {
 }
 
 require_once __DIR__.'/coherence.php';
+require_once __DIR__.'/vocabulaire.php';

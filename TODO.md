@@ -6,8 +6,6 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   SQLSandbox, quand QueryCraft gérera des jeux RDF ; comparer les graphes de `CONSTRUCT` à
   l'isomorphisme près (aujourd'hui, tous les nœuds anonymes sont tenus pour égaux) ; vérifier
   l'effet d'une mise à jour en comparant les graphes obtenus.
-- **Diagramme du vocabulaire** d'un jeu : classes, propriétés (`rdfs:domain`, `rdfs:range`,
-  `rdfs:subClassOf`) et liens observés dans les données.
 - **Ontologie et instances dans des graphes nommés** (option 2) : aujourd'hui, les fichiers d'un jeu
   (pour « Cinéma », `ontologie.ttl` et `cinema.ttl`) sont chargés ensemble dans le graphe par
   défaut. Les charger chacun dans son graphe nommé (`<…/ontologie>`, `<…/instances>`), en TriG ou
@@ -26,6 +24,9 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
 - **Éditeur d'ontologie** avec une vue en graphe : créer et modifier classes et propriétés
   (`rdfs:subClassOf`, `rdfs:domain`, `rdfs:range`…) dans la copie de session, en prolongeant le
-  diagramme du vocabulaire.
+  diagramme du vocabulaire (`js/vocabulaire.js`, modèle de `vocabulaire.php`).
+- **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
+  (la disposition en couches est simple, sans minimisation des croisements), propriétés
+  `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.
 - **Peuplement d'une ontologie par IA** (ProxyIAg) : générer des instances conformes à l'ontologie
   (et aux formes SHACL) d'un jeu, comme la génération de données de SQLSandbox.

@@ -315,6 +315,33 @@ verifie(strpos($coh, 'incohérence') !== false && strpos($coh, 'cine:realisePar'
 reinitialise_jeu('cinema');
 list($apercu, $coh) = explore_jeu('cinema');
 verifie(strpos($coh, 'Aucune incohérence') !== false, 'panneau Cohérence : copie revenue à l\'origine');
+
+// Diagramme du vocabulaire : schéma déclaré + liens observés
+list($voc, $err) = vocabulaire_jeu('cinema');
+verifie(!is_null($voc), 'vocabulaire : modèle construit ('.$err.')');
+$cl = array(); foreach ($voc['classes'] as $c) $cl[$c['nom']] = $c;
+verifie(isset($cl['cine:Film'], $cl['cine:Acteur'], $cl['foaf:Person']) && !isset($cl['rdfs:Class']), 'vocabulaire : classes, sans rdfs:Class');
+verifie($cl['cine:Film']['n'] == 9 && $cl['foaf:Person']['n'] == 0 && $cl['foaf:Person']['decl'], 'vocabulaire : instances comptées, super-classe déclarée sans instance');
+$sous = array(); foreach ($voc['sous'] as $s) $sous[$s['de'].' > '.$s['vers']] = true;
+verifie(isset($sous['http://example.org/cinema/vocab#Acteur > http://example.org/cinema/vocab#Personne']), 'vocabulaire : rdfs:subClassOf');
+$ts = array(); foreach ($cl['cine:Film']['attributs'] as $a) $ts[$a['nom']] = $a;
+verifie(isset($ts['cine:annee']) && $ts['cine:annee']['type'] === 'xsd:integer' && $ts['cine:annee']['n'] == 9 && $ts['cine:annee']['decl'], 'vocabulaire : attribut déclaré et observé');
+verifie(isset($ts['cine:titre']) && $ts['cine:titre']['type'] === 'rdf:langString', 'vocabulaire : rdfs:Literal remplacé par le type observé');
+$ln = array(); foreach ($voc['liens'] as $l) $ln[$l['nom']][] = $l;
+verifie(isset($ln['cine:realisePar']) && $ln['cine:realisePar'][0]['decl'] && $ln['cine:realisePar'][0]['n'] > 0, 'vocabulaire : lien déclaré et observé');
+verifie(isset($ln['cine:film']) && count($ln['cine:film']) == 2, 'vocabulaire : propriété sans domaine déclaré, observée depuis deux classes');
+execute_sparql('cinema', $P.'INSERT DATA { ex:x cine:lien ex:y . ex:x a cine:Film }');
+list($voc, $err) = vocabulaire_jeu('cinema');
+$ln = array(); foreach ($voc['liens'] as $l) $ln[$l['nom']][] = $l;
+verifie(isset($ln['cine:lien']) && !$ln['cine:lien'][0]['decl'] && $ln['cine:lien'][0]['vers'] === VOC_RESSOURCE, 'vocabulaire : lien observé non déclaré, vers une ressource sans classe');
+reinitialise_jeu('cinema');
+list($voc, $err) = vocabulaire_jeu('amis');
+$cl = array(); foreach ($voc['classes'] as $c) $cl[$c['nom']] = $c;
+verifie(isset($cl['foaf:Person']) && $cl['foaf:Person']['n'] > 0, 'vocabulaire : jeu sans ontologie, classes observées');
+// Déclaration incomplète : domaine seul, portée seule
+$m = construit_vocabulaire(array(array('http://e/A', null)), array(), array(array('http://e/p', 'http://e/A', null), array('http://e/q', null, 'http://e/A')), array(), array(), array());
+$ln = array(); foreach ($m['liens'] as $l) $ln[$l['nom']] = $l;
+verifie(count($m['liens']) == 0 || (isset($ln['<http://e/q>']) && $ln['<http://e/q>']['de'] === VOC_RESSOURCE), 'vocabulaire : déclaration incomplète tolérée');
 $r = execute_sparql('cinema', $P.'INSERT DATA { ex:katorza cine:ville "Nantes centre" }');
 verifie(!$avecShacl || strpos(affiche_resultat($r, array()), 'exactement une ville') !== false, 'SHACL : maxCount d\'une mise à jour');
 reinitialise_jeu('cinema');
@@ -513,6 +540,9 @@ if (function_exists('curl_init')) {
 	verifie($code == 200 && strpos($corps, 'cine:Film') !== false, 'contrôleur : exploration');
 	$j = json_decode($corps, true);
 	verifie(strpos($j['coherence'] ?? '', 'incohérence') !== false, 'contrôleur : rapport de cohérence');
+	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'vocabulaire', 'jeu' => 'cinema', 'csrf' => $jeton));
+	$j = json_decode($corps, true);
+	verifie($code == 200 && ($j['ok'] ?? false) && count($j['modele']['classes'] ?? array()) >= 7, 'contrôleur : vocabulaire');
 	list($code, $corps) = http("http://127.0.0.1:$port/controler.php", array('action' => 'exercice', 'jeu' => 'cinema', 'csrf' => $jeton, 'exercice' => 'cinema-tp1'));
 	$j = json_decode($corps, true);
 	verifie($code == 200 && count($j['exercice']['questions'] ?? array()) == 8 && strpos($corps, 'cine:annee ?a') === false, 'contrôleur : exercice sans solutions');

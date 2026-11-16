@@ -64,6 +64,7 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
   <script src="<?php echo url_fichier('js/codemirror/sparql.js'); ?>"></script>
   <script src="<?php echo url_fichier('js/codemirror/matchbrackets.js'); ?>"></script>
   <script type="application/json" id="donnees"><?php echo json_encode($donnees_js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?></script>
+  <script src="<?php echo url_fichier('js/vocabulaire.js'); ?>" defer></script>
   <script src="<?php echo url_fichier('js/sandbox.js'); ?>" defer></script>
 </head>
 <body>
@@ -151,6 +152,7 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
         <p class="astuce">Cliquez sur une classe ou une propriété pour l'utiliser dans une requête.</p>
         <div id="explorer"><p class="astuce">Chargement…</p></div>
         <div class="boutons">
+          <button type="button" class="btn secondaire" id="voir-vocabulaire">🗺️ Diagramme du vocabulaire</button>
           <button type="button" class="btn secondaire" id="actualiser">🔄 Actualiser</button>
           <button type="button" class="btn danger" id="reinitialiser">↩️ Revenir au jeu d'origine</button>
         </div>
@@ -169,6 +171,22 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
   </div>
 <?php } ?>
 </main>
+<?php if ($jeu) { ?>
+<dialog id="vocabulaire" aria-labelledby="titre-vocabulaire">
+  <div class="entete-dialogue">
+    <h2 class="title" id="titre-vocabulaire">🗺️ Vocabulaire de votre copie</h2>
+    <button type="button" class="btn secondaire" id="fermer-vocabulaire">✖️ Fermer</button>
+  </div>
+  <p class="astuce">Classes (avec leurs attributs), sous-classes et propriétés entre classes. Les nombres sont ceux de vos données.
+    Cliquez sur une classe ou une propriété pour l'utiliser dans une requête.</p>
+  <p class="legende-vocabulaire">
+    <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-obs"/></svg> observé dans les données</span>
+    <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-decl"/></svg> déclaré, jamais observé</span>
+    <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-sous"/></svg> rdfs:subClassOf (vers la super-classe)</span>
+  </p>
+  <div id="schema-vocabulaire" class="schema-vocabulaire"><p class="astuce">Chargement…</p></div>
+</dialog>
+<?php } ?>
 <footer class="pied"><p><?php echo html($nom_appli); ?> <?php echo html($version); ?>
   <span class="separateur">·</span> © 2026 E. Desmontils, Nantes Université
   <span class="separateur">·</span> Logiciel libre sous licence GPL v3

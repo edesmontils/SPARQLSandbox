@@ -1,6 +1,6 @@
 <?php
 // Actions appelées par le JavaScript (POST, réponse JSON) :
-// executer (jeu, requete64), explorer (jeu), reinitialiser (jeu),
+// executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
 // exercice (jeu, exercice), verifier (jeu, exercice, question, requete64),
 // intention (jeu, exercice, question, intention) : correction par IA si elle est activée
 // (ia.php), sinon auto-évaluation
@@ -59,6 +59,11 @@ case 'intention':
 case 'explorer':
 	list($h, $coherence) = explore_jeu($jeu);
 	echo json_encode(array('ok' => true, 'html' => $h, 'coherence' => $coherence), JSON_UNESCAPED_UNICODE);
+	exit;
+case 'vocabulaire':
+	list($modele, $erreur) = vocabulaire_jeu($jeu);
+	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
+	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'reinitialiser':
 	reinitialise_jeu($jeu);

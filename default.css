@@ -344,3 +344,39 @@ sup a { text-decoration: none; }
 .grille-techno .icone { font-size: 1.8em; }
 .grille-techno span:last-child { font-size: .88em; color: var(--sb-ink-soft); }
 @media (max-width: 600px) { .carte-auteur { flex-direction: column; text-align: center; } }
+
+/* Diagramme du vocabulaire (js/vocabulaire.js) */
+#vocabulaire {
+	width: min(1200px, 96vw); max-height: 92vh; padding: 20px 24px; border: 0;
+	border-radius: var(--sb-radius-lg); background: var(--sb-surface); color: var(--sb-ink);
+	box-shadow: var(--sb-shadow-page);
+}
+#vocabulaire::backdrop { background: rgba(29, 39, 48, .55); }
+.entete-dialogue { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.entete-dialogue .title { margin: 0; }
+.legende-vocabulaire { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 6px 0 12px; font-size: .9em; color: var(--sb-ink-soft); }
+.legende-vocabulaire svg { vertical-align: middle; overflow: visible; }
+.schema-vocabulaire { overflow: auto; max-height: 68vh; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); background: var(--sb-surface-2); }
+.voc-svg { display: block; max-width: 100%; height: auto; margin: 0 auto; font-size: 13px; }
+.voc-trait { fill: none; stroke-width: 1.8; }
+.voc-obs { stroke: var(--sb-accent); }
+.voc-decl { stroke: var(--sb-ink-faint); stroke-dasharray: 6 4; }
+.voc-sous { stroke: var(--sb-accent-2); stroke-width: 2.2; }
+.voc-pointe-obs { fill: var(--sb-accent); }
+.voc-pointe-decl { fill: var(--sb-ink-faint); }
+.voc-pointe-sous { fill: var(--sb-surface); stroke: var(--sb-accent-2); stroke-width: 1.4; }
+.voc-noeud > rect { fill: var(--sb-surface); stroke: var(--sb-border-strong); stroke-width: 1.4; }
+.voc-noeud .voc-entete { fill: var(--sb-accent-soft); stroke: none; }
+.voc-noeud.voc-vide > rect { stroke-dasharray: 5 3; }
+.voc-noeud.voc-vide .voc-entete { fill: var(--sb-surface-2); }
+.voc-noeud.voc-ressource > rect { stroke-dasharray: 2 3; }
+.voc-nom { font-weight: 600; fill: var(--sb-ink); }
+.voc-attribut { fill: var(--sb-ink-soft); font-family: var(--sb-mono); font-size: 12px; }
+.voc-attribut.voc-decl-texte { fill: var(--sb-ink-faint); font-style: italic; }
+.voc-clic, .voc-etiquette { cursor: pointer; }
+.voc-clic:hover .voc-entete { fill: var(--sb-accent); }
+.voc-clic:hover .voc-nom { fill: #fff; }
+.voc-etiquette text { fill: var(--sb-accent); font-family: var(--sb-mono); font-size: 12px; paint-order: stroke; stroke: var(--sb-surface-2); stroke-width: 5px; stroke-linejoin: round; stroke-dasharray: none; }
+.voc-etiquette.voc-decl text { fill: var(--sb-ink-soft); font-style: italic; stroke-dasharray: none; }
+.voc-etiquette:hover text, .voc-etiquette:focus text { text-decoration: underline; }
+.voc-clic:focus-visible, .voc-etiquette:focus-visible { outline: 3px solid var(--sb-accent-ring); }

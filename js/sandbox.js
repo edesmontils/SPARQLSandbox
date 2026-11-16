@@ -178,6 +178,34 @@
 	});
 	explorer();
 
+	// Diagramme du vocabulaire de la copie (js/vocabulaire.js) ; un clic sur une classe ou une
+	// propriété en fait une requête, comme dans l'explorateur
+	var dialogueVoc = document.getElementById('vocabulaire');
+	var zoneVoc = document.getElementById('schema-vocabulaire');
+	function metsAJourVocabulaire() {
+		zoneVoc.innerHTML = '<p class="astuce">Chargement…</p>';
+		appel('vocabulaire').then(function (r) {
+			if (!r.ok) { zoneVoc.innerHTML = r.html; return; }
+			window.dessineVocabulaire(r.modele, zoneVoc, function (sorte, nom) {
+				var requete = sorte === 'classes'
+					? prefixesUtiles(nom) + 'SELECT ?s\nWHERE {\n  ?s a ' + terme(nom) + ' .\n}\nLIMIT 50'
+					: prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
+				dialogueVoc.close();
+				quitteTrous();
+				editeur.setValue(requete);
+				resultat.innerHTML = '';
+				editeur.focus();
+			});
+		});
+	}
+	document.getElementById('voir-vocabulaire').addEventListener('click', function () {
+		if (typeof dialogueVoc.showModal !== 'function') { alert('Votre navigateur ne sait pas afficher ce diagramme.'); return; }
+		dialogueVoc.showModal();
+		metsAJourVocabulaire();
+	});
+	document.getElementById('fermer-vocabulaire').addEventListener('click', function () { dialogueVoc.close(); });
+	dialogueVoc.addEventListener('click', function (e) { if (e.target === dialogueVoc) dialogueVoc.close(); });
+
 	// Mémoire : requêtes gardées dans ce navigateur, par jeu de données
 	var listeMemoire = document.getElementById('memoire');
 	function afficheMemoire() {
