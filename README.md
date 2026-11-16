@@ -79,8 +79,8 @@ faire :
 - une requête est arrêtée au bout de **5 secondes** ; la mémoire d'un processus Oxigraph est
   limitée (`ulimit -v`) ; la sortie lue est plafonnée à 4 Mo et l'affichage à 1000 lignes ;
 - **`LOAD`** est refusé avant l'exécution, et **`SERVICE`** (requêtes fédérées) aussi, sauf vers les
-  points d'accès listés dans le réglage `services_autorises` de `sparqlsandbox.ini` (vide par
-  défaut ; adresse exacte, ni variable ni jokers). Ils feraient sinon sortir le serveur vers le web. Le mot-clé est cherché hors des chaînes, commentaires et IRI ;
+  points d'accès du réglage `services_autorises` de `sparqlsandbox.ini` (par défaut Wikidata et
+  DBpedia ; une valeur vide interdit `SERVICE` ; adresse exacte, ni variable ni jokers). Ils feraient sinon sortir le serveur vers le web. Le mot-clé est cherché hors des chaînes, commentaires et IRI ;
 - le store d'une session est limité à 20 Mo, le total des copies à 1 Go, et aucune copie n'est
   faite s'il reste moins de 200 Mo libres (réglables dans `sparqlsandbox.ini`) ;
 - chaque adresse IP a au plus 4 requêtes en cours, et les requêtes d'une session sur un même jeu

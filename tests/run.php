@@ -76,7 +76,8 @@ foreach (array(
 	"SELECT * WHERE { SERVICE <$wd> { ?s ?p ?o } SERVICE <http://x.org/s> { ?s ?p ?o } }",
 ) as $q) verifie(!is_null(analyse_sparql($q, $bl)['refus']), "SERVICE hors liste refusé : $q");
 verifie(!is_null(analyse_sparql("LOAD <$wd>", $bl)['refus']), 'LOAD toujours refusé');
-verifie(services_autorises() === array(), 'aucun service autorisé par défaut');
+verifie(services_autorises() === SERVICES_PAR_DEFAUT, 'Wikidata et DBpedia autorisés par défaut');
+verifie(is_null(analyse_sparql("SELECT * WHERE { SERVICE <https://dbpedia.org/sparql> { ?s ?p ?o } }")['refus']), 'SERVICE DBpedia accepté par défaut');
 
 $formes = array(
 	'SELECT * WHERE { ?s ?p ?o }' => 'SELECT',

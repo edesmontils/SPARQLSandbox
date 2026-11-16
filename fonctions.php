@@ -200,11 +200,14 @@ function jetons_sparql($q) {
 
 // Points d'accès SPARQL que SERVICE peut interroger : réglage « services_autorises » de
 // sparqlsandbox.ini (liste séparée par des virgules ou des espaces, ou services_autorises[]
-// répété). Vide par défaut : toute requête fédérée est alors refusée. Seules les adresses
-// http(s) sont retenues, et la comparaison est exacte (aucun préfixe, aucun joker).
+// répété). Par défaut : Wikidata et DBpedia ; un réglage vide (services_autorises =) les
+// interdit tous. Seules les adresses http(s) sont retenues, et la comparaison est exacte
+// (aucun préfixe, aucun joker).
+const SERVICES_PAR_DEFAUT = array('https://query.wikidata.org/sparql', 'https://dbpedia.org/sparql');
 function services_autorises() {
 	$r = reglages();
-	$brut = $r['services_autorises'] ?? array();
+	if (!array_key_exists('services_autorises', $r)) return SERVICES_PAR_DEFAUT;
+	$brut = $r['services_autorises'];
 	if (!is_array($brut)) $brut = array($brut);
 	$liste = array();
 	foreach ($brut as $b)

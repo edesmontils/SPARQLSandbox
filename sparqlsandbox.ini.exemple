@@ -14,6 +14,7 @@
 ;espace_libre_min_mo = 200
 
 ; Points d'accès SPARQL que SERVICE (requêtes fédérées) peut interroger : adresses http(s)
-; exactes, séparées par des virgules ou des espaces. Vide par défaut : SERVICE est refusé.
-; Le serveur interroge alors ces points d'accès pour le compte des étudiants (5 s maximum).
+; exactes, séparées par des virgules ou des espaces. Par défaut : Wikidata et DBpedia (ci-dessous).
+; Une valeur vide (services_autorises =) interdit SERVICE. Le serveur interroge ces points
+; d'accès pour le compte des étudiants (5 s maximum).
 ;services_autorises = https://query.wikidata.org/sparql, https://dbpedia.org/sparql
