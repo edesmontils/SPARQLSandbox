@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <!-- Configuration générale de SPARQL Sandbox. Les jeux de données sont décrits chacun
      par le config.xml de leur dossier dans donnees/. -->
-<sparqlsandbox version="0.3" name="SPARQL Sandbox">
+<sparqlsandbox version="0.4" name="SPARQL Sandbox">
 	<accueil>
 		<section class="post accueil">
 			<h2 class="title">Bienvenue dans SPARQL Sandbox</h2>
