@@ -42,6 +42,7 @@
 	// État : le brouillon
 	//--------------------------------------------------------------------------
 	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', sel: null, pos: {} };
+	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null;
 	var vue = 'graphe', lien = null, drag = null, dernier = { t: 0, k: '' }, quitte = false, enCours = false;
 
 	function cl(iri) { return E.classes.filter(function (c) { return c.iri === iri; })[0]; }
@@ -340,7 +341,7 @@
 		$('#v-liste').classList.toggle('actif', vue === 'liste');
 	}
 	function rendLeger() { rendListes(); rendGraphe(); rendEtat(); }
-	function rend() { rendListes(); rendFiche(); rendGraphe(); rendEtat(); rendVue(); }
+	function rend() { rendListes(); rendFiche(); rendGraphe(); rendEtat(); rendVue(); rendInstances(); rendCible(); }
 
 	//--------------------------------------------------------------------------
 	// Modifications du brouillon
@@ -492,13 +493,119 @@
 	});
 
 	//--------------------------------------------------------------------------
+	// Instances de la copie, et peuplement par IA
+	//--------------------------------------------------------------------------
+	function chargeInstances() {
+		return appel('instances').then(function (r) {
+			if (!r.ok) { $('#p-instances').innerHTML = r.html; return; }
+			I = r.modele; rendInstances();
+		});
+	}
+	function rendInstances() {
+		var zone = $('#p-instances');
+		if (!I) return;
+		var total = I.classes.reduce(function (s, c) { return s + c.n; }, 0);
+		$('#c-inst').textContent = total;
+		var selIri = E.sel && E.sel.t === 'classe' ? E.sel.iri : null;
+		if (selIri && selIri !== dernierSel) { ouverts[selIri] = true; dernierSel = selIri; }   // choisir un concept ouvre sa liste
+		var h = '<p class="astuce" style="margin-top:0">Les individus de votre copie, par concept. Sélectionnez un concept dans le graphe pour voir les siens.' +
+			(I.tronque ? ' <strong>Liste tronquée.</strong>' : '') + '</p>';
+		if (!I.classes.length) h += '<p class="astuce">Aucune instance : peuplez-la avec l\'IA (onglet voisin) ou avec <code>INSERT DATA</code>.</p>';
+		I.classes.forEach(function (c) {
+			var ouvert = !!ouverts[c.iri];
+			var nIA = c.items.filter(function (it) { return it.iri && iaIris[it.iri]; }).length;
+			h += '<div class="inst-classe' + (c.iri === selIri ? ' sel' : '') + '"><button type="button" class="lien-mini inst-tete" data-ic="' + echappe(c.iri) + '" aria-expanded="' + ouvert + '" style="display:flex;width:100%;justify-content:space-between;font-weight:600;padding:5px 2px">' +
+				'<span>' + (ouvert ? '▾ ' : '▸ ') + echappe(c.nom) + (nIA ? ' <span class="badge ia">' + nIA + ' IA</span>' : '') + '</span><span>' + c.n + '</span></button>';
+			if (ouvert) {
+				c.items.forEach(function (it) {
+					var vals = it.props.map(function (p) { return echappe(p.p) + ' = ' + echappe(p.v) + (p.l ? '@' + echappe(p.l) : ''); }).join(' · ');
+					h += '<div class="inst' + (it.iri && iaIris[it.iri] ? ' nouveau-ia' : '') + '"><div class="tete"><strong title="' + echappe(it.iri || it.nom) + '">' + echappe(it.titre || it.nom) + '</strong>' +
+						(it.iri && iaIris[it.iri] ? '<span class="badge ia">IA</span>' : '') + '</div>' +
+						(it.titre ? '<div class="vals">' + echappe(it.nom) + '</div>' : '') + (vals ? '<div class="vals">' + vals + '</div>' : '') + '</div>';
+				});
+				if (c.plus > 0) h += '<div class="inst-plus">… et ' + c.plus + ' autre' + (c.plus > 1 ? 's' : '') + ' non affichée' + (c.plus > 1 ? 's' : '') + '</div>';
+			}
+			h += '</div>';
+		});
+		zone.innerHTML = h;
+	}
+
+	function ouvreOnglet(o) {
+		document.querySelectorAll('.onglets button').forEach(function (b) { b.classList.toggle('actif', b.dataset.onglet === o); });
+		['instances', 'ia'].forEach(function (k) { $('#p-' + k).hidden = k !== o; });
+		if (o === 'ia') rendCible();
+	}
+	function modifies() {
+		return E.classes.filter(function (c) { return statut(c, 'classe') && !c.supprime; }).map(function (c) { return [c, 'classe']; })
+			.concat(E.props.filter(function (p) { return statut(p, 'prop') && !p.supprime; }).map(function (p) { return [p, 'prop']; }));
+	}
+	function rendCible() {
+		var z = $('#cible'); if (!z) return;
+		var m = modifies();
+		z.innerHTML = m.length ? 'Cibles : ' + m.map(function (x) {
+			return '<span>' + echappe(affiche(x[0])) + (statut(x[0], x[1]) === 'new' ? ' ＋' : ' ✎') + '</span>';
+		}).join('') : 'Aucune modification en cours : le mode ciblé n\'aurait rien à faire.';
+	}
+	function rendPropositions() {
+		var z = $('#propositions');
+		if (!propositions || !propositions.liste.length) { z.innerHTML = ''; return; }
+		var h = '<div class="ligne"><strong>' + propositions.liste.length + ' proposition(s)</strong><button type="button" class="lien-mini" id="tout-cocher">tout cocher</button></div>';
+		propositions.liste.forEach(function (p, k) {
+			h += '<label><input type="checkbox" data-p="' + p.i + '" checked> <span><strong>' +
+				(p.genre === 'nouveau' ? 'Créer ' + echappe(p.cible) + ' « ' + echappe(p.titre) + ' »' : 'Compléter ' + echappe(p.cible)) + '</strong>' +
+				(p.detail.length ? '<span class="detail">' + p.detail.map(echappe).join(' · ') + '</span>' : '') + '</span></label>';
+		});
+		var n = nbModifs();
+		h += '<div class="boutons"><button type="button" class="btn vert" id="accepte">➕ Ajouter les propositions cochées</button></div>' +
+			(n ? '<p class="astuce">Vos ' + n + ' modification(s) de l\'ontologie seront enregistrées en même temps : les données ne sont jamais ajoutées sans l\'ontologie qui les décrit.</p>' : '');
+		z.innerHTML = h;
+	}
+	function genere() {
+		var mode = document.querySelector('input[name=mode]:checked').value;
+		if (mode === 'cible' && !modifies().length) { message("<p class='statut ko'>❌ Aucune modification de l'ontologie à viser : modifiez d'abord un concept ou une propriété, ou choisissez le peuplement général.</p>"); return; }
+		var bouton = $('#generer');
+		bouton.disabled = true;
+		message("<p class='astuce'>⏳ L'IA prépare des propositions (cela peut prendre une demi-minute)…</p>");
+		$('#propositions').innerHTML = '';
+		appel('ia_peupler', { mode: mode, quantite: $('#quantite').value, consigne: $('#consigne').value, brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
+			bouton.disabled = false;
+			if (!r.ok) { message(r.html); return; }
+			message("<p class='statut ok'>✨ " + r.propositions.length + " proposition(s) de l'IA (" + echappe(r.modele) + ") : relisez-les avant de les ajouter ; elles peuvent contenir des erreurs.</p>");
+			propositions = { jeton: r.jeton, liste: r.propositions.map(function (p, i) { p.i = i; return p; }) };
+			rendPropositions();
+		});
+	}
+	function accepte() {
+		var cochees = [].slice.call(document.querySelectorAll('#propositions input[data-p]:checked')).map(function (c) { return c.dataset.p; });
+		if (!cochees.length) { toast('Cochez au moins une proposition'); return; }
+		var bouton = $('#accepte'); bouton.disabled = true; enCours = true; rendEtat();
+		appel('ia_ajouter', { jeton: propositions.jeton, indices: cochees.join(','), brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
+			enCours = false;
+			message(r.html);
+			if (!r.ok) { bouton.disabled = false; rendEtat(); return; }
+			(r.sujets || []).forEach(function (s) { iaIris[s] = true; });
+			propositions.liste = propositions.liste.filter(function (p) { return cochees.indexOf(String(p.i)) < 0; });
+			if (r.modele) charge(r.modele);
+			rend(); rendPropositions();
+			chargeInstances().then(function () { toast('✨ ' + cochees.length + ' élément(s) ajouté(s) à l\'instance'); ouvreOnglet('instances'); });
+		});
+	}
+
+	//--------------------------------------------------------------------------
 	// Boutons, clavier, sortie
 	//--------------------------------------------------------------------------
 	document.addEventListener('click', function (e) {
 		var n = e.target.closest('[data-t]');
 		if (n) { E.sel = { t: n.dataset.t, iri: n.dataset.iri }; rend(); return; }
+		var o = e.target.closest('[data-onglet]');
+		if (o) { ouvreOnglet(o.dataset.onglet); return; }
+		var ic = e.target.closest('[data-ic]');
+		if (ic) { ouverts[ic.dataset.ic] = !ouverts[ic.dataset.ic]; rendInstances(); return; }
 		var id = e.target.id;
-		if (id === 'add-classe') creeConcept();
+		if (id === 'generer') genere();
+		else if (id === 'accepte') accepte();
+		else if (id === 'tout-cocher') document.querySelectorAll('#propositions input[data-p]').forEach(function (c) { c.checked = true; });
+		else if (id === 'add-classe') creeConcept();
 		else if (id === 'add-prop') creeProp('', XSD + 'string', 'nouvelle propriété');
 		else if (id === 'v-graphe') { vue = 'graphe'; rendVue(); }
 		else if (id === 'v-liste') { vue = 'liste'; rendVue(); }
@@ -528,5 +635,6 @@
 		if (!r.ok) { message(r.html); return; }
 		charge(r.modele);
 		rend();
+		chargeInstances();
 	});
 })();

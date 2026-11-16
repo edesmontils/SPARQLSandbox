@@ -107,7 +107,10 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
       <summary class="title">🗺️ Vocabulaire de votre copie</summary>
       <p class="astuce">Classes (avec leurs attributs), sous-classes et propriétés entre classes ; les nombres sont ceux de vos données.
         Cliquez sur une classe ou une propriété pour voir ses instances ou ses triplets.</p>
-      <p class="boutons" style="margin:0 0 8px"><a class="btn secondaire petit" href="editeur.php?jeu=<?php echo html(urlencode($jeu)); ?>" title="Ajouter, modifier ou supprimer des concepts et des propriétés dans votre copie">✏️ Éditer l'ontologie</a></p>
+      <p class="boutons" style="margin:0 0 8px"><a class="btn secondaire petit" href="editeur.php?jeu=<?php echo html(urlencode($jeu)); ?>" title="Ajouter, modifier ou supprimer des concepts et des propriétés dans votre copie">✏️ Éditer l'ontologie</a>
+        <a class="btn secondaire petit" href="export.php?jeu=<?php echo html(urlencode($jeu)); ?>" download title="Télécharger votre copie (ontologie et instances) au format Turtle">⬇️ Exporter en Turtle</a>
+        <a class="btn secondaire petit" href="export.php?jeu=<?php echo html(urlencode($jeu)); ?>&amp;partie=ontologie" download title="Télécharger seulement l'ontologie (classes, propriétés) en Turtle">⬇️ Ontologie</a>
+        <a class="btn secondaire petit" href="export.php?jeu=<?php echo html(urlencode($jeu)); ?>&amp;partie=instances" download title="Télécharger seulement les instances en Turtle">⬇️ Instances</a></p>
       <p class="legende-vocabulaire">
         <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-obs"/></svg> observé dans les données</span>
         <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-decl"/></svg> déclaré, jamais observé</span>

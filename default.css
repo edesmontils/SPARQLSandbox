@@ -399,7 +399,8 @@ sup a { text-decoration: none; }
 .etat.sale { background: #fff4d6; border-color: #e7c766; color: #7a5a00; }
 .btn.petit { padding: 4px 10px; font-size: .88em; }
 .btn.vert { background: var(--sb-ok); }
-.ed-corps { padding: 18px 22px; flex: 1; background: var(--sb-surface-2); }
+.ed-corps { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 18px; padding: 18px 22px; align-items: start; flex: 1; background: var(--sb-surface-2); }
+@media (max-width: 1100px) { .ed-corps { grid-template-columns: minmax(0, 1fr); } }
 .orphelines { border-top: 1px solid var(--sb-border); }
 .orphelines summary { padding: 8px 14px; cursor: pointer; font-size: .9em; color: #7a5a00; background: #fff9e6; }
 .orphelines[open] summary { border-bottom: 1px solid var(--sb-border); }
@@ -499,3 +500,32 @@ dialog .boutons { justify-content: flex-end; }
 .toast.vu { opacity: 1; }
 
 a.btn { display: inline-block; text-decoration: none; }
+
+/* Éditeur d'ontologie : instances et peuplement par IA */
+.onglets { display: flex; border-bottom: 1px solid var(--sb-border); }
+.onglets button { flex: 1; padding: 10px 6px; border: 0; background: transparent; font: inherit; cursor: pointer; color: var(--sb-ink-soft); border-bottom: 3px solid transparent; }
+.onglets button:hover { color: var(--sb-accent); }
+.onglets button.actif { color: var(--sb-accent); font-weight: 600; border-bottom-color: var(--sb-accent); }
+.onglets .compte { margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--sb-accent-soft); font-size: .8em; }
+.onglets .compte.rouge { background: var(--sb-danger-soft); color: var(--sb-danger); }
+.panneau { padding: 12px 14px; max-height: calc(100vh - 220px); overflow: auto; }
+.panneau[hidden] { display: none; }
+.inst { padding: 6px 8px; border: 1px solid var(--sb-border); border-radius: 8px; margin-bottom: 6px; font-size: .9em; background: #fff; }
+.inst .tete { display: flex; gap: 6px; align-items: center; }
+.inst .tete strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inst .vals { margin-top: 3px; color: var(--sb-ink-soft); font-family: var(--sb-mono); font-size: .84em; }
+.radio-carte { display: block; padding: 8px 12px; border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-sm); margin-bottom: 8px; cursor: pointer; }
+.radio-carte:has(input:checked) { border-color: var(--sb-accent); background: var(--sb-accent-soft); }
+.radio-carte small { display: block; color: var(--sb-ink-soft); margin-left: 24px; }
+.cible { margin: 6px 0 10px 24px; font-size: .86em; color: var(--sb-ink-soft); }
+.cible span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 8px; border-radius: 999px; background: var(--sb-accent-soft); }
+.ligne { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.propositions label { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border: 1px dashed #cdbcf5; border-radius: 8px; margin-bottom: 6px; font-size: .9em; background: #faf7ff; }
+.panneau { max-height: calc(100vh - 200px); }
+.inst.nouveau-ia { border-color: #cdbcf5; background: #faf7ff; }
+.inst-classe { margin-bottom: 6px; }
+.inst-classe > summary { cursor: pointer; padding: 5px 2px; font-weight: 600; font-size: .92em; color: var(--sb-ink-soft); display: flex; justify-content: space-between; gap: 8px; }
+.inst-classe.sel > summary { color: var(--sb-accent); }
+.inst-plus { font-size: .84em; color: var(--sb-ink-faint); padding: 0 2px 6px; }
+.propositions .detail { display: block; color: var(--sb-ink-soft); font-family: var(--sb-mono); font-size: .86em; }
+.propositions label.deja { opacity: .5; }

@@ -14,8 +14,9 @@ modele = "proxyiag/gemma-4-31b"
 
 ; Réglages facultatifs (valeurs par défaut indiquées)
 ; par_session_intention = 30 ; corrections d'intention par session et par jour
+; par_session_peuplement = 10 ; peuplements de l'instance (éditeur d'ontologie) par session et par jour
 ; delai = 5              ; secondes minimum entre deux corrections d'une session
 ; par_ip = 250           ; appels par adresse IP et par jour (0 = sans limite)
 ; plafond_global = 500   ; appels par jour pour toute l'application (0 = sans limite)
-; max_tokens = 1500      ; longueur maximale de la réponse
+; max_tokens = 1500      ; longueur maximale de la réponse (au moins 3000 pour un peuplement)
 ; delai_appel = 60       ; secondes d'attente de la réponse

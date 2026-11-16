@@ -274,3 +274,25 @@ function enregistre_ontologie($jeu, $brouillon) {
 	return array(true, "<p class='statut ok'>✅ $n élément".($n > 1 ? 's' : '')." de l'ontologie enregistré".($n > 1 ? 's' : '').".</p>"
 		.affiche_corps($r, prefixes_jeu($jeu)), $nouveau);
 }
+
+// Ontologie « effective » : le modèle courant avec le brouillon appliqué (éléments ajoutés,
+// modifiés, supprimés), sans rien enregistrer. Sert à demander à l'IA des données qui
+// correspondent à ce que l'étudiant est en train de construire. $prefixes abrège les nouveaux IRI.
+function onto_applique_brouillon(array $courant, array $b, array $prefixes) {
+	foreach (array('classes', 'props') as $k) {
+		$m = array();
+		foreach ($courant[$k] as $e) $m[$e['iri']] = $e;
+		foreach ($b['supprimes'][$k] as $iri => $_) unset($m[$iri]);
+		foreach ($b[$k] as $iri => $e) {
+			if (isset($b['supprimes'][$k][$iri])) continue;
+			$o = $m[$iri] ?? ($k === 'classes'
+				? array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parent' => '', 'n' => 0, 'decl' => true)
+				: array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'domain' => '', 'range' => ''));
+			foreach (array('label', 'llang', 'comment', 'clang', 'parent', 'domain', 'range') as $c)
+				if (array_key_exists($c, $o) && array_key_exists($c, $e)) $o[$c] = $e[$c];
+			$m[$iri] = $o;
+		}
+		$courant[$k] = array_values($m);
+	}
+	return $courant;
+}

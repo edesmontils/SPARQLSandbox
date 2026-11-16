@@ -22,13 +22,12 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
-- **Éditeur d'ontologie** (squelette fait : `editeur.php`, `js/editeur.js`, `ontologie.php`) : graphe
-  et liste éditables, brouillon enregistré dans la copie de session par une mise à jour SPARQL.
-  Reste : le contrôle de cohérence ontologie/instance depuis l'éditeur, le peuplement de
-  l'instance par IA (général ou ciblé sur les modifications, voir ci-dessous), les instances
-  affichées dans l'éditeur, ré-accrocher l'extrémité d'une flèche, et des sous-classes multiples.
+- **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `ontologie.php`, `peuplement.php`) :
+  graphe et liste éditables, brouillon enregistré dans la copie par une mise à jour SPARQL, instances
+  affichées par concept, peuplement par IA (général ou ciblé sur les modifications, propositions
+  relues avant ajout). Reste : le bouton de contrôle de cohérence ontologie/instance dans l'éditeur,
+  ré-accrocher l'extrémité d'une flèche, les sous-classes multiples, modifier ou supprimer une
+  instance à la main, et des formes SHACL générées avec l'ontologie.
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.
-- **Peuplement d'une ontologie par IA** (ProxyIAg) : générer des instances conformes à l'ontologie
-  (et aux formes SHACL) d'un jeu, comme la génération de données de SQLSandbox.

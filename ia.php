@@ -13,6 +13,7 @@ require_once __DIR__.'/dossiers.php';
 
 // Réglages par défaut, modifiables dans sparqlsandbox-ia.ini
 define('IA_PAR_SESSION_INTENTION', 30); // corrections d'intention par session et par jour
+define('IA_PAR_SESSION_PEUPLEMENT', 10); // peuplements de l'instance (éditeur d'ontologie) par session et par jour
 define('IA_DELAI', 5);           // secondes minimum entre deux corrections d'une session
 define('IA_PAR_IP', 250);        // appels par adresse IP et par jour (0 = sans limite) : la moitié du
                                  // plafond global, pour une salle de TP derrière une même adresse
@@ -39,6 +40,7 @@ function ia_lit_ini($fichier) {
 	return array(
 		'url' => $url, 'cle' => $cle, 'modele' => $modele,
 		'par_session_intention' => max(1, (int)($ini['par_session_intention'] ?? IA_PAR_SESSION_INTENTION)),
+		'par_session_peuplement' => max(1, (int)($ini['par_session_peuplement'] ?? IA_PAR_SESSION_PEUPLEMENT)),
 		'delai' => max(0, (int)($ini['delai'] ?? IA_DELAI)),
 		'par_ip' => max(0, (int)($ini['par_ip'] ?? IA_PAR_IP)),
 		'plafond_global' => max(0, (int)($ini['plafond_global'] ?? IA_PLAFOND_GLOBAL)),
@@ -132,17 +134,19 @@ function ia_compteur_ip($delta, $plafond) {
 	return $ok;
 }
 
-// Réserve une correction pour la session. Retourne null si c'est accordé, sinon le message de refus.
-function ia_reserve($conf) {
-	$max = $conf['par_session_intention'];
+// Réserve un appel pour la session. Retourne null si c'est accordé, sinon le message de refus.
+// $cle : compteur de session (corrections d'intention par défaut ; 'ia_peuplement' pour
+// l'éditeur d'ontologie, avec son propre plafond $max et son libellé).
+function ia_reserve($conf, $cle = 'ia_intention', $max = null, $libelle = "corrections d'intention") {
+	if (is_null($max)) $max = $conf['par_session_intention'];
 	$jour = date('Y-m-d');
-	if (!isset($_SESSION['ia_intention']) || !is_array($_SESSION['ia_intention']) || ($_SESSION['ia_intention']['jour'] ?? '') !== $jour)
-		$_SESSION['ia_intention'] = array('jour' => $jour, 'n' => 0, 'dernier' => 0);
-	$s = &$_SESSION['ia_intention'];
+	if (!isset($_SESSION[$cle]) || !is_array($_SESSION[$cle]) || ($_SESSION[$cle]['jour'] ?? '') !== $jour)
+		$_SESSION[$cle] = array('jour' => $jour, 'n' => 0, 'dernier' => 0);
+	$s = &$_SESSION[$cle];
 	if ($s['n'] >= $max)
-		return "Vous avez utilisé vos $max corrections d'intention du jour ; le compteur repart demain.";
+		return "Vous avez utilisé vos $max $libelle du jour ; le compteur repart demain.";
 	$attente = $conf['delai'] - (time() - $s['dernier']);
-	if ($attente > 0) return "Patientez $attente seconde(s) avant une nouvelle correction.";
+	if ($attente > 0) return "Patientez $attente seconde(s) avant une nouvelle demande à l'IA.";
 	if (!ia_compteur_ip(1, $conf['par_ip']))
 		return "La limite d'utilisation de l'IA depuis ce poste (ou ce réseau) est atteinte pour aujourd'hui.";
 	if (!ia_compteur_global(1, $conf['plafond_global'])) {
@@ -166,15 +170,15 @@ function ia_rouvre_session() {
 }
 
 // Rend l'appel réservé quand le service n'a pas pu répondre
-function ia_rend($conf, $session = true) {
+function ia_rend($conf, $session = true, $cle = 'ia_intention') {
 	if (!$session) { // appel hors session (fiche d'un service) : seuls les compteurs communs
 		ia_compteur_ip(-1, $conf['par_ip']);
 		ia_compteur_global(-1, $conf['plafond_global']);
 		return;
 	}
 	ia_rouvre_session();
-	if (isset($_SESSION['ia_intention']['n']) && $_SESSION['ia_intention']['n'] > 0) $_SESSION['ia_intention']['n']--;
-	if (isset($_SESSION['ia_intention'])) $_SESSION['ia_intention']['dernier'] = 0;
+	if (isset($_SESSION[$cle]['n']) && $_SESSION[$cle]['n'] > 0) $_SESSION[$cle]['n']--;
+	if (isset($_SESSION[$cle])) $_SESSION[$cle]['dernier'] = 0;
 	ia_compteur_ip(-1, $conf['par_ip']);
 	ia_compteur_global(-1, $conf['plafond_global']);
 	if (session_status() == PHP_SESSION_ACTIVE && PHP_SAPI != 'cli') session_write_close();
@@ -279,7 +283,7 @@ function ia_post($conf, $corps) {
 // Demande la correction au modèle. Retourne array('texte' => ..., 'tokens' => n) ou une
 // erreur ia_erreur() ; la réservation est rendue si le service n'a pas pu répondre. Les
 // messages d'erreur du proxy ne sont jamais montrés aux étudiants : ils vont dans le journal.
-function ia_appel($conf, $messages, $session = true) {
+function ia_appel($conf, $messages, $session = true, $cle = 'ia_intention') {
 	$corps = array('model' => $conf['modele'], 'messages' => $messages, 'temperature' => 0.2,
 	               'max_tokens' => $conf['max_tokens'], 'response_format' => array('type' => 'json_object'));
 	list($code, $texte, $err) = ia_post($conf, $corps);
@@ -289,17 +293,17 @@ function ia_appel($conf, $messages, $session = true) {
 	}
 	if ($code == 0 || $code >= 500) {
 		error_log("SPARQLSandbox IA : proxy injoignable ou en erreur (code $code) $err ".substr($texte, 0, 200));
-		ia_rend($conf, $session);
+		ia_rend($conf, $session, $cle);
 		return ia_erreur("Le service de correction est momentanément indisponible. Réessayez dans un instant.", 503);
 	}
 	if ($code == 429) {
-		ia_rend($conf, $session);
+		ia_rend($conf, $session, $cle);
 		return ia_erreur("Le service de correction a atteint sa limite pour aujourd'hui ou est saturé. Réessayez plus tard.", 429);
 	}
 	if ($code != 200) {
 		// 401 (clé révoquée), 403 (modèle interdit), 400/422... : problème de configuration
 		error_log("SPARQLSandbox IA : refus du proxy (code $code) ".substr($texte, 0, 200));
-		ia_rend($conf, $session);
+		ia_rend($conf, $session, $cle);
 		return ia_erreur("La correction par IA n'est pas disponible (erreur de configuration du serveur).", 503);
 	}
 	$d = json_decode($texte, true);

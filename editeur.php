@@ -3,6 +3,7 @@
 // copie de session (js/editeur.js ; modèle et enregistrement dans ontologie.php).
 require __DIR__.'/session.php';
 require_once __DIR__.'/fonctions.php';
+require_once __DIR__.'/ia.php';
 
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
 
@@ -22,6 +23,8 @@ $donnees_js = array(
 	'jeu' => $jeu,
 	'titre_jeu' => $jeux[$jeu]['titre'],
 	'retour' => './?jeu='.urlencode($jeu),
+	// peuplement de l'instance par IA (ia.php) : sinon, l'onglet l'explique
+	'ia' => !is_null(ia_config()),
 );
 header('Cache-Control: no-store');
 ?><!DOCTYPE html>
@@ -90,6 +93,37 @@ header('Cache-Control: no-store');
 
       <section class="vol" id="fiche"></section>
     </div>
+
+    <aside class="vol ed-droite">
+      <div class="onglets" role="tablist">
+        <button type="button" role="tab" data-onglet="instances" class="actif">🗃️ Instance <span class="compte" id="c-inst">…</span></button>
+        <button type="button" role="tab" data-onglet="ia">✨ Peupler avec l'IA</button>
+      </div>
+
+      <div class="panneau" id="p-instances" role="tabpanel"><p class="astuce">Chargement…</p></div>
+
+      <div class="panneau" id="p-ia" role="tabpanel" hidden>
+<?php if (is_null(ia_config())) { ?>
+        <p class="astuce">L'IA générative n'est pas activée sur ce serveur : le peuplement automatique de l'instance n'est pas disponible.
+          Vous pouvez ajouter des données avec <code>INSERT DATA</code> depuis la page des requêtes.</p>
+<?php } else { ?>
+        <p class="astuce" style="margin-top:0">L'IA ajoute des données à l'instance <em>sans requête SPARQL</em>. Vous relisez ses propositions et n'ajoutez que celles que vous choisissez.</p>
+        <label class="radio-carte"><input type="radio" name="mode" value="general" checked> <strong>Peuplement général</strong>
+          <small>Enrichit toute l'instance à partir de l'ontologie, telle que vous la voyez ici.</small></label>
+        <label class="radio-carte"><input type="radio" name="mode" value="cible"> <strong>Ciblé sur mes modifications</strong>
+          <small>Ne génère que des données qui exercent ce que vous avez créé ou changé.</small></label>
+        <div class="cible" id="cible"></div>
+        <div class="ligne">
+          <label for="quantite">Nouvelles instances</label>
+          <select id="quantite" class="champ" style="width:auto"><option>3</option><option selected>5</option><option>10</option></select>
+        </div>
+        <label for="consigne" class="visuellement-cache">Consigne</label>
+        <textarea id="consigne" class="champ" rows="2" maxlength="300" placeholder="Consigne facultative : « films français des années 90 »…"></textarea>
+        <div class="boutons"><button type="button" class="btn" id="generer">✨ Générer des propositions</button></div>
+        <div id="propositions" class="propositions" aria-live="polite"></div>
+<?php } ?>
+      </div>
+    </aside>
   </div>
 </div>
 
