@@ -30,6 +30,8 @@ réserve le droit de supprimer toute instance à tout moment.
   l'ontologie déclare (`rdfs:domain`, `rdfs:range`) et ce que les données montrent (classe du sujet
   et de l'objet de chaque triplet), donc il fonctionne aussi pour un jeu sans ontologie. Trait
   plein : observé ; pointillé : déclaré mais jamais observé. Il suit les mises à jour de la copie.
+  Un clic sur une classe ou une propriété affiche ses instances ou ses triplets à droite du
+  diagramme, qui reste ouvert (lien « Dans l'éditeur » pour reprendre la requête).
   Le modèle est construit par `vocabulaire.php`, le dessin (SVG) par `js/vocabulaire.js`.
 - **Exemples** : chaque jeu de données propose des requêtes commentées (`config.xml` du jeu).
 - **Exercices** au format QueryCraft, avec vérification des requêtes (voir plus bas).

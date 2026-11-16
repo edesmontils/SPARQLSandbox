@@ -380,3 +380,17 @@ sup a { text-decoration: none; }
 .voc-etiquette.voc-decl text { fill: var(--sb-ink-soft); font-style: italic; stroke-dasharray: none; }
 .voc-etiquette:hover text, .voc-etiquette:focus text { text-decoration: underline; }
 .voc-clic:focus-visible, .voc-etiquette:focus-visible { outline: 3px solid var(--sb-accent-ring); }
+
+/* Résultat à droite du diagramme : le diagramme reste ouvert */
+.corps-vocabulaire { display: flex; gap: 14px; align-items: flex-start; }
+.corps-vocabulaire .schema-vocabulaire { flex: 1 1 0; min-width: 0; }
+.panneau-vocabulaire { flex: 0 0 min(38%, 460px); max-height: 68vh; overflow: auto; padding: 10px 12px; font-size: .8em; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); }
+.panneau-vocabulaire[hidden] { display: none; }
+.panneau-vocabulaire .entete-panneau { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 6px; font-family: var(--sb-mono); }
+.panneau-vocabulaire .defile { max-height: none; overflow: visible; border: 0; }
+.panneau-vocabulaire table.resultat { font-size: 1em; }
+.panneau-vocabulaire .resultat th, .panneau-vocabulaire .resultat td { padding: 3px 6px; }
+.voc-clic.voc-choisi .voc-entete { fill: var(--sb-accent); }
+.voc-clic.voc-choisi .voc-nom { fill: #fff; }
+.voc-etiquette.voc-choisi text { font-weight: 700; text-decoration: underline; }
+@media (max-width: 900px) { .corps-vocabulaire { flex-direction: column; } .panneau-vocabulaire { flex: none; width: 100%; max-height: 40vh; } }

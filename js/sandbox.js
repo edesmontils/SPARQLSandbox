@@ -178,24 +178,39 @@
 	});
 	explorer();
 
-	// Diagramme du vocabulaire de la copie (js/vocabulaire.js) ; un clic sur une classe ou une
-	// propriété en fait une requête, comme dans l'explorateur
+	// Diagramme du vocabulaire de la copie (js/vocabulaire.js)
 	var dialogueVoc = document.getElementById('vocabulaire');
 	var zoneVoc = document.getElementById('schema-vocabulaire');
+	var panneauVoc = document.getElementById('panneau-vocabulaire');
+	var resultatVoc = document.getElementById('resultat-vocabulaire');
+	var requeteVoc = null, numeroVoc = 0;
+	// Un clic sur le diagramme exécute la requête et montre le résultat à côté, sans la requête
+	function interrogeVocabulaire(sorte, nom) {
+		requeteVoc = sorte === 'classes'
+			? prefixesUtiles(nom) + 'SELECT ?s\nWHERE {\n  ?s a ' + terme(nom) + ' .\n}\nLIMIT 50'
+			: prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
+		var mon = ++numeroVoc;
+		document.getElementById('titre-panneau-vocabulaire').textContent = (sorte === 'classes' ? 'Instances de ' : 'Triplets de ') + nom;
+		resultatVoc.innerHTML = "<p class='astuce'>⏳ Exécution…</p>";
+		panneauVoc.hidden = false;
+		appel('executer', { requete64: base64(requeteVoc) }).then(function (r) {
+			if (mon === numeroVoc) resultatVoc.innerHTML = r.html;
+		});
+	}
+	document.getElementById('reprendre-vocabulaire').addEventListener('click', function () {
+		dialogueVoc.close();
+		quitteTrous();
+		editeur.setValue(requeteVoc);
+		resultat.innerHTML = '';
+		editeur.focus();
+	});
 	function metsAJourVocabulaire() {
 		zoneVoc.innerHTML = '<p class="astuce">Chargement…</p>';
+		panneauVoc.hidden = true;
+		numeroVoc++;
 		appel('vocabulaire').then(function (r) {
 			if (!r.ok) { zoneVoc.innerHTML = r.html; return; }
-			window.dessineVocabulaire(r.modele, zoneVoc, function (sorte, nom) {
-				var requete = sorte === 'classes'
-					? prefixesUtiles(nom) + 'SELECT ?s\nWHERE {\n  ?s a ' + terme(nom) + ' .\n}\nLIMIT 50'
-					: prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
-				dialogueVoc.close();
-				quitteTrous();
-				editeur.setValue(requete);
-				resultat.innerHTML = '';
-				editeur.focus();
-			});
+			window.dessineVocabulaire(r.modele, zoneVoc, interrogeVocabulaire);
 		});
 	}
 	document.getElementById('voir-vocabulaire').addEventListener('click', function () {

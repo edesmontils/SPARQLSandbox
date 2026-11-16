@@ -178,13 +178,22 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
     <button type="button" class="btn secondaire" id="fermer-vocabulaire">✖️ Fermer</button>
   </div>
   <p class="astuce">Classes (avec leurs attributs), sous-classes et propriétés entre classes. Les nombres sont ceux de vos données.
-    Cliquez sur une classe ou une propriété pour l'utiliser dans une requête.</p>
+    Cliquez sur une classe ou une propriété pour voir ses instances ou ses triplets à droite.</p>
   <p class="legende-vocabulaire">
     <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-obs"/></svg> observé dans les données</span>
     <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-decl"/></svg> déclaré, jamais observé</span>
     <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-sous"/></svg> rdfs:subClassOf (vers la super-classe)</span>
   </p>
-  <div id="schema-vocabulaire" class="schema-vocabulaire"><p class="astuce">Chargement…</p></div>
+  <div class="corps-vocabulaire">
+    <div id="schema-vocabulaire" class="schema-vocabulaire"><p class="astuce">Chargement…</p></div>
+    <aside id="panneau-vocabulaire" class="panneau-vocabulaire" hidden aria-live="polite">
+      <div class="entete-panneau">
+        <strong id="titre-panneau-vocabulaire"></strong>
+        <button type="button" class="lien" id="reprendre-vocabulaire" title="Reprendre cette requête dans l'éditeur">✏️ Dans l'éditeur</button>
+      </div>
+      <div id="resultat-vocabulaire"></div>
+    </aside>
+  </div>
 </dialog>
 <?php } ?>
 <footer class="pied"><p><?php echo html($nom_appli); ?> <?php echo html($version); ?>

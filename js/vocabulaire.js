@@ -257,7 +257,11 @@
 		conteneur.innerHTML = '<svg class="voc-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + largeur + ' ' + hauteur + '" width="' + largeur +
 			'" role="img" aria-label="Diagramme du vocabulaire">' + defs + dessin + noeudsSvg + etiquettes + '</svg>';
 		conteneur.querySelectorAll('[data-sorte]').forEach(function (g) {
-			function ouvre() { if (surClic) surClic(g.dataset.sorte, g.dataset.nom); }
+			function ouvre() {
+				conteneur.querySelectorAll('.voc-choisi').forEach(function (e) { e.classList.remove('voc-choisi'); });
+				g.classList.add('voc-choisi');
+				if (surClic) surClic(g.dataset.sorte, g.dataset.nom);
+			}
 			g.addEventListener('click', ouvre);
 			g.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvre(); } });
 		});
