@@ -1,12 +1,13 @@
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from sparqlsandbox_admin import inifile, jeux, maintenance
 from sparqlsandbox_admin.profils import DepotProfils, Profil
-from sparqlsandbox_admin.transport import LocalTransport
+from sparqlsandbox_admin.transport import LocalTransport, TransportError
 
 SITE = Path(__file__).resolve().parents[2]  # racine de SPARQLSandbox
 TTL = b"@prefix ex: <http://example.org/> .\nex:a ex:p ex:b .\n"
@@ -159,6 +160,57 @@ class MaintenanceTest(unittest.TestCase):
 
     def test_dossier_tmp_absent(self):
         self.assertFalse(maintenance.etat(LocalTransport(), "/nexiste/pas").tmp_existe)
+
+
+def git(cwd, *args):
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
+                   capture_output=True)
+
+
+class MiseAJourTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        origine, self.site, self.autre = self.tmp / "origine.git", self.tmp / "site", self.tmp / "autre"
+        git(self.tmp, "init", "-q", "--bare", "-b", "main", str(origine))
+        git(self.tmp, "clone", "-q", str(origine), str(self.site))
+        (self.site / "index.php").write_text("v1")
+        git(self.site, "add", "."); git(self.site, "commit", "-q", "-m", "premier"); git(self.site, "push", "-q", "origin", "main")
+        git(self.tmp, "clone", "-q", str(origine), str(self.autre))
+        self.t = LocalTransport()
+
+    def publie(self, texte, titre):
+        (self.autre / "index.php").write_text(texte)
+        git(self.autre, "commit", "-q", "-am", titre); git(self.autre, "push", "-q", "origin", "main")
+
+    def test_a_jour(self):
+        e = maintenance.etat_depot(self.t, str(self.site))
+        self.assertEqual((e.branche, e.a_recuperer, e.modifie), ("main", [], False))
+
+    def test_pull_et_relance(self):
+        self.publie("v2", "deuxième version")
+        e = maintenance.etat_depot(self.t, str(self.site))
+        self.assertEqual(len(e.a_recuperer), 1)
+        self.assertIn("deuxième version", e.a_recuperer[0])
+        r = maintenance.met_a_jour(self.t, str(self.site), f"touch {self.tmp}/relance.ok")
+        self.assertNotEqual(r.avant, r.apres)
+        self.assertIn("deuxième version", r.commits[0])
+        self.assertEqual((self.site / "index.php").read_text(), "v2")
+        self.assertEqual(r.relance[0], 0)
+        self.assertTrue((self.tmp / "relance.ok").exists())
+        self.assertEqual(maintenance.etat_depot(self.t, str(self.site)).a_recuperer, [])
+
+    def test_modifications_locales_jamais_ecrasees(self):
+        (self.site / "index.php").write_text("local")
+        self.publie("v2", "conflit")
+        self.assertTrue(maintenance.etat_depot(self.t, str(self.site)).modifie)
+        with self.assertRaises(TransportError):
+            maintenance.met_a_jour(self.t, str(self.site))
+        self.assertEqual((self.site / "index.php").read_text(), "local")
+
+    def test_pas_un_depot(self):
+        with self.assertRaises(TransportError):
+            maintenance.etat_depot(self.t, str(self.tmp))
 
 
 class ProfilTest(unittest.TestCase):

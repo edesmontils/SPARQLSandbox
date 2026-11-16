@@ -38,6 +38,7 @@ class Profil:
     dossier_tmp: str = ""      # dossier de travail (défaut : sparqlsandbox-tmp à côté de la racine)
     url: str = ""              # adresse publique, pour ouvrir le site
     production: bool = False   # machine de production : bandeau et confirmations renforcées
+    commande_relance: str = "" # commande lancée après une mise à jour (ex. recharger php-fpm), facultative
 
     def _voisin(self, valeur: str, nom: str) -> str:
         return valeur or posixpath.join(posixpath.dirname(self.racine.rstrip("/")), nom)

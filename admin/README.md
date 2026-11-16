@@ -99,8 +99,27 @@ Mise en place sur le serveur, une seule fois (depuis une session `root`, ou avec
    ```
    Contrôle : `ssh root@<hôte>` doit être refusé, `ssh sparqlsandbox@<hôte>` accepté. Pour revenir
    en arrière : restaurer la sauvegarde et recharger `ssh`.
-4. Dans l'application, « Machines… » → « Tester » : les sept contrôles du diagnostic doivent être
-   verts.
+4. Dans l'application, « Gérer les machines » → « Tester la connexion » : les sept contrôles du
+   diagnostic doivent être verts.
+
+### Mettre à jour le site depuis l'application
+
+« Gérer les machines » → **« Mettre à jour le site… »** fait un `git pull --ff-only` dans la racine
+du site de la machine choisie : l'application montre d'abord les commits à récupérer (une demande
+de confirmation, renforcée en production), puis le résultat. L'avance rapide seule est permise :
+jamais de fusion ni d'écrasement, et si des fichiers suivis ont été modifiés sur la machine et
+gênent, la mise à jour s'arrête avec le message de git.
+
+Le champ « Après la mise à jour » (facultatif) est une commande lancée ensuite sur la machine, par
+exemple `sudo -n systemctl reload php-fpm`. Un site PHP n'a en général pas besoin d'être relancé
+(les `.ini` sont relus à chaque requête, et les jeux d'origine se rechargent quand leurs fichiers
+changent). `sudo -n` ne demande jamais de mot de passe : il échoue s'il en faut un, plutôt que de
+bloquer ; autorisez la commande exacte dans `/etc/sudoers.d/` si vous en avez besoin.
+
+Si la machine passe par un proxy, il faut que `git` l'atteigne : une variable `https_proxy` en
+`https://…` vers un proxy qui parle HTTP (Squid, port 3128) provoque l'erreur « GnuTLS, handshake
+failed » ; l'adresse doit alors commencer par `http://`
+(`git config --global http.proxy http://proxy:3128` pour le compte du site).
 
 ## Lancer
 
@@ -133,7 +152,17 @@ vraie fenêtre hors écran.
 ## Déploiement du site : ne pas exposer `admin/`
 
 Ce dossier est dans le dépôt de SPARQLSandbox, donc un `git pull` sur un serveur le dépose sous la
-racine web. Il ne contient aucun secret, mais il n'a rien à y faire : interdisez-le comme
-`donnees`, `tests` et `tmp` (Caddy : ajouter `admin` à la regex déjà utilisée ; Apache : le `.htaccess`
-de la racine ne le couvre pas, ajoutez-y un `RedirectMatch 404 ^/.*admin/`, ou n'envoyez pas
-`admin/` sur le serveur).
+racine web. Il ne contient aucun secret, mais il n'a rien à y faire, et son code ne doit pas être
+servi :
+
+- **Apache** (hébergement mutualisé, production) : le fichier `admin/.htaccess` du dépôt l'interdit
+  déjà, comme `donnees/`, `tests/` et `tmp/`. Rien à faire de plus, si `AllowOverride` autorise les
+  `.htaccess` (c'est déjà le cas pour `donnees/`).
+- **Caddy ou nginx** (qui ignorent les `.htaccess`) : ajouter `admin` à la règle qui interdit déjà
+  `donnees`, `tests`, `tmp` et `bin`.
+
+Vérification, depuis le Mac (attendu : 403, jamais 200) :
+
+```sh
+curl -s -o /dev/null -w "%{http_code}\n" https://<site>/SPARQLSandbox/admin/lancement.py
+```

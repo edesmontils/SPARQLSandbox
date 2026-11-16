@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-                               QLabel, QLineEdit, QListWidget, QMessageBox, QSpinBox, QVBoxLayout, QWidget)
+                               QLabel, QLineEdit, QListWidget, QMessageBox, QScrollArea, QSpinBox, QVBoxLayout, QWidget)
 
 from .. import maintenance
 from ..jeux import FORMATS, NOM_JEU, Jeu
@@ -41,7 +41,7 @@ class ChampFichier(QWidget):
 def formulaire(parent: QWidget | None = None) -> QFormLayout:
     f = QFormLayout()
     f.setHorizontalSpacing(16)
-    f.setVerticalSpacing(10)
+    f.setVerticalSpacing(12)
     f.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
     f.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
     return f
@@ -123,7 +123,8 @@ class DialogueProfils(QDialog):
         super().__init__(parent)
         self.ctx = ctx
         self.setWindowTitle("Machines")
-        self.setMinimumSize(860, 560)
+        self.setMinimumSize(900, 600)
+        self.resize(960, 760)
         self.liste = QListWidget()
         self.liste.setFixedWidth(210)
         self.liste.currentRowChanged.connect(self._affiche)
@@ -147,6 +148,9 @@ class DialogueProfils(QDialog):
         self.tmp = QLineEdit()
         self.url = QLineEdit()
         self.url.setPlaceholderText("https://…/SPARQLSandbox/")
+        self.relance = QLineEdit()
+        self.relance.setProperty("role", "code")
+        self.relance.setPlaceholderText("facultatif, ex. : sudo -n systemctl reload php-fpm")
         self.production = QCheckBox("Machine de production")
         self.production.setToolTip("Affiche un bandeau ambre et demande de recopier le nom pour les actions "
                                    "destructrices.")
@@ -170,6 +174,12 @@ class DialogueProfils(QDialog):
         emplacements.addRow("sparqlsandbox-ia.ini", self.ini_ia)
         emplacements.addRow("Dossier de travail", self.tmp)
         emplacements.addRow("Adresse publique", self.url)
+        mise_a_jour = formulaire()
+        mise_a_jour.addRow("Après la mise à jour", self.relance)
+        aide_maj = etiquette("« Mettre à jour le site » fait un git pull (avance rapide seulement) dans la racine du "
+                             "site, puis lance cette commande si elle est renseignée. Un site PHP n'a en général "
+                             "pas besoin d'être relancé ; sudo doit pouvoir s'exécuter sans mot de passe (sudo -n).",
+                             "aide")
         aide_conn = etiquette("Authentification par vos clés SSH et votre agent : aucun mot de passe n'est "
                               "mémorisé. La clé privée n'est utile que si elle n'est pas déjà dans ~/.ssh/config.",
                               "aide")
@@ -179,6 +189,9 @@ class DialogueProfils(QDialog):
         b_ajout = bouton("Ajouter une machine")
         b_suppr = bouton("Supprimer", "danger")
         b_test = bouton("Tester la connexion")
+        b_maj = bouton("Mettre à jour le site…")
+        b_maj.setToolTip("git pull sur la machine, puis la commande de relance")
+        b_maj.clicked.connect(self._met_a_jour)
         b_ok = bouton("Enregistrer", "primaire")
         b_ferme = bouton("Fermer")
         b_ok.setDefault(True)
@@ -195,28 +208,45 @@ class DialogueProfils(QDialog):
         gauche.addWidget(b_suppr)
         droite = QVBoxLayout()
         droite.setSpacing(8)
+        droite.setContentsMargins(0, 0, 14, 0)
         droite.addWidget(section("Identité"))
         droite.addLayout(identite)
-        droite.addSpacing(6)
+        droite.addSpacing(10)
         droite.addWidget(section("Connexion"))
         droite.addLayout(connexion)
         droite.addWidget(aide_conn)
-        droite.addSpacing(6)
+        droite.addSpacing(10)
         droite.addWidget(section("Emplacements sur la machine"))
         droite.addLayout(emplacements)
         droite.addWidget(aide_chemins)
+        droite.addSpacing(10)
+        droite.addWidget(section("Mise à jour du site"))
+        droite.addLayout(mise_a_jour)
+        droite.addWidget(aide_maj)
         droite.addStretch(1)
+        contenu = QWidget()
+        contenu.setObjectName("contenu")  # fond « papier » du thème
+        contenu.setLayout(droite)
+        defilement = QScrollArea()
+        defilement.setWidgetResizable(True)
+        defilement.setFrameShape(QFrame.NoFrame)
+        defilement.viewport().setAutoFillBackground(False)
+        defilement.setWidget(contenu)
         bas = QHBoxLayout()
         bas.addWidget(b_test)
+        bas.addWidget(b_maj)
         bas.addStretch(1)
         bas.addWidget(b_ferme)
         bas.addWidget(b_ok)
-        droite.addLayout(bas)
+        colonne = QVBoxLayout()
+        colonne.setSpacing(12)
+        colonne.addWidget(defilement, 1)
+        colonne.addLayout(bas)
         racine = QHBoxLayout(self)
         racine.setContentsMargins(22, 20, 22, 18)
         racine.setSpacing(24)
         racine.addLayout(gauche)
-        racine.addLayout(droite, 1)
+        racine.addLayout(colonne, 1)
         self._ancien: str | None = None
         self._remplit(self.ctx.profil.nom if self.ctx.profil else None)
 
@@ -236,6 +266,7 @@ class DialogueProfils(QDialog):
         p = p or Profil("", racine="")
         self.nom.setText(p.nom)
         self.production.setChecked(p.production)
+        self.relance.setText(p.commande_relance)
         self.type.setCurrentIndex(self.type.findData(p.type))
         self.hote.setText(p.hote)
         self.utilisateur.setText(p.utilisateur)
@@ -258,7 +289,7 @@ class DialogueProfils(QDialog):
                       self.utilisateur.text().strip(), self.port.value(), self.cle.texte(),
                       self.racine.text().strip().rstrip("/") or "", self.ini.text().strip(),
                       self.ini_ia.text().strip(), self.tmp.text().strip(), self.url.text().strip(),
-                      self.production.isChecked())
+                      self.production.isChecked(), self.relance.text().strip())
 
     def _ajoute(self):
         self.liste.blockSignals(True)
@@ -270,6 +301,7 @@ class DialogueProfils(QDialog):
         self.cle.champ.clear()
         self.port.setValue(0)
         self.production.setChecked(False)
+        self.relance.clear()
         self.type.setCurrentIndex(0)
         self.nom.setFocus()
 
@@ -316,3 +348,67 @@ class DialogueProfils(QDialog):
             QMessageBox.information(self, f"Test de « {p.nom} »", "\n".join(f"{icones[n]}  {m}" for n, m in res))
 
         self.ctx.lance(travail, fini)
+
+    def _met_a_jour(self):
+        """Vérifie ce qu'il y a à récupérer, demande confirmation, puis git pull et relance."""
+        p = self._profil()
+        erreurs = p.erreurs()
+        if erreurs:
+            QMessageBox.warning(self, "Machine incomplète", "\n".join(erreurs))
+            return
+        ctx = self.ctx
+
+        def verifie():
+            t = p.transport()
+            try:
+                return maintenance.etat_depot(t, p.racine)
+            finally:
+                t.ferme()
+
+        def propose(etat):
+            if not etat.a_recuperer:
+                QMessageBox.information(self, f"Mise à jour de « {p.nom} »",
+                                        f"Le site est déjà à jour (branche {etat.branche}, commit {etat.tete}).")
+                return
+            b = QMessageBox(QMessageBox.Question, f"Mise à jour de « {p.nom} »",
+                            f"{len(etat.a_recuperer)} modification(s) à récupérer sur la branche {etat.branche} :",
+                            QMessageBox.Cancel, self)
+            detail = "\n".join(etat.a_recuperer[:15]) + ("\n…" if len(etat.a_recuperer) > 15 else "")
+            if etat.modifie:
+                detail += ("\n\n⚠ Des fichiers suivis ont été modifiés sur la machine : si git ne peut pas les "
+                           "concilier, la mise à jour s'arrête sans rien écraser.")
+            if p.production:
+                detail = "⚠ PRODUCTION : les étudiants verront le résultat tout de suite.\n\n" + detail
+            if p.commande_relance:
+                detail += f"\n\nPuis : {p.commande_relance}"
+            b.setInformativeText(detail)
+            ok = b.addButton("Mettre à jour", QMessageBox.AcceptRole)
+            b.setDefaultButton(b.button(QMessageBox.Cancel))
+            b.exec()
+            if b.clickedButton() is ok:
+                lance()
+
+        def lance():
+            def travail():
+                t = p.transport()
+                try:
+                    return maintenance.met_a_jour(t, p.racine, p.commande_relance)
+                finally:
+                    t.ferme()
+
+            def fini(r):
+                lignes = [f"Commit {r.avant} → {r.apres}." if r.avant != r.apres else "Aucun changement."]
+                lignes += r.commits[:15]
+                if r.relance is not None:
+                    code, sortie = r.relance
+                    lignes.append("")
+                    lignes.append("Relance : " + ("réussie." if code == 0 else f"ÉCHEC (code {code})."))
+                    if sortie:
+                        lignes.append(sortie[:600])
+                (QMessageBox.information if r.relance is None or r.relance[0] == 0 else QMessageBox.warning)(
+                    self, f"Mise à jour de « {p.nom} »", "\n".join(lignes))
+                ctx.message.emit(f"« {p.nom} » mis à jour ({r.apres}).")
+
+            ctx.lance(travail, fini)
+
+        ctx.lance(verifie, propose)

@@ -140,3 +140,59 @@ def diagnostic(t: Transport, profil) -> list[tuple[str, str]]:
     else:
         r.append(("ok", "Correction des intentions par IA : désactivée (auto-évaluation)."))
     return r
+
+
+# --- mise à jour du site (git pull) -----------------------------------------------------
+
+@dataclass
+class EtatDepot:
+    branche: str
+    tete: str                      # empreinte courte du commit actuel
+    modifie: bool                  # fichiers suivis modifiés localement
+    a_recuperer: list[str] = field(default_factory=list)  # commits en avance sur le serveur : « empreinte titre »
+
+
+@dataclass
+class ResultatMaj:
+    avant: str
+    apres: str
+    commits: list[str]
+    sortie: str
+    relance: tuple[int, str] | None = None  # (code, sortie) de la commande de relance
+
+
+def _git(t: Transport, racine: str, args: str, delai: int = 90) -> str:
+    code, sortie, erreur = t.execute(f"git -C {shlex.quote(t.chemin(racine))} {args} 2>&1", delai)
+    if code != 0:
+        raise TransportError((sortie + erreur).strip() or f"git a échoué (code {code})")
+    return sortie.strip()
+
+
+def etat_depot(t: Transport, racine: str) -> EtatDepot:
+    """Interroge le dépôt git du site (après un « fetch ») : branche, commit et commits à récupérer."""
+    if _git(t, racine, "rev-parse --is-inside-work-tree") != "true":
+        raise TransportError(f"{racine} n'est pas un dépôt git.")
+    branche = _git(t, racine, "rev-parse --abbrev-ref HEAD")
+    tete = _git(t, racine, "rev-parse --short HEAD")
+    _git(t, racine, "fetch --quiet")
+    try:
+        nouveaux = _git(t, racine, "log --oneline 'HEAD..@{u}'")
+    except TransportError as e:
+        raise TransportError(f"La branche « {branche} » ne suit aucune branche distante : {e}") from e
+    modifie = bool(_git(t, racine, "status --porcelain --untracked-files=no"))
+    return EtatDepot(branche, tete, modifie, [l for l in nouveaux.splitlines() if l])
+
+
+def met_a_jour(t: Transport, racine: str, relance: str = "") -> ResultatMaj:
+    """git pull (avance rapide seulement : jamais de fusion ni d'écrasement), puis la commande de relance."""
+    avant = _git(t, racine, "rev-parse --short HEAD")
+    sortie = _git(t, racine, "pull --ff-only", 120)
+    apres = _git(t, racine, "rev-parse --short HEAD")
+    commits = []
+    if avant != apres:
+        commits = [l for l in _git(t, racine, f"log --oneline {avant}..{apres}").splitlines() if l]
+    res = ResultatMaj(avant, apres, commits, sortie)
+    if relance.strip():
+        code, out, err = t.execute(relance.strip() + " 2>&1", 90)
+        res.relance = (code, (out + err).strip())
+    return res
