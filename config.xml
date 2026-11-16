@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <!-- Configuration générale de SPARQL Sandbox. Les jeux de données sont décrits chacun
      par le config.xml de leur dossier dans donnees/. -->
-<sparqlsandbox version="0.4" name="SPARQL Sandbox">
+<sparqlsandbox version="0.5" name="SPARQL Sandbox">
 	<accueil>
 		<section class="post accueil">
 			<h2 class="title">Bienvenue dans SPARQL Sandbox</h2>
@@ -22,15 +22,18 @@
 				<ol>
 					<li><strong>Choisissez un jeu de données</strong> parmi les pastilles en haut de la page :
 						sa description s'affiche.</li>
-					<li><strong>Découvrez-le</strong> : « 🧩 Contenu de votre copie » liste ses classes et ses
-						propriétés ; un clic en fait une requête.</li>
+					<li><strong>Découvrez-le</strong> : « 🗺️ Vocabulaire de votre copie » dessine ses classes, leurs
+						attributs et les liens entre elles ; un clic sur une classe ou une propriété montre ses
+						instances ou ses triplets à côté du schéma. « 🧩 Contenu de votre copie » les liste aussi,
+						et un clic en fait une requête.</li>
 					<li><strong>Écrivez une requête</strong>, ou partez d'un exemple, puis lancez-la avec
 						<strong>▶️ Exécuter</strong> (ou Ctrl+Entrée, Cmd+Entrée sur Mac).
 						« 🏷️ Insérer les préfixes » ajoute les déclarations <code>PREFIX</code> du jeu.</li>
 					<li><strong>Gardez vos requêtes</strong> utiles avec <strong>🧺 Mémoriser</strong>.</li>
 					<li><strong>Entraînez-vous</strong> avec les exercices d'un jeu (« 📝 Exercices ») :
-						écrivez la requête demandée puis <strong>✅ Vérifier ma réponse</strong>, ou rédigez
-						l'intention d'une requête donnée et comparez-la à celle de l'enseignant.</li>
+						écrivez la requête demandée ou complétez une requête à trous, puis
+						<strong>✅ Vérifier ma réponse</strong> ; ou rédigez l'intention d'une requête donnée et
+						comparez-la à celle de l'enseignant (ou faites-la corriger par l'IA, si elle est activée).</li>
 					<li><strong>Surveillez la cohérence</strong> : après chaque mise à jour, SPARQL Sandbox
 						compare votre copie à l'ontologie du jeu et à ses formes SHACL, et signale ce que
 						vous avez rendu incohérent (« 🩺 Cohérence »).</li>
@@ -45,8 +48,9 @@
 				<ul>
 					<li>Une requête est arrêtée au bout de 5 secondes, et seules les 1000 premières lignes
 						d'un résultat sont affichées.</li>
-					<li>Les requêtes fédérées (<code>SERVICE</code>) et <code>LOAD</code> sont refusées : le
-						serveur n'interroge pas d'autres sites.</li>
+					<li><code>LOAD</code> est refusé. Les requêtes fédérées (<code>SERVICE</code>) ne sont
+						acceptées que vers les points d'accès autorisés par le serveur (Wikidata et DBpedia par
+						défaut) : voir la page « Services fédérés » en pied de page.</li>
 					<li>Oxigraph ne fait pas d'inférence : <code>rdfs:subClassOf</code> n'est pas déduit
 						automatiquement, mais vous pouvez le suivre avec un chemin de propriétés
 						(<code>rdf:type/rdfs:subClassOf*</code>).</li>
