@@ -9,6 +9,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sparqlsandbox_admin.profils import DepotProfils, Profil  # noqa: E402
@@ -36,7 +37,7 @@ class FenetreTest(unittest.TestCase):
         os.environ["SPARQLSANDBOX_ADMIN_HOME"] = str(self.tmp / "admin")
         profils = DepotProfils(self.tmp / "profils.json")
         profils.remplace(None, Profil("Local", "local", racine=str(self.tmp / "site")))
-        self.f = Fenetre(profils)
+        self.f = Fenetre(profils, QSettings(str(self.tmp / "reglages.ini"), QSettings.IniFormat))
         self.addCleanup(self.f.close)
 
     def test_chargement_des_onglets(self):
@@ -51,6 +52,20 @@ class FenetreTest(unittest.TestCase):
             app.processEvents()
         ex = self.f.pages[1][1]
         self.assertTrue(attend(lambda: ex.table.rowCount() == 2))
+
+    def test_changement_de_machine(self):
+        # régression : changer de machine dans le sélecteur faisait planter l'application
+        self.f.ctx.profils.remplace(None, Profil("Autre", "local", racine=str(self.tmp / "site")))
+        self.f._remplit_choix()
+        self.assertEqual(self.f.choix.count(), 2)
+        for i in (1, 0, 1):
+            self.f.choix.setCurrentIndex(i)
+            self.f.choix.activated.emit(i)
+            self.assertTrue(attend(lambda: self.f.ctx.profil.nom == self.f.choix.itemText(i)))
+            self.assertEqual(self.f.choix.currentIndex(), i)
+        jeux = self.f.pages[0][1]
+        self.assertTrue(attend(lambda: jeux.liste.count() == 2))
+        self.assertEqual(self.f.reglages.value("profil"), "Autre")  # dernier choix mémorisé
 
     def test_enregistrement_et_services(self):
         jeux = self.f.pages[0][1]

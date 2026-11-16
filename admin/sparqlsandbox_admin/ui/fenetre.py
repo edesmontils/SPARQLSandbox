@@ -15,7 +15,7 @@ from .page_reglages import PageIA, PageReglages, PageSites
 
 
 class Fenetre(QMainWindow):
-    def __init__(self, profils: DepotProfils | None = None):
+    def __init__(self, profils: DepotProfils | None = None, reglages: QSettings | None = None):
         super().__init__()
         self.setWindowTitle("SPARQLSandbox Admin")
         self.resize(1100, 760)
@@ -71,9 +71,8 @@ class Fenetre(QMainWindow):
         ctx.profil_change.connect(self._profil_change)
 
         self._remplit_choix()
-        reglages = QSettings("SPARQLSandboxAdmin", "SPARQLSandboxAdmin")
-        dernier = reglages.value("profil", "")
-        self.setProperty("reglages", reglages)
+        self.reglages = reglages or QSettings("SPARQLSandboxAdmin", "SPARQLSandboxAdmin")
+        dernier = self.reglages.value("profil", "")
         noms = ctx.profils.noms()
         ctx.selectionne(dernier if dernier in noms else (noms[0] if noms else None))
         if not noms:
@@ -96,7 +95,7 @@ class Fenetre(QMainWindow):
     def _profil_change(self):
         self._remplit_choix()
         if self.ctx.profil:
-            self.property("reglages").setValue("profil", self.ctx.profil.nom)
+            self.reglages.setValue("profil", self.ctx.profil.nom)
             self.setWindowTitle(f"SPARQLSandbox Admin — {self.ctx.profil.nom}")
         else:
             self.setWindowTitle("SPARQLSandbox Admin")
