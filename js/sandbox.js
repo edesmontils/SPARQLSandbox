@@ -225,6 +225,11 @@
 		resultat.innerHTML = '';
 		editeur.focus();
 	});
+	document.getElementById('fermer-panneau-vocabulaire').addEventListener('click', function () {
+		numeroVoc++;
+		panneauVoc.hidden = true;
+		zoneVoc.querySelectorAll('.voc-choisi').forEach(function (e) { e.classList.remove('voc-choisi'); });
+	});
 	function metsAJourVocabulaire() {
 		zoneVoc.innerHTML = '<p class="astuce">Chargement…</p>';
 		panneauVoc.hidden = true;

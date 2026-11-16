@@ -380,7 +380,7 @@ sup a { text-decoration: none; }
 .corps-vocabulaire .schema-vocabulaire { flex: 1 1 380px; min-width: 0; }
 .panneau-vocabulaire { flex: 1 1 300px; max-height: 68vh; overflow: auto; padding: 10px 12px; font-size: .8em; border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); }
 .panneau-vocabulaire[hidden] { display: none; }
-.panneau-vocabulaire .entete-panneau { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 6px; font-family: var(--sb-mono); }
+.panneau-vocabulaire .entete-panneau { flex-wrap: wrap; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 6px; font-family: var(--sb-mono); }
 .panneau-vocabulaire .defile { max-height: none; overflow: visible; border: 0; }
 .panneau-vocabulaire table.resultat { font-size: 1em; }
 .panneau-vocabulaire .resultat th, .panneau-vocabulaire .resultat td { padding: 3px 6px; }

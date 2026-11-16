@@ -118,6 +118,7 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
           <div class="entete-panneau">
             <strong id="titre-panneau-vocabulaire"></strong>
             <button type="button" class="lien" id="reprendre-vocabulaire" title="Reprendre cette requête dans l'éditeur">✏️ Dans l'éditeur</button>
+            <button type="button" class="lien" id="fermer-panneau-vocabulaire" title="Masquer le tableau : le graphe reprend toute la largeur" aria-label="Masquer le tableau">✖️ Fermer</button>
           </div>
           <div id="resultat-vocabulaire"></div>
         </aside>
