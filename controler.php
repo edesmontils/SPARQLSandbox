@@ -1,6 +1,7 @@
 <?php
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
+// ontologie (jeu), ontologie_enregistrer (jeu, brouillon64) : éditeur d'ontologie (editeur.php),
 // exercice (jeu, exercice), verifier (jeu, exercice, question, requete64),
 // intention (jeu, exercice, question, intention) : correction par IA si elle est activée
 // (ia.php), sinon auto-évaluation
@@ -64,6 +65,19 @@ case 'vocabulaire':
 	list($modele, $erreur) = vocabulaire_jeu($jeu);
 	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
 	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	exit;
+case 'ontologie':
+	list($modele, $erreur) = modele_ontologie($jeu);
+	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
+	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	exit;
+case 'ontologie_enregistrer':
+	$brut = param('brouillon64');
+	$texte = is_string($brut) ? base64_decode($brut, true) : false;
+	$brouillon = $texte === false ? null : json_decode($texte, true);
+	if (!is_array($brouillon)) reponse(false, "<p class='statut ko'>❌ Brouillon reçu illisible.</p>", 400);
+	list($ok, $h, $modele) = enregistre_ontologie($jeu, $brouillon);
+	echo json_encode(array('ok' => $ok, 'html' => $h, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'reinitialiser':
 	reinitialise_jeu($jeu);

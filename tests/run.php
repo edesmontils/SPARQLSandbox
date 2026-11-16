@@ -345,6 +345,46 @@ verifie(count($m['liens']) == 0 || (isset($ln['<http://e/q>']) && $ln['<http://e
 $r = execute_sparql('cinema', $P.'INSERT DATA { ex:katorza cine:ville "Nantes centre" }');
 verifie(!$avecShacl || strpos(affiche_resultat($r, array()), 'exactement une ville') !== false, 'SHACL : maxCount d\'une mise à jour');
 reinitialise_jeu('cinema');
+
+// Éditeur d'ontologie : modèle modifiable et mise à jour calculée à partir du brouillon
+list($mo, $err) = modele_ontologie('cinema');
+verifie(!is_null($mo), 'éditeur : modèle lu ('.$err.')');
+$ci = array(); foreach ($mo['classes'] as $c) $ci[$c['nom']] = $c;
+$pi = array(); foreach ($mo['props'] as $p) $pi[$p['nom']] = $p;
+verifie(isset($ci['cine:Film'], $ci['cine:Acteur']) && !isset($ci['rdfs:Class']), 'éditeur : classes lues, sans le vocabulaire RDFS');
+verifie($ci['cine:Film']['label'] === 'Film' && $ci['cine:Film']['llang'] === 'fr' && $ci['cine:Film']['n'] == 9, 'éditeur : libellé en français et instances comptées');
+verifie($ci['cine:Acteur']['parent'] === $ci['cine:Personne']['iri'], 'éditeur : super-classe');
+verifie(isset($pi['cine:annee']) && $pi['cine:annee']['range'] === PREFIXES_STANDARD['xsd'].'integer' && $pi['cine:annee']['domain'] === $ci['cine:Film']['iri'], 'éditeur : propriété, domaine et portée');
+verifie($mo['espace'] === 'http://example.org/cinema/vocab#', 'éditeur : espace de noms des nouveaux éléments');
+$brouillon = function (array $classes, array $props, array $sc = array(), array $sp = array()) {
+	return array('classes' => $classes, 'props' => $props, 'supprimes' => array('classes' => $sc, 'props' => $sp));
+};
+$vide = onto_nettoie_brouillon($brouillon(array(), array()))[0];
+verifie(onto_mise_a_jour($mo, $vide)[0] === '', 'éditeur : brouillon vide, rien à faire');
+verifie(is_null(onto_nettoie_brouillon($brouillon(array(array('iri' => 'pas une iri', 'label' => 'x')), array()))[0]), 'éditeur : IRI invalide refusée');
+verifie(is_null(onto_nettoie_brouillon($brouillon(array(array('iri' => 'http://e/a>b')), array()))[0]), 'éditeur : IRI avec > refusée');
+$esp = $mo['espace'];
+$film = $ci['cine:Film'];
+$brut = $brouillon(
+	array(array('iri' => $film['iri'], 'label' => 'Long "métrage"', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parent' => ''),
+	      array('iri' => $esp.'Salle', 'label' => 'Salle', 'llang' => '', 'comment' => "Une salle\nde cinéma", 'clang' => '', 'parent' => $ci['cine:Cinema']['iri'])),
+	array(array('iri' => $esp.'duree', 'label' => 'durée', 'llang' => '', 'domain' => $film['iri'], 'range' => PREFIXES_STANDARD['xsd'].'integer')),
+	array($ci['cine:Projection']['iri']));
+$b = onto_nettoie_brouillon($brut)[0];
+list($maj, $nb) = onto_mise_a_jour($mo, $b);
+verifie($nb == 3 + 1, 'éditeur : '.$nb.' changements comptés (libellé, 2 nouveaux, 1 suppression)');
+verifie(strpos($maj, 'DELETE DATA') !== false && strpos($maj, '"Long \\"métrage\\""@fr') !== false && strpos($maj, '"Film"@fr') !== false, 'éditeur : le libellé est remplacé, guillemets protégés');
+verifie(strpos($maj, '"Une salle\\nde cinéma"@fr') !== false && strpos($maj, 'DELETE WHERE { <'.$ci['cine:Projection']['iri'].'> ?p ?o }') !== false, 'éditeur : langue par défaut d\'un nouvel élément, suppression');
+list($ok, $h, $nouveau) = enregistre_ontologie('cinema', $brut);
+verifie($ok && !is_null($nouveau), 'éditeur : enregistrement accepté ('.strip_tags($h).')');
+$ci2 = array(); foreach ($nouveau['classes'] as $c) $ci2[$c['nom']] = $c;
+$pi2 = array(); foreach ($nouveau['props'] as $p) $pi2[$p['nom']] = $p;
+verifie($ci2['cine:Film']['label'] === 'Long "métrage"' && $ci2['cine:Salle']['parent'] === $ci['cine:Cinema']['iri'] && $ci2['cine:Salle']['comment'] === "Une salle\nde cinéma", 'éditeur : modifications relues dans la copie');
+verifie($pi2['cine:duree']['domain'] === $film['iri'] && !$ci2['cine:Projection']['decl'], 'éditeur : nouvelle propriété et concept retiré de l\'ontologie');
+verifie(onto_mise_a_jour($nouveau, onto_nettoie_brouillon($brouillon(array(), array()))[0])[0] === '', 'éditeur : rien à refaire après l\'enregistrement');
+$autres = execute_sparql('cinema', 'ASK { ?f a <'.$film['iri'].'> }');
+verifie($autres['ok'] && $autres['resultat'] === true, 'éditeur : les instances ne sont pas touchées');
+reinitialise_jeu('cinema');
 $a = array('anomalies' => array(anomalie('RDFS', 'a'), anomalie('RDFS', 'b')));
 $b = array('anomalies' => array(anomalie('RDFS', 'b'), anomalie('SHACL', 'a')));
 list($n, $c) = difference_coherence($a, $b);

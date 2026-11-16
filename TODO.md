@@ -22,9 +22,11 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
-- **Éditeur d'ontologie** avec une vue en graphe : créer et modifier classes et propriétés
-  (`rdfs:subClassOf`, `rdfs:domain`, `rdfs:range`…) dans la copie de session, en prolongeant le
-  diagramme du vocabulaire (`js/vocabulaire.js`, modèle de `vocabulaire.php`).
+- **Éditeur d'ontologie** (squelette fait : `editeur.php`, `js/editeur.js`, `ontologie.php`) : graphe
+  et liste éditables, brouillon enregistré dans la copie de session par une mise à jour SPARQL.
+  Reste : le contrôle de cohérence ontologie/instance depuis l'éditeur, le peuplement de
+  l'instance par IA (général ou ciblé sur les modifications, voir ci-dessous), les instances
+  affichées dans l'éditeur, ré-accrocher l'extrémité d'une flèche, et des sous-classes multiples.
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.

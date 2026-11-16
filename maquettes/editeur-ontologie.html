@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette — Éditeur d'ontologie · SPARQL Sandbox</title>
+<link rel="stylesheet" href="../default.css">
+<style>
+/* ===== Maquette : éditeur d'ontologie (page dédiée) ===== */
+body { padding: 20px; }
+.mq-bandeau { margin: 0 0 14px; padding: 8px 14px; border-radius: var(--sb-radius-sm); background: #fff8e1; border: 1px dashed #e0b84a; color: #6b5200; font-size: .88em; }
+.ed { display: flex; flex-direction: column; min-height: calc(100vh - 40px); }
+.ed-barre { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 22px; background: var(--sb-surface); border-bottom: 1px solid var(--sb-border); }
+.ed-barre h1 { margin: 0; font-size: 1.25em; flex: 1 1 auto; }
+.ed-barre h1 small { font-weight: 400; color: var(--sb-ink-soft); font-size: .72em; margin-left: 8px; }
+.ed-barre .groupe { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.etat { padding: 3px 12px; border-radius: 999px; font-size: .86em; border: 1px solid var(--sb-border-strong); background: var(--sb-surface-2); color: var(--sb-ink-soft); }
+.etat.sale { background: #fff4d6; border-color: #e7c766; color: #7a5a00; }
+.btn.petit { padding: 4px 10px; font-size: .88em; }
+.btn.danger { background: var(--sb-danger); }
+.btn.vert { background: var(--sb-ok); }
+
+.ed-corps { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; padding: 18px 22px; align-items: start; flex: 1; background: var(--sb-surface-2); }
+@media (max-width: 1000px) { .ed-corps { grid-template-columns: minmax(0, 1fr); } }
+.orphelines { border-top: 1px solid var(--sb-border); }
+.orphelines summary { padding: 8px 14px; cursor: pointer; font-size: .9em; color: #7a5a00; background: #fff9e6; }
+.orphelines[open] summary { border-bottom: 1px solid var(--sb-border); }
+.vol { background: var(--sb-surface); border: 1px solid var(--sb-border); border-radius: var(--sb-radius-md); box-shadow: var(--sb-shadow-card); }
+.vol > h2 { margin: 0; padding: 10px 14px; font-size: 1em; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--sb-border); }
+.vol .contenu { padding: 10px 12px; }
+
+/* Arbre */
+.arbre { list-style: none; margin: 0; padding: 0; }
+.arbre ul { list-style: none; margin: 0 0 0 16px; padding: 0 0 0 8px; border-left: 1px solid var(--sb-border); }
+.noeud { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin: 1px 0; border-radius: 8px; cursor: pointer; font-size: .95em; }
+.noeud:hover { background: var(--sb-accent-soft); }
+.noeud.sel { background: var(--sb-accent-soft); outline: 2px solid var(--sb-accent); outline-offset: -2px; }
+.noeud .nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.noeud .nb { color: var(--sb-ink-faint); font-size: .82em; font-family: var(--sb-mono); }
+.noeud.del .nom { text-decoration: line-through; color: var(--sb-ink-faint); }
+.puce { width: 10px; height: 10px; border-radius: 3px; background: var(--sb-accent); flex: none; }
+.puce.prop { border-radius: 50%; background: var(--sb-accent-2); }
+.badge { font-size: .7em; padding: 0 7px; border-radius: 999px; border: 1px solid; line-height: 1.7; flex: none; }
+.badge.new { background: var(--sb-ok-soft); border-color: var(--sb-ok-border); color: var(--sb-ok); }
+.badge.mod { background: #fff4d6; border-color: #e7c766; color: #7a5a00; }
+.badge.del { background: var(--sb-danger-soft); border-color: var(--sb-danger-border); color: var(--sb-danger); }
+.badge.ia { background: #efe8ff; border-color: #cdbcf5; color: #5b34b0; }
+.ajout { display: flex; gap: 6px; margin-top: 8px; }
+.ajout .btn { flex: 1; }
+
+/* Formulaire */
+.formulaire { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px 14px; align-items: center; padding: 16px 18px; }
+.formulaire label { font-weight: 600; color: var(--sb-ink-soft); }
+.formulaire input[type=text], .formulaire select, .formulaire textarea, .champ {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-sm); font: inherit; background: #fff; color: var(--sb-ink); }
+.formulaire input:focus, .formulaire select:focus, .formulaire textarea:focus, .champ:focus { outline: none; border-color: var(--sb-accent); box-shadow: 0 0 0 3px var(--sb-accent-ring); }
+.formulaire .mono { font-family: var(--sb-mono); }
+.formulaire .plein { grid-column: 1 / -1; }
+.impact { margin: 0 18px 16px; padding: 10px 14px; border-radius: var(--sb-radius-sm); background: var(--sb-surface-2); border: 1px solid var(--sb-border); font-size: .92em; color: var(--sb-ink-soft); }
+.impact ul { margin: 4px 0 0; padding-left: 20px; }
+.actions-fiche { display: flex; gap: 8px; padding: 0 18px 16px; flex-wrap: wrap; }
+.vide { padding: 40px 20px; text-align: center; color: var(--sb-ink-faint); }
+
+/* Onglets droite */
+.onglets { display: flex; border-bottom: 1px solid var(--sb-border); }
+.onglets button { flex: 1; padding: 10px 6px; border: 0; background: transparent; font: inherit; cursor: pointer; color: var(--sb-ink-soft); border-bottom: 3px solid transparent; }
+.onglets button:hover { color: var(--sb-accent); }
+.onglets button.actif { color: var(--sb-accent); font-weight: 600; border-bottom-color: var(--sb-accent); }
+.onglets .compte { margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--sb-accent-soft); font-size: .8em; }
+.onglets .compte.rouge { background: var(--sb-danger-soft); color: var(--sb-danger); }
+.panneau { padding: 12px 14px; max-height: calc(100vh - 220px); overflow: auto; }
+.panneau[hidden] { display: none; }
+.inst { padding: 6px 8px; border: 1px solid var(--sb-border); border-radius: 8px; margin-bottom: 6px; font-size: .9em; background: #fff; }
+.inst .tete { display: flex; gap: 6px; align-items: center; }
+.inst .tete strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inst .vals { margin-top: 3px; color: var(--sb-ink-soft); font-family: var(--sb-mono); font-size: .84em; }
+.groupe-cl { margin: 10px 0 4px; font-weight: 600; font-size: .9em; color: var(--sb-ink-soft); display: flex; justify-content: space-between; }
+.lien-mini { border: 0; background: none; color: var(--sb-accent); cursor: pointer; font: inherit; font-size: .88em; padding: 0 4px; }
+.lien-mini:hover { text-decoration: underline; }
+.radio-carte { display: block; padding: 8px 12px; border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-sm); margin-bottom: 8px; cursor: pointer; }
+.radio-carte:has(input:checked) { border-color: var(--sb-accent); background: var(--sb-accent-soft); }
+.radio-carte small { display: block; color: var(--sb-ink-soft); margin-left: 24px; }
+.cible { margin: 6px 0 10px 24px; font-size: .86em; color: var(--sb-ink-soft); }
+.cible span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 8px; border-radius: 999px; background: var(--sb-accent-soft); }
+.ligne { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.rapport .item { display: flex; gap: 8px; padding: 8px 10px; margin-bottom: 6px; border-radius: 8px; border: 1px solid; font-size: .9em; }
+.rapport .item.violation { background: var(--sb-danger-soft); border-color: var(--sb-danger-border); }
+.rapport .item.avert { background: #fff4d6; border-color: #e7c766; }
+.rapport .item.info { background: var(--sb-surface-2); border-color: var(--sb-border); }
+.rapport .item.ok { background: var(--sb-ok-soft); border-color: var(--sb-ok-border); color: var(--sb-ok); }
+.rapport .item button { margin-left: auto; align-self: flex-start; white-space: nowrap; }
+.propositions label { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border: 1px dashed #cdbcf5; border-radius: 8px; margin-bottom: 6px; font-size: .9em; background: #faf7ff; }
+
+/* Zone centrale : bascule graphe / liste */
+.ed-centre { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.bascule { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.bascule .seg { display: inline-flex; border: 1px solid var(--sb-border-strong); border-radius: 999px; overflow: hidden; background: #fff; }
+.bascule .seg button { border: 0; background: transparent; padding: 6px 16px; font: inherit; cursor: pointer; color: var(--sb-ink-soft); }
+.bascule .seg button.actif { background: var(--sb-accent); color: #fff; font-weight: 600; }
+.bascule .astuce { margin: 0; font-size: .88em; }
+
+/* Graphe éditable (SVG) */
+.graphe-svg { display: block; width: 100%; height: auto; touch-action: none; user-select: none; -webkit-user-select: none;
+  background-color: var(--sb-surface); background-image: radial-gradient(var(--sb-border) 1px, transparent 1px); background-size: 20px 20px; }
+.aide-graphe { display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 8px 14px; border-top: 1px solid var(--sb-border); font-size: .84em; color: var(--sb-ink-soft); background: var(--sb-surface-2); border-radius: 0 0 var(--sb-radius-md) var(--sb-radius-md); }
+.aide-graphe kbd { padding: 0 6px; border: 1px solid var(--sb-border-strong); border-bottom-width: 2px; border-radius: 5px; background: #fff; font-family: var(--sb-mono); font-size: .92em; }
+.aide-graphe .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; border: 2px solid; vertical-align: -1px; margin-right: 4px; background: #fff; }
+.gn { cursor: grab; }
+.gn:active { cursor: grabbing; }
+.gn .corps { fill: #fff; stroke: var(--sb-accent); stroke-width: 1.6; }
+.gn:hover .corps { fill: #f3fafb; }
+.gn.sel .corps { fill: var(--sb-accent-soft); stroke-width: 3; }
+.gn.cible .corps { fill: #e3f6ec; stroke: var(--sb-ok); stroke-width: 3; }
+.gn.st-new .corps { stroke: var(--sb-ok); }
+.gn.st-mod .corps { stroke: #d19a00; }
+.gn.st-del .corps { stroke: var(--sb-danger); stroke-dasharray: 5 3; }
+.gn.st-del .nom, .gn.st-del .at { opacity: .5; text-decoration: line-through; }
+.gn .nom { font-size: 14px; font-weight: 600; fill: var(--sb-ink); }
+.gn .cpt { font-size: 11px; fill: var(--sb-ink-faint); font-family: var(--sb-mono); }
+.gn .at { font-size: 11.5px; font-family: var(--sb-mono); fill: var(--sb-ink-soft); cursor: pointer; }
+.gn .at:hover { fill: var(--sb-accent); }
+.gn .at.sel { fill: var(--sb-accent-2); font-weight: 700; }
+.gn .at.new { fill: var(--sb-ok); }
+.halo { fill: none; stroke: var(--sb-danger); stroke-width: 3; stroke-dasharray: 2 3; pointer-events: none; }
+.halo.avert { stroke: #e0a100; }
+.hd { cursor: crosshair; opacity: .3; }
+.gn:hover .hd, .gn.sel .hd { opacity: 1; }
+.hd circle { fill: var(--sb-accent-2); stroke: #fff; stroke-width: 2; }
+.hd polygon { fill: var(--sb-accent); stroke: #fff; stroke-width: 1.5; }
+.hd:hover circle, .hd:hover polygon { filter: brightness(1.25); }
+.ar .trait { fill: none; stroke: var(--sb-ink-soft); stroke-width: 1.8; }
+.ar.sub .trait { stroke: var(--sb-accent); stroke-dasharray: 6 4; }
+.ar.st-new .trait { stroke: var(--sb-ok); }
+.ar.st-mod .trait { stroke: #d19a00; }
+.ar.st-del .trait { stroke: var(--sb-danger); stroke-dasharray: 3 4; opacity: .6; }
+.ar.sel .trait { stroke: var(--sb-accent-2); stroke-width: 3.2; }
+.ar .hit { fill: none; stroke: transparent; stroke-width: 16; cursor: pointer; }
+.ar:hover .trait { stroke-width: 3; }
+.ar .lbl { font-size: 12px; fill: var(--sb-iri); paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; cursor: pointer; text-anchor: middle; }
+.ar.sel .lbl { font-weight: 700; fill: var(--sb-accent-2); }
+.ar.st-del .lbl { text-decoration: line-through; opacity: .6; }
+.ar.anom .trait { stroke: var(--sb-danger); stroke-width: 3; }
+.tmp { stroke: var(--sb-accent-2); stroke-width: 2.2; stroke-dasharray: 5 4; pointer-events: none; fill: none; }
+
+/* Dialogue */
+dialog { border: 0; border-radius: var(--sb-radius-lg); padding: 24px 26px; max-width: 520px; width: calc(100% - 40px); box-shadow: 0 20px 60px rgba(0,0,0,.35); font-family: inherit; color: var(--sb-ink); }
+dialog::backdrop { background: rgba(20, 30, 40, .5); }
+dialog h2 { margin-top: 0; }
+dialog .boutons { justify-content: flex-end; }
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--sb-ink); color: #fff; padding: 10px 20px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.3); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 20; }
+.toast.vu { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="mq-bandeau">🧪 <strong>Maquette non branchée</strong> — données factices du jeu « Cinéma », tout est simulé côté navigateur (rien n'est enregistré). Elle montre la page qui s'ouvrirait depuis le bouton « ✏️ Éditer l'ontologie » du graphe.</div>
+
+<div class="container ed">
+
+  <!-- ===== Barre d'outils fixe ===== -->
+  <div class="ed-barre">
+    <button type="button" class="btn secondaire" id="retour">← Retour au graphe</button>
+    <h1>🧬 Éditeur d'ontologie <small>jeu « Cinéma » · copie de travail</small></h1>
+    <div class="groupe">
+      <span class="etat" id="etat">Aucune modification</span>
+      <button type="button" class="btn secondaire" id="b-controle" title="Vérifie la cohérence de l'ontologie et de l'instance">🔍 Contrôler</button>
+      <button type="button" class="btn secondaire" id="b-ia" title="Peupler l'instance avec l'IA générative">✨ Peupler avec l'IA</button>
+      <button type="button" class="btn vert" id="b-enreg">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <div class="ed-corps">
+
+    <!-- ===== Centre : graphe (ou liste) + fiche ===== -->
+    <div class="ed-centre">
+      <div class="bascule">
+        <button type="button" class="btn secondaire petit" id="add-classe">＋ Concept</button>
+        <button type="button" class="btn secondaire petit" id="add-prop">＋ Propriété</button>
+        <div class="seg" role="group" aria-label="Affichage" style="margin-left:auto">
+          <button type="button" id="v-graphe" class="actif">🕸️ Graphe</button>
+          <button type="button" id="v-liste" title="Alternative accessible au clavier et aux lecteurs d'écran">📋 Vue liste</button>
+        </div>
+      </div>
+
+      <section class="vol" id="zone-liste" hidden>
+        <h2>📋 Vue liste <span class="astuce" style="margin:0;font-weight:400;font-size:.8em">alternative accessible au graphe</span></h2>
+        <div class="contenu">
+          <div class="groupe-cl" style="margin-top:0"><span>Concepts</span><span id="n-classes"></span></div>
+          <ul class="arbre" id="arbre-classes"></ul>
+          <div class="groupe-cl" style="margin-top:16px"><span>Propriétés</span><span id="n-props"></span></div>
+          <ul class="arbre" id="arbre-props"></ul>
+        </div>
+      </section>
+
+      <section class="vol" id="zone-graphe">
+        <h2>🕸️ Graphe de l'ontologie <button type="button" class="btn secondaire petit" id="reorg" title="Remet les concepts à leur place d'origine">↺ Réorganiser</button></h2>
+        <svg id="svg-graphe" class="graphe-svg" viewBox="0 0 780 470" role="img" aria-label="Graphe éditable de l'ontologie"></svg>
+        <div class="aide-graphe">
+          <span><kbd>double-clic</kbd> sur le fond : nouveau concept</span>
+          <span><kbd>●</kbd> glisser vers un concept : propriété entre concepts ; vers le fond : attribut</span>
+          <span><kbd>▲</kbd> glisser vers un concept : « sous-classe de »</span>
+          <span><kbd>double-clic</kbd> sur un nom : renommer</span>
+          <span><kbd>Suppr</kbd> : supprimer la sélection</span>
+          <span><i class="sw" style="border-color:var(--sb-ok)"></i>nouveau <i class="sw" style="border-color:#d19a00;margin-left:8px"></i>modifié <i class="sw" style="border-color:var(--sb-danger);border-style:dashed;margin-left:8px"></i>supprimé <i class="sw" style="border-color:var(--sb-danger);border-style:dotted;margin-left:8px"></i>anomalie</span>
+        </div>
+        <details class="orphelines" id="orphelines" hidden>
+          <summary id="orph-titre"></summary>
+          <p class="astuce" style="margin:6px 14px">Ces propriétés n'ont pas de domaine ou de portée : le graphe ne peut pas les dessiner. Sélectionnez-en une pour la compléter dans la fiche.</p>
+          <ul class="arbre" id="arbre-orph" style="padding:0 12px 10px"></ul>
+        </details>
+      </section>
+
+      <section class="vol" id="fiche"></section>
+    </div>
+
+    <!-- ===== Droite : instances / IA / contrôle ===== -->
+    <aside class="vol ed-droite">
+      <div class="onglets" role="tablist">
+        <button type="button" role="tab" data-onglet="instances" class="actif">🗃️ Instance <span class="compte" id="c-inst">0</span></button>
+        <button type="button" role="tab" data-onglet="ia">✨ IA</button>
+        <button type="button" role="tab" data-onglet="controle">🔍 Contrôle <span class="compte" id="c-ctrl" hidden>0</span></button>
+      </div>
+
+      <div class="panneau" id="p-instances" role="tabpanel"></div>
+
+      <div class="panneau" id="p-ia" role="tabpanel" hidden>
+        <p class="astuce" style="margin-top:0">L'IA ajoute des données à l'instance <em>sans passer par une requête</em>. Vous relisez les propositions avant de les accepter.</p>
+        <label class="radio-carte"><input type="radio" name="mode" value="general" checked> <strong>Peuplement général</strong>
+          <small>Enrichit toute l'instance à partir de l'ontologie courante.</small></label>
+        <label class="radio-carte"><input type="radio" name="mode" value="cible"> <strong>Ciblé sur mes modifications</strong>
+          <small>Ne génère que ce qui touche à ce que vous avez changé.</small></label>
+        <div class="cible" id="cible"></div>
+        <div class="ligne">
+          <label for="nb">Quantité</label>
+          <select id="nb" class="champ" style="width:auto"><option>3</option><option selected>5</option><option>10</option></select>
+        </div>
+        <label for="consigne" class="visuellement-cache">Consigne</label>
+        <textarea id="consigne" class="champ" rows="2" placeholder="Consigne facultative : « films français des années 90 »…"></textarea>
+        <div class="boutons"><button type="button" class="btn" id="generer">✨ Générer des propositions</button></div>
+        <div id="propositions" class="propositions"></div>
+      </div>
+
+      <div class="panneau" id="p-controle" role="tabpanel" hidden>
+        <div class="boutons" style="margin-top:0"><button type="button" class="btn" id="lancer-controle">🔍 Contrôler maintenant</button></div>
+        <div class="rapport" id="rapport"><p class="astuce">Le contrôle vérifie l'ontologie (domaines, portées, hiérarchie) et sa cohérence avec l'instance.</p></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ===== Dialogue de sortie ===== -->
+<dialog id="dlg-sortie">
+  <h2>Quitter l'éditeur ?</h2>
+  <p id="dlg-texte"></p>
+  <div class="boutons">
+    <button type="button" class="btn secondaire" id="s-continuer">Continuer l'édition</button>
+    <button type="button" class="btn danger" id="s-abandon">Quitter sans enregistrer</button>
+    <button type="button" class="btn vert" id="s-enreg">💾 Enregistrer et quitter</button>
+  </div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+  var XSD = ['xsd:string', 'xsd:integer', 'xsd:date', 'xsd:decimal', 'xsd:boolean'];
+  var uid = 100;
+
+  /* ---------- État initial (cinéma) + 2 ajouts de l'étudiant pour la démo ---------- */
+  var etat = {
+    classes: [
+      { id: 'Film', label: 'Film', parent: '', comment: '', st: '' },
+      { id: 'Personne', label: 'Personne', parent: '', comment: '', st: '' },
+      { id: 'Acteur', label: 'Acteur', parent: 'Personne', comment: '', st: '' },
+      { id: 'Realisateur', label: 'Réalisateur', parent: 'Personne', comment: '', st: '' },
+      { id: 'Role', label: 'Rôle', parent: '', comment: 'Un acteur joue un personnage dans un film (relation à trois termes).', st: '' },
+      { id: 'Cinema', label: 'Cinéma', parent: '', comment: '', st: '' },
+      { id: 'Projection', label: 'Projection', parent: '', comment: '', st: '' },
+      { id: 'Salle', label: 'Salle', parent: '', comment: 'Une salle d\'un cinéma.', st: 'new' }
+    ],
+    props: [
+      { id: 'titre', label: 'titre', domain: 'Film', range: 'xsd:string', st: '' },
+      { id: 'annee', label: 'année', domain: 'Film', range: 'xsd:integer', st: '' },
+      { id: 'genre', label: 'genre', domain: 'Film', range: 'xsd:string', st: '' },
+      { id: 'realisePar', label: 'réalisé par', domain: 'Film', range: 'Realisateur', st: '' },
+      { id: 'acteur', label: 'acteur', domain: 'Role', range: 'Acteur', st: '' },
+      { id: 'personnage', label: 'personnage', domain: 'Role', range: 'xsd:string', st: '' },
+      { id: 'ville', label: 'ville', domain: 'Cinema', range: 'xsd:string', st: '' },
+      { id: 'duree', label: 'durée (min)', domain: 'Film', range: 'xsd:integer', st: 'new' }
+    ],
+    inst: [
+      { id: 'i1', cls: 'Film', label: 'Alien', vals: { titre: 'Alien', annee: '1979', genre: 'Science-fiction' }, src: '' },
+      { id: 'i2', cls: 'Film', label: 'Le Fabuleux Destin d\'Amélie Poulain', vals: { titre: 'Le Fabuleux Destin d\'Amélie Poulain', annee: '2001', genre: 'Comédie' }, src: '' },
+      { id: 'i3', cls: 'Film', label: 'Pulp Fiction', vals: { titre: 'Pulp Fiction', annee: '1994', genre: 'Policier' }, src: '' },
+      { id: 'i4', cls: 'Realisateur', label: 'Ridley Scott', vals: {}, src: '' },
+      { id: 'i5', cls: 'Acteur', label: 'Sigourney Weaver', vals: {}, src: '' },
+      { id: 'i6', cls: 'Cinema', label: 'Gaumont Nantes', vals: { ville: 'Nantes' }, src: '' }
+    ],
+    sel: { type: 'classe', id: 'Film' },
+    enregistre: JSON.stringify({ c: 0 })   // simulé : sale dès qu'il y a des changements non enregistrés
+  };
+  var dirty = true;   // la démo démarre avec 2 ajouts non enregistrés
+  var propositions = [];
+
+  function cl(id) { return etat.classes.filter(function (c) { return c.id === id; })[0]; }
+  function pr(id) { return etat.props.filter(function (p) { return p.id === id; })[0]; }
+  function nomClasse(id) { var c = cl(id); return c ? c.label : id; }
+  function ancetres(id) { var r = [], c = cl(id); while (c && c.parent) { r.push(c.parent); c = cl(c.parent); } return r; }
+  function nbInst(id) { return etat.inst.filter(function (i) { return i.cls === id; }).length; }
+  function marque() { dirty = true; anom = {}; rend(); }
+  function toast(t) { var e = $('#toast'); e.textContent = t; e.classList.add('vu'); setTimeout(function () { e.classList.remove('vu'); }, 2200); }
+  function badge(st) { return st === 'new' ? '<span class="badge new">nouveau</span>' : st === 'mod' ? '<span class="badge mod">modifié</span>' : st === 'del' ? '<span class="badge del">supprimé</span>' : ''; }
+  function modifs() { return etat.classes.concat(etat.props).filter(function (x) { return x.st; }); }
+
+  /* ---------- Arbres ---------- */
+  function noeudClasse(c) {
+    var enfants = etat.classes.filter(function (x) { return x.parent === c.id; });
+    var sel = etat.sel.type === 'classe' && etat.sel.id === c.id ? ' sel' : '';
+    return '<li><div class="noeud' + sel + (c.st === 'del' ? ' del' : '') + '" data-t="classe" data-id="' + c.id + '" tabindex="0"><span class="puce"></span><span class="nom">' + esc(c.label) + '</span>' + badge(c.st) + '<span class="nb">' + nbInst(c.id) + '</span></div>' +
+      (enfants.length ? '<ul>' + enfants.map(noeudClasse).join('') + '</ul>' : '') + '</li>';
+  }
+  function rendArbres() {
+    $('#arbre-classes').innerHTML = etat.classes.filter(function (c) { return !c.parent || !cl(c.parent); }).map(noeudClasse).join('');
+    $('#arbre-props').innerHTML = etat.props.map(function (p) {
+      var sel = etat.sel.type === 'prop' && etat.sel.id === p.id ? ' sel' : '';
+      return '<li><div class="noeud' + sel + (p.st === 'del' ? ' del' : '') + '" data-t="prop" data-id="' + p.id + '" tabindex="0"><span class="puce prop"></span><span class="nom">' + esc(p.label) + '</span>' + badge(p.st) + '</div></li>';
+    }).join('');
+    var orph = etat.props.filter(function (p) { return !p.domain || !p.range; });
+    $('#orphelines').hidden = !orph.length;
+    $('#orph-titre').textContent = '⚠️ ' + orph.length + ' propriété(s) non reliée(s) au graphe';
+    $('#arbre-orph').innerHTML = orph.map(function (p) {
+      var sel = etat.sel.type === 'prop' && etat.sel.id === p.id ? ' sel' : '';
+      return '<li><div class="noeud' + sel + '" data-t="prop" data-id="' + p.id + '" tabindex="0"><span class="puce prop"></span><span class="nom">' + esc(p.label) + '</span>' + badge(p.st) + '<span class="nb">' + (p.domain ? '' : 'domaine ? ') + (p.range ? '' : 'portée ?') + '</span></div></li>';
+    }).join('');
+    $('#n-classes').textContent = etat.classes.filter(function (c) { return c.st !== 'del'; }).length;
+    $('#n-props').textContent = etat.props.filter(function (c) { return c.st !== 'del'; }).length;
+  }
+
+  /* ---------- Fiche ---------- */
+  function optionsClasses(val, avecVide, avecTypes) {
+    var o = avecVide ? '<option value="">— aucune —</option>' : '';
+    o += etat.classes.filter(function (c) { return c.st !== 'del'; }).map(function (c) { return '<option value="' + c.id + '"' + (c.id === val ? ' selected' : '') + '>' + esc(c.label) + '</option>'; }).join('');
+    if (avecTypes) o += '<optgroup label="Types de données">' + XSD.map(function (t) { return '<option value="' + t + '"' + (t === val ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</optgroup>';
+    return o;
+  }
+  function rendFiche() {
+    var s = etat.sel, f = $('#fiche'), x = s.type === 'classe' ? cl(s.id) : pr(s.id);
+    if (!x) { f.innerHTML = '<div class="vide">Sélectionnez un concept ou une propriété à gauche,<br>ou créez-en un.</div>'; return; }
+    var html = '<h2>' + (s.type === 'classe' ? '🟦 Concept' : '🔵 Propriété') + ' : ' + esc(x.label) + ' ' + badge(x.st) + '</h2><div class="formulaire">';
+    html += '<label for="f-label">Libellé</label><input type="text" id="f-label" value="' + esc(x.label) + '"' + (x.st === 'del' ? ' disabled' : '') + '>';
+    html += '<label>Identifiant</label><input type="text" class="mono" value="cine:' + esc(x.id) + '" disabled>';
+    if (s.type === 'classe') {
+      html += '<label for="f-parent">Sous-classe de</label><select id="f-parent"' + (x.st === 'del' ? ' disabled' : '') + '>' + optionsClasses(x.parent, true, false).replace('value="' + x.id + '"', 'value="' + x.id + '" disabled') + '</select>';
+      html += '<label for="f-comment">Commentaire</label><textarea id="f-comment" rows="3">' + esc(x.comment) + '</textarea>';
+    } else {
+      html += '<label for="f-domain">Domaine (sujet)</label><select id="f-domain">' + optionsClasses(x.domain, true, false) + '</select>';
+      html += '<label for="f-range">Portée (objet)</label><select id="f-range">' + optionsClasses(x.range, true, true) + '</select>';
+      html += '<div class="plein astuce" style="margin:0">' + (XSD.indexOf(x.range) >= 0 ? '↪ Propriété de <strong>donnée</strong> (<code>owl:DatatypeProperty</code>) : la valeur est un littéral.' : '↪ Propriété <strong>objet</strong> (<code>owl:ObjectProperty</code>) : elle relie deux ressources.') + '</div>';
+    }
+    html += '</div>';
+
+    // Impact
+    var imp = [];
+    if (s.type === 'classe') {
+      var n = nbInst(x.id), fils = etat.classes.filter(function (c) { return c.parent === x.id && c.st !== 'del'; }),
+        ps = etat.props.filter(function (p) { return p.st !== 'del' && (p.domain === x.id || p.range === x.id); });
+      if (n) imp.push(n + ' instance(s) de ce concept');
+      if (fils.length) imp.push(fils.length + ' sous-classe(s) : ' + fils.map(function (c) { return esc(c.label); }).join(', '));
+      if (ps.length) imp.push(ps.length + ' propriété(s) l\'utilisent : ' + ps.map(function (p) { return esc(p.label); }).join(', '));
+    } else {
+      var v = etat.inst.filter(function (i) { return i.vals[x.id] !== undefined; }).length;
+      imp.push(v + ' valeur(s) dans l\'instance');
+    }
+    html += '<div class="impact"><strong>Impact</strong>' + (imp.length ? '<ul><li>' + imp.join('</li><li>') + '</li></ul>' : ' : aucun usage.') + '</div>';
+    html += '<div class="actions-fiche">' + (x.st === 'del'
+      ? '<button type="button" class="btn secondaire" id="restaure">↩️ Annuler la suppression</button>'
+      : '<button type="button" class="btn secondaire" id="supprime" style="color:var(--sb-danger);border-color:var(--sb-danger-border)">🗑️ Supprimer</button>') + '</div>';
+    f.innerHTML = html;
+
+    var set = function (k, v) { x[k] = v; if (!x.st) x.st = 'mod'; marque(); };
+    var q = function (i) { return $(i); };
+    if (q('#f-label')) q('#f-label').addEventListener('input', function (e) { x.label = e.target.value; if (!x.st) x.st = 'mod'; dirty = true; rendArbres(); rendGraphe(); rendEtat(); });
+    if (q('#f-label')) q('#f-label').addEventListener('change', function () { rend(); });
+    if (q('#f-parent')) q('#f-parent').addEventListener('change', function (e) { set('parent', e.target.value); });
+    if (q('#f-comment')) q('#f-comment').addEventListener('change', function (e) { set('comment', e.target.value); });
+    if (q('#f-domain')) q('#f-domain').addEventListener('change', function (e) { set('domain', e.target.value); });
+    if (q('#f-range')) q('#f-range').addEventListener('change', function (e) { set('range', e.target.value); });
+    if (q('#supprime')) q('#supprime').addEventListener('click', function () {
+      if (x.st === 'new') { // un élément jamais enregistré disparaît vraiment
+        (s.type === 'classe' ? etat.classes : etat.props).splice((s.type === 'classe' ? etat.classes : etat.props).indexOf(x), 1);
+        etat.sel = { type: 'classe', id: 'Film' };
+      } else x.st = 'del';
+      marque();
+    });
+    if (q('#restaure')) q('#restaure').addEventListener('click', function () { x.st = 'mod'; marque(); });
+  }
+
+  /* ---------- Instance ---------- */
+  function rendInstances() {
+    var h = '<div class="ligne" style="margin-top:0"><button type="button" class="btn secondaire petit" id="add-inst">＋ Ajouter une instance</button><button type="button" class="btn secondaire petit" id="vide-ia" ' + (etat.inst.some(function (i) { return i.src === 'ia'; }) ? '' : 'disabled') + '>↩️ Retirer ce que l\'IA a ajouté</button></div>';
+    etat.classes.forEach(function (c) {
+      var li = etat.inst.filter(function (i) { return i.cls === c.id; });
+      if (!li.length) return;
+      h += '<div class="groupe-cl"><span>' + esc(c.label) + (c.st === 'del' ? ' ' + badge('del') : '') + '</span><span>' + li.length + '</span></div>';
+      li.forEach(function (i) {
+        var v = Object.keys(i.vals).map(function (k) { var p = pr(k); return esc(p ? p.label : k) + ' = ' + esc(i.vals[k]); }).join(' · ');
+        h += '<div class="inst"><div class="tete"><strong title="' + esc(i.label) + '">' + esc(i.label) + '</strong>' + (i.src === 'ia' ? '<span class="badge ia">IA</span>' : '') + '<button type="button" class="lien-mini" data-sup="' + i.id + '" title="Supprimer">✖</button></div>' + (v ? '<div class="vals">' + v + '</div>' : '') + '</div>';
+      });
+    });
+    $('#p-instances').innerHTML = h;
+    $('#c-inst').textContent = etat.inst.length;
+  }
+
+  /* ---------- IA (simulée) ---------- */
+  var POOL = {
+    Film: [['Blade Runner', '1982', 'Science-fiction', '117'], ['La Haine', '1995', 'Drame', '98'], ['Les Visiteurs', '1993', 'Comédie', '107'], ['Léon', '1994', 'Thriller', '110'], ['Le Cinquième Élément', '1997', 'Science-fiction', '126'], ['Amélie', '2001', 'Comédie', '122'], ['Taxi Driver', '1976', 'Drame', '114'], ['Heat', '1995', 'Policier', '170'], ['Matrix', '1999', 'Science-fiction', '136'], ['Les Intouchables', '2011', 'Comédie', '112']],
+    Acteur: ['Jean Reno', 'Natalie Portman', 'Omar Sy', 'Audrey Tautou', 'Vincent Cassel', 'Marion Cotillard'],
+    Realisateur: ['Luc Besson', 'Mathieu Kassovitz', 'Jean-Pierre Jeunet', 'Martin Scorsese'],
+    Cinema: [['Pathé Beaulieu', 'Nantes'], ['Le Katorza', 'Nantes'], ['UGC Ciné Cité', 'Rennes']],
+    Salle: ['Salle 1 (Gaumont Nantes)', 'Salle 2 (Gaumont Nantes)', 'Salle Lumière (Katorza)', 'Salle 4 (UGC Rennes)', 'Salle Premium (Pathé)'],
+    Personne: ['Camille Martin', 'Alex Durand']
+  };
+  function rendCible() {
+    var m = modifs();
+    $('#cible').innerHTML = m.length ? 'Cibles : ' + m.map(function (x) { return '<span>' + esc(x.label) + (x.st === 'new' ? ' ＋' : x.st === 'del' ? ' ✖' : ' ✎') + '</span>'; }).join('') : 'Aucune modification pour l\'instant : le mode ciblé n\'aurait rien à faire.';
+  }
+  function genere() {
+    var mode = document.querySelector('input[name=mode]:checked').value, n = +$('#nb').value, out = [];
+    if (mode === 'cible') {
+      modifs().forEach(function (x) {
+        if (x.st === 'del') return;
+        if (etat.props.indexOf(x) >= 0) {   // propriété : on remplit les instances du domaine
+          etat.inst.filter(function (i) { return i.cls === x.domain && i.vals[x.id] === undefined; }).slice(0, n).forEach(function (i) {
+            var val = x.id === 'duree' ? String(95 + Math.floor(Math.random() * 60)) : x.range === 'xsd:integer' ? '42' : 'valeur-à-relire';
+            out.push({ kind: 'val', inst: i.id, prop: x.id, val: val, txt: 'Compléter « ' + i.label + ' » : ' + x.label + ' = ' + val });
+          });
+        } else if (POOL[x.id]) {            // classe : on crée des instances
+          POOL[x.id].slice(0, n).forEach(function (l) { out.push({ kind: 'new', cls: x.id, label: l, vals: {}, txt: 'Créer ' + x.label + ' : ' + l }); });
+        } else { out.push({ kind: 'new', cls: x.id, label: x.label + ' n°1', vals: {}, txt: 'Créer ' + x.label + ' : ' + x.label + ' n°1' }); }
+      });
+    } else {
+      POOL.Film.slice(0, n).forEach(function (f) {
+        var v = { titre: f[0], annee: f[1], genre: f[2] }; if (pr('duree') && pr('duree').st !== 'del') v.duree = f[3];
+        out.push({ kind: 'new', cls: 'Film', label: f[0], vals: v, txt: 'Créer Film : ' + f[0] + ' (' + f[1] + ', ' + f[2] + ')' });
+      });
+      POOL.Acteur.slice(0, Math.ceil(n / 2)).forEach(function (a) { out.push({ kind: 'new', cls: 'Acteur', label: a, vals: {}, txt: 'Créer Acteur : ' + a }); });
+    }
+    propositions = out;
+    var h = out.length ? '<div class="ligne"><strong>' + out.length + ' proposition(s)</strong><button type="button" class="lien-mini" id="tout-cocher">tout cocher</button></div>' +
+      out.map(function (p, k) { return '<label><input type="checkbox" data-p="' + k + '" checked> <span>' + esc(p.txt) + '</span></label>'; }).join('') +
+      '<div class="boutons"><button type="button" class="btn vert" id="accepte">➕ Ajouter les propositions cochées</button></div>'
+      : '<p class="astuce">Rien à générer pour ce mode.</p>';
+    $('#propositions').innerHTML = h;
+  }
+  function accepte() {
+    var n = 0;
+    document.querySelectorAll('#propositions input[data-p]:checked').forEach(function (c) {
+      var p = propositions[+c.dataset.p]; n++;
+      if (p.kind === 'new') etat.inst.push({ id: 'i' + (++uid), cls: p.cls, label: p.label, vals: p.vals, src: 'ia' });
+      else { var i = etat.inst.filter(function (x) { return x.id === p.inst; })[0]; if (i) { i.vals[p.prop] = p.val; i.src = 'ia'; } }
+    });
+    propositions = []; $('#propositions').innerHTML = '';
+    marque(); toast(n + ' élément(s) ajouté(s) à l\'instance (marqués IA)');
+    ouvreOnglet('instances');
+  }
+
+  /* ---------- Contrôle de cohérence (réel sur les données de la maquette) ---------- */
+  function controle() {
+    var r = [], cible = function (t, id) { return ' data-goto="' + t + ':' + id + '"'; };
+    etat.classes.forEach(function (c) {
+      if (c.st === 'del') { var n = nbInst(c.id); if (n) r.push({ g: 'violation', t: 'Le concept « ' + c.label + ' » est supprimé mais ' + n + ' instance(s) l\'utilisent encore.', go: ['classe', c.id] }); }
+      else if (c.parent && cl(c.parent) && cl(c.parent).st === 'del') r.push({ g: 'violation', t: '« ' + c.label + ' » est sous-classe de « ' + nomClasse(c.parent) + ' », supprimé.', go: ['classe', c.id] });
+    });
+    etat.props.forEach(function (p) {
+      if (p.st === 'del') return;
+      if (!p.domain) r.push({ g: 'avert', t: 'La propriété « ' + p.label + ' » n\'a pas de domaine.', go: ['prop', p.id] });
+      else if (cl(p.domain) && cl(p.domain).st === 'del') r.push({ g: 'violation', t: '« ' + p.label + ' » a pour domaine « ' + nomClasse(p.domain) + ' », supprimé.', go: ['prop', p.id] });
+      if (!p.range) r.push({ g: 'avert', t: 'La propriété « ' + p.label + ' » n\'a pas de portée.', go: ['prop', p.id] });
+      else if (cl(p.range) && cl(p.range).st === 'del') r.push({ g: 'violation', t: '« ' + p.label + ' » a pour portée « ' + nomClasse(p.range) + ' », supprimé.', go: ['prop', p.id] });
+      if (p.st === 'new' && !etat.inst.some(function (i) { return i.vals[p.id] !== undefined; })) r.push({ g: 'info', t: 'Nouvelle propriété « ' + p.label + ' » : aucune valeur dans l\'instance (l\'IA peut en générer).', go: ['prop', p.id] });
+    });
+    etat.classes.forEach(function (c) { if (c.st === 'new' && !nbInst(c.id)) r.push({ g: 'info', t: 'Nouveau concept « ' + c.label + ' » : aucune instance.', go: ['classe', c.id] }); });
+    etat.inst.forEach(function (i) {
+      Object.keys(i.vals).forEach(function (k) {
+        var p = pr(k);
+        if (!p || p.st === 'del') r.push({ g: 'violation', t: '« ' + i.label + ' » utilise la propriété « ' + (p ? p.label : k) + ' », absente de l\'ontologie.', go: ['classe', i.cls] });
+        else if (p.domain && p.domain !== i.cls && ancetres(i.cls).indexOf(p.domain) < 0) r.push({ g: 'avert', t: '« ' + i.label + ' » (' + nomClasse(i.cls) + ') porte « ' + p.label + ' » dont le domaine est ' + nomClasse(p.domain) + '.', go: ['classe', i.cls] });
+      });
+    });
+    var viol = r.filter(function (x) { return x.g === 'violation'; }).length;
+    anom = {};
+    r.forEach(function (x) { if (x.g !== 'info') { var k = x.go[0] + ':' + x.go[1]; if (!anom[k] || x.g === 'violation') anom[k] = x.g; } });
+    rendGraphe();
+    var ico = { violation: '⛔', avert: '⚠️', info: 'ℹ️' };
+    $('#rapport').innerHTML = (r.length ? '' : '<div class="item ok">✅ Ontologie et instance cohérentes.</div>') +
+      (viol ? '<div class="item violation"><strong>' + viol + ' violation(s)</strong>&nbsp;: à corriger avant d\'enregistrer.</div>' : (r.length ? '<div class="item ok">✅ Aucune violation bloquante.</div>' : '')) +
+      r.map(function (x) { return '<div class="item ' + x.g + '"><span>' + ico[x.g] + '</span><span>' + esc(x.t) + '</span><button type="button" class="lien-mini" data-goto="' + x.go[0] + ':' + x.go[1] + '">voir</button></div>'; }).join('');
+    var c = $('#c-ctrl'); c.hidden = false; c.textContent = r.length; c.classList.toggle('rouge', viol > 0);
+    return viol;
+  }
+
+  /* ---------- Graphe éditable ---------- */
+  var vue = 'graphe', anom = {}, lien = null, drag = null, dernier = { t: 0, k: '' }, pos = {};
+  var LAYOUT = { Personne: [320, 20], Acteur: [180, 130], Realisateur: [470, 130], Role: [180, 270], Film: [470, 270], Cinema: [30, 390], Projection: [230, 390], Salle: [430, 410] };
+  var GW = 150, VW = 780, VH = 470;
+  function initPos() { Object.keys(LAYOUT).forEach(function (k) { pos[k] = { x: LAYOUT[k][0], y: LAYOUT[k][1] }; }); }
+  initPos();
+  function attrsDe(id) { return etat.props.filter(function (p) { return p.domain === id && XSD.indexOf(p.range) >= 0; }); }
+  function libre() {
+    for (var y = 20; y < VH - 60; y += 70) for (var x = 20; x < VW - GW; x += 170) {
+      var ok = etat.classes.every(function (c) { var q = pos[c.id]; return !q || Math.abs(q.x - x) >= 160 || Math.abs(q.y - y) >= 100; });
+      if (ok) return { x: x, y: y };
+    }
+    return { x: 20, y: 20 };
+  }
+  function geo(c) { if (!pos[c.id]) pos[c.id] = libre(); var at = attrsDe(c.id); return { x: pos[c.id].x, y: pos[c.id].y, w: GW, h: 32 + at.length * 15, at: at }; }
+  function rectPt(n, tx, ty) {
+    var cx = n.x + n.w / 2, cy = n.y + n.h / 2, dx = tx - cx, dy = ty - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+    var s = Math.min(dx ? (n.w / 2) / Math.abs(dx) : Infinity, dy ? (n.h / 2) / Math.abs(dy) : Infinity);
+    return { x: cx + dx * s, y: cy + dy * s };
+  }
+  function court(t, n) { return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+  function arete(e, N, off) {
+    var A = N[e.a], B = N[e.b], x = e.k === 'prop' ? e.p : e.c, id = x.id, tp = e.k === 'prop' ? 'prop' : 'classe';
+    var sel = etat.sel.type === 'prop' && e.k === 'prop' && etat.sel.id === id;
+    var cls = 'ge ar' + (e.k === 'sub' ? ' sub' : '') + (x.st ? ' st-' + x.st : '') + (sel ? ' sel' : '') + (e.k === 'prop' && anom['prop:' + id] === 'violation' ? ' anom' : '');
+    var d, lx, ly, mk = e.k === 'sub' ? 'url(#tri)' : 'url(#fl)';
+    if (e.a === e.b) {
+      var x0 = A.x + A.w, y0 = A.y + 10;
+      d = 'M' + x0 + ' ' + y0 + ' C' + (x0 + 60) + ' ' + (y0 - 28) + ' ' + (x0 + 60) + ' ' + (y0 + 48) + ' ' + x0 + ' ' + (y0 + 20); lx = x0 + 48; ly = y0 + 10;
+    } else {
+      var ax = A.x + A.w / 2, ay = A.y + A.h / 2, bx = B.x + B.w / 2, by = B.y + B.h / 2, dx = bx - ax, dy = by - ay, len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var cx = (ax + bx) / 2 + (-dy / len) * off, cy = (ay + by) / 2 + (dx / len) * off;
+      var P0 = rectPt(A, cx, cy), P2 = rectPt(B, cx, cy);
+      d = 'M' + P0.x + ' ' + P0.y + ' Q' + cx + ' ' + cy + ' ' + P2.x + ' ' + P2.y;
+      lx = .25 * P0.x + .5 * cx + .25 * P2.x; ly = .25 * P0.y + .5 * cy + .25 * P2.y;
+    }
+    return '<g class="' + cls + '" data-edge="' + tp + ':' + id + '"><path class="hit" d="' + d + '"/><path class="trait" d="' + d + '" marker-end="' + mk + '"/>' +
+      (e.k === 'prop' ? '<text class="lbl" x="' + lx + '" y="' + (ly - 5) + '">' + esc(e.p.label) + '</text>' : '') + '</g>';
+  }
+  function rendGraphe() {
+    var svg = $('#svg-graphe'); if (!svg) return;
+    var N = {}; etat.classes.forEach(function (c) { N[c.id] = geo(c); });
+    var ar = [];
+    etat.classes.forEach(function (c) { if (c.parent && N[c.parent]) ar.push({ k: 'sub', a: c.id, b: c.parent, c: c }); });
+    etat.props.forEach(function (p) { if (p.domain && N[p.domain] && p.range && N[p.range]) ar.push({ k: 'prop', a: p.domain, b: p.range, p: p }); });
+    var grp = {}; ar.forEach(function (e) { var k = [e.a, e.b].sort().join('|'); (grp[k] = grp[k] || []).push(e); });
+    var h = '<defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#56636e"/></marker>' +
+      '<marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M1 1 L11 6 L1 11 z" fill="#fff" stroke="#1f7a8c" stroke-width="1.5"/></marker></defs>';
+    Object.keys(grp).forEach(function (k) { var L = grp[k]; L.forEach(function (e, i) { h += arete(e, N, (i - (L.length - 1) / 2) * 64 * (e.a < e.b ? 1 : -1)); }); });
+    etat.classes.forEach(function (c) {
+      var g = N[c.id], selC = etat.sel.type === 'classe' && etat.sel.id === c.id, an = anom['classe:' + c.id];
+      h += '<g class="gn' + (c.st ? ' st-' + c.st : '') + (selC ? ' sel' : '') + (lien && lien.cible === c.id ? ' cible' : '') + '" data-cls="' + c.id + '" transform="translate(' + g.x + ',' + g.y + ')">' +
+        (an ? '<rect class="halo' + (an === 'avert' ? ' avert' : '') + '" x="-5" y="-5" width="' + (g.w + 10) + '" height="' + (g.h + 10) + '" rx="14"/>' : '') +
+        '<rect class="corps" width="' + g.w + '" height="' + g.h + '" rx="10"/><text class="nom" x="10" y="21">' + esc(court(c.label, 17)) + '</text><text class="cpt" x="' + (g.w - 10) + '" y="21" text-anchor="end">' + nbInst(c.id) + '</text>';
+      g.at.forEach(function (p, i) {
+        var s = etat.sel.type === 'prop' && etat.sel.id === p.id;
+        h += '<text class="at' + (s ? ' sel' : '') + (p.st === 'new' ? ' new' : '') + '" data-attr="' + p.id + '" x="10" y="' + (40 + i * 15) + '">• ' + esc(court(p.label, 10)) + ' : ' + p.range.replace('xsd:', '') + (anom['prop:' + p.id] ? ' ⚠' : '') + '</text>';
+      });
+      h += '<g class="hd" data-cls="' + c.id + '" data-kind="prop" transform="translate(' + g.w + ',16)"><circle r="8"/><title>Glisser vers un concept : propriété ; vers le fond : attribut</title></g>' +
+        '<g class="hd" data-cls="' + c.id + '" data-kind="sub" transform="translate(' + (g.w / 2) + ',0)"><polygon points="-8,5 8,5 0,-8"/><title>Glisser vers un concept : « sous-classe de »</title></g></g>';
+    });
+    if (lien) {
+      var s = N[lien.from], hx = lien.kind === 'prop' ? s.x + s.w : s.x + s.w / 2, hy = lien.kind === 'prop' ? s.y + 16 : s.y;
+      h += '<line class="tmp" x1="' + hx + '" y1="' + hy + '" x2="' + lien.x + '" y2="' + lien.y + '" marker-end="' + (lien.kind === 'sub' ? 'url(#tri)' : 'url(#fl)') + '"/>';
+    }
+    svg.innerHTML = h;
+  }
+  function rendVue() {
+    $('#zone-graphe').hidden = vue !== 'graphe';
+    $('#zone-liste').hidden = vue !== 'liste';
+    $('#v-graphe').classList.toggle('actif', vue === 'graphe');
+    $('#v-liste').classList.toggle('actif', vue === 'liste');
+  }
+  function pt(e) { var s = $('#svg-graphe'), p = new DOMPoint(e.clientX, e.clientY).matrixTransform(s.getScreenCTM().inverse()); return { x: p.x, y: p.y }; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function focusLabel() { setTimeout(function () { var l = $('#f-label'); if (l && !l.disabled) { l.focus(); l.select(); } }, 0); }
+  function creeProp(dom, rng, lbl) { var k = 'prop' + (++uid); etat.props.push({ id: k, label: lbl, domain: dom, range: rng, st: 'new' }); etat.sel = { type: 'prop', id: k }; marque(); focusLabel(); }
+  function creeConcept(x, y) { var k = 'Concept' + (++uid); pos[k] = { x: clamp(x, 0, VW - GW), y: clamp(y, 0, VH - 40) }; etat.classes.push({ id: k, label: 'Nouveau concept', parent: '', comment: '', st: 'new' }); etat.sel = { type: 'classe', id: k }; marque(); focusLabel(); }
+  function mv(e) {
+    var p = pt(e);
+    if (drag) { pos[drag.id] = { x: clamp(p.x - drag.dx, 0, VW - GW), y: clamp(p.y - drag.dy, 0, VH - 40) }; rendGraphe(); }
+    else if (lien) { var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'); lien.x = p.x; lien.y = p.y; lien.cible = n ? n.dataset.cls : null; rendGraphe(); }
+  }
+  function up(e) {
+    document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
+    if (drag) { drag = null; return; }
+    if (!lien) return;
+    var l = lien; lien = null;
+    var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'), dansSvg = el && el.closest && el.closest('#svg-graphe');
+    if (l.kind === 'prop') {
+      if (n) creeProp(l.from, n.dataset.cls, 'nouvelle relation');
+      else if (dansSvg) creeProp(l.from, 'xsd:string', 'nouvel attribut');
+      else rendGraphe();
+    } else {
+      if (!n || n.dataset.cls === l.from) { rendGraphe(); if (dansSvg) toast('Lâchez sur un autre concept pour créer « sous-classe de »'); return; }
+      if (ancetres(n.dataset.cls).indexOf(l.from) >= 0) { rendGraphe(); toast('⛔ Cycle : un concept ne peut pas descendre de son propre descendant'); return; }
+      var c = cl(l.from); c.parent = n.dataset.cls; if (!c.st) c.st = 'mod'; etat.sel = { type: 'classe', id: c.id }; marque(); toast(c.label + ' est maintenant sous-classe de ' + nomClasse(n.dataset.cls));
+    }
+  }
+  function suit() { document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); }
+  $('#svg-graphe').addEventListener('pointerdown', function (e) {
+    if (e.button) return;
+    var hd = e.target.closest('.hd'), at = e.target.closest('[data-attr]'), gn = e.target.closest('.gn'), ge = e.target.closest('.ge'), p = pt(e), now = Date.now();
+    if (hd) { e.preventDefault(); lien = { from: hd.dataset.cls, kind: hd.dataset.kind, x: p.x, y: p.y, cible: null }; suit(); return; }
+    if (at) { etat.sel = { type: 'prop', id: at.dataset.attr }; rend(); return; }
+    if (gn) {
+      var id = gn.dataset.cls, dbl = dernier.k === id && now - dernier.t < 400; dernier = { t: now, k: id };
+      etat.sel = { type: 'classe', id: id }; rend();
+      if (dbl) { focusLabel(); return; }
+      drag = { id: id, dx: p.x - pos[id].x, dy: p.y - pos[id].y }; suit(); return;
+    }
+    if (ge) { var a = ge.dataset.edge.split(':'); etat.sel = { type: a[0], id: a[1] }; rend(); return; }
+    var dbl2 = dernier.k === 'fond' && now - dernier.t < 400; dernier = { t: now, k: 'fond' };
+    if (dbl2) creeConcept(p.x - GW / 2, p.y - 16);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    var b = $('#supprime'); if (b) { e.preventDefault(); b.click(); }
+  });
+
+  /* ---------- Rendu global ---------- */
+  function rendEtat() {
+    var n = modifs().length, e = $('#etat');
+    e.textContent = dirty ? '● ' + (n ? n + ' modification(s)' : 'modifié') + ' non enregistrée(s)' : 'Tout est enregistré';
+    e.classList.toggle('sale', dirty);
+  }
+  function rend() { rendArbres(); rendFiche(); rendInstances(); rendCible(); rendEtat(); rendGraphe(); rendVue(); }
+  function ouvreOnglet(o) {
+    document.querySelectorAll('.onglets button').forEach(function (b) { b.classList.toggle('actif', b.dataset.onglet === o); });
+    ['instances', 'ia', 'controle'].forEach(function (k) { $('#p-' + k).hidden = k !== o; });
+    if (o === 'ia') rendCible();
+  }
+
+  /* ---------- Événements ---------- */
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-t]'); if (t) { etat.sel = { type: t.dataset.t, id: t.dataset.id }; rend(); return; }
+    var g = e.target.closest('[data-goto]'); if (g) { var a = g.dataset.goto.split(':'); etat.sel = { type: a[0], id: a[1] }; rend(); return; }
+    var o = e.target.closest('[data-onglet]'); if (o) { ouvreOnglet(o.dataset.onglet); return; }
+    var s = e.target.closest('[data-sup]'); if (s) { etat.inst = etat.inst.filter(function (i) { return i.id !== s.dataset.sup; }); marque(); return; }
+    var id = e.target.id;
+    if (id === 'add-classe') { var k = 'Concept' + (++uid); pos[k] = libre(); etat.classes.push({ id: k, label: 'Nouveau concept', parent: '', comment: '', st: 'new' }); etat.sel = { type: 'classe', id: k }; marque(); setTimeout(function () { var l = $('#f-label'); if (l) { l.focus(); l.select(); } }, 0); }
+    else if (id === 'add-prop') { var k2 = 'prop' + (++uid); etat.props.push({ id: k2, label: 'nouvelle propriété', domain: '', range: 'xsd:string', st: 'new' }); etat.sel = { type: 'prop', id: k2 }; marque(); setTimeout(function () { var l = $('#f-label'); if (l) { l.focus(); l.select(); } }, 0); }
+    else if (id === 'add-inst') {
+      var cc = etat.sel.type === 'classe' && cl(etat.sel.id) && cl(etat.sel.id).st !== 'del' ? etat.sel.id : 'Film';
+      etat.inst.push({ id: 'i' + (++uid), cls: cc, label: 'Nouvelle ' + nomClasse(cc).toLowerCase(), vals: {}, src: '' }); marque();
+    }
+    else if (id === 'vide-ia') { etat.inst = etat.inst.filter(function (i) { return i.src !== 'ia'; }); marque(); toast('Ajouts de l\'IA retirés'); }
+    else if (id === 'v-graphe') { vue = 'graphe'; rendVue(); }
+    else if (id === 'v-liste') { vue = 'liste'; rendVue(); }
+    else if (id === 'reorg') { pos = {}; initPos(); etat.classes.forEach(function (c) { if (!pos[c.id]) pos[c.id] = libre(); }); rendGraphe(); }
+    else if (id === 'b-ia') ouvreOnglet('ia');
+    else if (id === 'b-controle') { ouvreOnglet('controle'); controle(); }
+    else if (id === 'lancer-controle') controle();
+    else if (id === 'generer') genere();
+    else if (id === 'tout-cocher') document.querySelectorAll('#propositions input[data-p]').forEach(function (c) { c.checked = true; });
+    else if (id === 'accepte') accepte();
+    else if (id === 'b-enreg') {
+      var v = controle();
+      if (v) { ouvreOnglet('controle'); toast('⛔ ' + v + ' violation(s) : corrigez ou enregistrez malgré tout'); }
+      else { dirty = false; etat.classes.concat(etat.props).forEach(function (x) { if (x.st === 'new' || x.st === 'mod') x.st = ''; }); etat.classes = etat.classes.filter(function (x) { return x.st !== 'del'; }); etat.props = etat.props.filter(function (x) { return x.st !== 'del'; }); rend(); toast('💾 Ontologie et instance enregistrées'); }
+    }
+    else if (id === 'retour') {
+      if (!dirty) { toast('Retour au graphe (le diagramme est redessiné)'); return; }
+      $('#dlg-texte').textContent = 'Vous avez des modifications non enregistrées (' + modifs().length + ' sur l\'ontologie, ' + etat.inst.filter(function (i) { return i.src === 'ia'; }).length + ' ajouts IA). Au retour, le graphe reflétera l\'état enregistré.';
+      $('#dlg-sortie').showModal();
+    }
+    else if (id === 's-continuer') $('#dlg-sortie').close();
+    else if (id === 's-abandon') { $('#dlg-sortie').close(); toast('Modifications abandonnées — retour au graphe'); }
+    else if (id === 's-enreg') { $('#dlg-sortie').close(); dirty = false; rend(); toast('💾 Enregistré — retour au graphe'); }
+  });
+  document.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.noeud')) { e.preventDefault(); e.target.click(); } });
+  window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  rend();
+})();
+</script>
+</body>
+</html>
