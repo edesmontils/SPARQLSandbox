@@ -84,6 +84,20 @@ class FenetreTest(unittest.TestCase):
         self.assertTrue(attend(lambda: jeux.liste.count() == 2))
         self.assertEqual(self.f.reglages.value("profil"), "Prod")  # dernier choix mémorisé
 
+    def test_choix_du_modele(self):
+        ia = self.f.pages[4][1]
+        self.f.aller(4)
+        self.assertTrue(attend(lambda: ia.etat.text() != ""))
+        ia.form.widgets["url"].setText("http://127.0.0.1:9/v1")  # service absent : erreur affichée, pas de plantage
+        ia.form.widgets["cle"].setText("sk-test")
+        ia.charge_modeles()
+        statut = ia.form._statuts["modele"]
+        self.assertTrue(attend(lambda: "ne répond pas" in statut.text()))
+        ia.form.remplit_choix("modele", ["a/un", "a/deux"], "2 modèles")
+        ia.form.widgets["modele"].setCurrentText("a/deux")
+        self.assertEqual(ia.form.valeur("modele"), "a/deux")
+        self.assertEqual(ia.form.widgets["modele"].count(), 2)
+
     def test_enregistrement_et_services(self):
         jeux = self.f.pages[0][1]
         self.assertTrue(attend(lambda: jeux.liste.count() == 2))

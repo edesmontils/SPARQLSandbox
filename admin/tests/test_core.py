@@ -213,6 +213,59 @@ class MiseAJourTest(unittest.TestCase):
             maintenance.etat_depot(self.t, str(self.tmp))
 
 
+class ModelesTest(unittest.TestCase):
+    """Liste des modèles d'un faux ProxyIAg (compatible OpenAI), interrogé par curl comme sur une machine."""
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        import threading
+
+        class Faux(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/v1/models" and self.headers.get("Authorization") == "Bearer sk-test":
+                    corps = json.dumps({"data": [{"id": "proxyiag/mistral-small-24b"}, {"id": "proxyiag/gemma-4-31b"},
+                                                 {"id": "proxyiag/gemma-4-31b"}]}).encode()
+                    self.send_response(200)
+                elif self.path == "/v1/models":
+                    corps, _ = b'{"error": "cle"}', self.send_response(401)
+                else:
+                    corps, _ = b"nope", self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(corps)
+
+            def log_message(self, *a):
+                pass
+
+        cls.serveur = http.server.HTTPServer(("127.0.0.1", 0), Faux)
+        threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
+        cls.url = f"http://127.0.0.1:{cls.serveur.server_address[1]}/v1"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serveur.shutdown()
+
+    def test_liste_triee_sans_doublon(self):
+        self.assertEqual(maintenance.liste_modeles(LocalTransport(), self.url, "sk-test"),
+                         ["proxyiag/gemma-4-31b", "proxyiag/mistral-small-24b"])
+        self.assertEqual(len(maintenance.liste_modeles(LocalTransport(), self.url + "/", "sk-test")), 2)
+
+    def test_cle_refusee(self):
+        with self.assertRaisesRegex(TransportError, "refuse la clé"):
+            maintenance.liste_modeles(LocalTransport(), self.url, "sk-mauvaise")
+
+    def test_service_absent_ou_mal_forme(self):
+        with self.assertRaisesRegex(TransportError, "ne répond pas"):
+            maintenance.liste_modeles(LocalTransport(), "http://127.0.0.1:9/v1", "sk-test")
+        with self.assertRaisesRegex(TransportError, "inattendue"):
+            maintenance.liste_modeles(LocalTransport(), self.url.replace("/v1", "/autre"), "sk-test")
+        with self.assertRaises(TransportError):
+            maintenance.liste_modeles(LocalTransport(), "pas une adresse", "sk-test")
+        with self.assertRaises(TransportError):
+            maintenance.liste_modeles(LocalTransport(), self.url, 'sk"; rm -rf')
+
+
 class ProfilTest(unittest.TestCase):
     def test_defauts_et_persistance(self):
         p = Profil("Pi", hote="pi", racine="/home/ed/programmation/SPARQLSandbox")

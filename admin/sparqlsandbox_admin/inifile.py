@@ -39,7 +39,7 @@ class Champ:
     """Description d'un réglage pour construire un formulaire."""
     cle: str
     libelle: str
-    type: str = "texte"      # texte, entier, secret
+    type: str = "texte"      # texte, entier, secret, choix (liste modifiable)
     defaut: object = ""
     aide: str = ""
     unite: str = ""          # suffixe d'un entier : « min », « Mo »…
@@ -125,8 +125,8 @@ CHAMPS_IA = [
           "Connexion à ProxyIAg", "https://…/v1"),
     Champ("cle", "Clé de l'application", "secret", "",
           "Créée avec proxyiag-keys ; propre à SPARQLSandbox.", "", "Connexion à ProxyIAg", "sk-…"),
-    Champ("modele", "Modèle", "texte", "", "Alias du modèle, par exemple proxyiag/gemma-4-31b.", "",
-          "Connexion à ProxyIAg"),
+    Champ("modele", "Modèle", "choix", "", "Choisissez dans la liste proposée par le service, ou saisissez un alias.",
+          "", "Connexion à ProxyIAg", "proxyiag/gemma-4-31b"),
     Champ("par_session_intention", "Corrections par étudiant et par jour", "entier", 30, "", "",
           "Limites d'usage"),
     Champ("delai", "Délai entre deux corrections", "entier", 5, "", "s", "Limites d'usage"),

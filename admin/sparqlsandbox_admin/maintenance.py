@@ -1,6 +1,7 @@
 """Diagnostic et entretien d'une installation : copies de session, stores d'origine, services."""
 from __future__ import annotations
 
+import json
 import posixpath
 import re
 import shlex
@@ -196,3 +197,31 @@ def met_a_jour(t: Transport, racine: str, relance: str = "") -> ResultatMaj:
         code, out, err = t.execute(relance.strip() + " 2>&1", 90)
         res.relance = (code, (out + err).strip())
     return res
+
+
+# --- modèles proposés par ProxyIAg -------------------------------------------------------
+
+def liste_modeles(t: Transport, url: str, cle: str) -> list[str]:
+    """Modèles proposés par le service (API compatible OpenAI : GET <url>/models), interrogé DEPUIS la
+    machine administrée : c'est elle qui l'utilisera, et l'adresse peut n'y être valable que localement
+    (http://127.0.0.1:8000/v1). La clé passe par l'entrée standard de curl, pas par sa ligne de commande."""
+    url = url.strip().rstrip("/")
+    if not re.fullmatch(r"https?://[^\s\"']+", url):
+        raise TransportError("Adresse de ProxyIAg invalide.")
+    if not cle or re.search(r"[\s\"\\]", cle):
+        raise TransportError("Clé invalide.")
+    config = f'header = "Authorization: Bearer {cle}"\n'.encode()
+    code, sortie, erreur = t.execute(
+        "curl -sS -m 15 -K - -w '\\n%{http_code}' " + shlex.quote(url + "/models"), 30, entree=config)
+    if code != 0:
+        raise TransportError("Le service ne répond pas depuis la machine : " + (erreur.strip() or f"curl, code {code}"))
+    corps, _, statut = sortie.rpartition("\n")
+    if statut.strip() in ("401", "403"):
+        raise TransportError("Le service refuse la clé (HTTP " + statut.strip() + ").")
+    if not statut.strip().startswith("2"):
+        raise TransportError(f"Réponse inattendue du service (HTTP {statut.strip()}).")
+    try:
+        donnees = json.loads(corps)["data"]
+        return sorted({str(m["id"]) for m in donnees if isinstance(m, dict) and m.get("id")})
+    except (ValueError, KeyError, TypeError) as e:
+        raise TransportError("Liste de modèles illisible : le service n'est pas compatible OpenAI.") from e

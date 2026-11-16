@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QScrollArea, QSpinBox, QVBoxLayout, QWidget)
 
 from .. import maintenance
@@ -33,6 +33,7 @@ class Formulaire(QWidget):
     """Formulaire de réglages construit depuis une liste de Champ : une section par groupe, le libellé et
     son aide à gauche, la valeur à droite avec un rappel de la valeur par défaut."""
     modifie = Signal()
+    liste_demandee = Signal(str)  # clé d'un champ « choix » dont on veut recharger la liste
 
     def __init__(self, champs):
         super().__init__()
@@ -41,6 +42,7 @@ class Formulaire(QWidget):
         self._rappels: dict[str, QLabel] = {}
         self._retablir: dict[str, QWidget] = {}
         self._chargement = False
+        self._statuts: dict[str, QLabel] = {}
         grille = QGridLayout(self)
         grille.setContentsMargins(0, 0, 0, 0)
         grille.setHorizontalSpacing(32)
@@ -78,6 +80,13 @@ class Formulaire(QWidget):
                     w.setSuffix(" " + c.unite)
                 w.setMaximumWidth(190)
                 w.valueChanged.connect(lambda _=None, k=c.cle: self._change(k))
+            elif c.type == "choix":
+                w = QComboBox()
+                w.setEditable(True)
+                w.setInsertPolicy(QComboBox.NoInsert)
+                w.lineEdit().setPlaceholderText(c.exemple)
+                w.setMinimumHeight(32)
+                w.currentTextChanged.connect(lambda _=None, k=c.cle: self._change(k))
             else:
                 w = QLineEdit()
                 w.setPlaceholderText(c.exemple)
@@ -94,6 +103,15 @@ class Formulaire(QWidget):
                 voir.toggled.connect(lambda v, w=w: w.setEchoMode(QLineEdit.Normal if v else QLineEdit.Password))
                 droite.addWidget(w)
                 droite.addWidget(voir)
+            elif c.type == "choix":
+                droite.addWidget(w)
+                charger = bouton("Charger la liste du service")
+                charger.setToolTip("Interroge ProxyIAg depuis la machine avec l'adresse et la clé ci-dessus")
+                charger.clicked.connect(lambda _=False, k=c.cle: self.liste_demandee.emit(k))
+                statut = etiquette("", "aide")
+                self._statuts[c.cle] = statut
+                droite.addWidget(charger, 0, Qt.AlignLeft)
+                droite.addWidget(statut)
             else:
                 droite.addWidget(w)
             pied = QHBoxLayout()
@@ -122,6 +140,8 @@ class Formulaire(QWidget):
         c, w = self._champ(cle), self.widgets[cle]
         if isinstance(w, QSpinBox):
             w.setValue(int(c.defaut))
+        elif isinstance(w, QComboBox):
+            w.setCurrentText("")
         else:
             w.clear()
         self._change(cle)
@@ -155,6 +175,8 @@ class Formulaire(QWidget):
                     w.setValue(int(v))
                 except (TypeError, ValueError):
                     w.setValue(int(c.defaut))
+            elif isinstance(w, QComboBox):
+                w.setCurrentText(str(v))
             else:
                 w.setText(str(v) if not isinstance(v, list) else ", ".join(v))
             self._rappel(c.cle)
@@ -172,7 +194,25 @@ class Formulaire(QWidget):
 
     def valeur(self, cle: str):
         w = self.widgets[cle]
-        return w.value() if isinstance(w, QSpinBox) else w.text().strip()
+        if isinstance(w, QSpinBox):
+            return w.value()
+        return w.currentText().strip() if isinstance(w, QComboBox) else w.text().strip()
+
+    def remplit_choix(self, cle: str, valeurs: list[str], message: str, erreur: bool = False):
+        """Met à jour la liste d'un champ « choix » en gardant la valeur saisie."""
+        w = self.widgets[cle]
+        courant = w.currentText()
+        w.blockSignals(True)
+        w.clear()
+        w.addItems(valeurs)
+        w.setCurrentText(courant)
+        w.blockSignals(False)
+        self._statuts[cle].setText(message)
+        self._statuts[cle].setStyleSheet(f"color: {theme.DANGER if erreur else theme.ATTENUE}")
+
+
+def pluriel_modeles(n: int) -> str:
+    return f"{n} modèle{'s' if n > 1 else ''}"
 
 
 def zone_defilante(contenu: QWidget) -> QScrollArea:
@@ -369,6 +409,7 @@ class PageIA(PageBase):
         super().__init__(ctx, "Correction par IA", "", "Enregistrer et activer")
         self.form = Formulaire(CHAMPS_IA)
         self.form.modifie.connect(lambda: self.marque_sale(True))
+        self.form.liste_demandee.connect(lambda _cle: self.charge_modeles())
         self.etat = etiquette("", "section")
         self.b_off = bouton("Désactiver", "danger")
         self.b_off.clicked.connect(self.desactive)
@@ -393,8 +434,34 @@ class PageIA(PageBase):
                               "Correction désactivée : les étudiants comparent eux-mêmes leur intention à celle de "
                               "l'enseignant.")
             self.etat.setStyleSheet(f"color: {theme.OK if existe else theme.ATTENUE}")
+            if existe:
+                self.charge_modeles(silencieux=True)
 
         ctx.lance(lambda: lit_ini(ctx, chemin, ENTETE_IA, chemin + ".desactive"), fini)
+
+    def charge_modeles(self, silencieux: bool = False):
+        """Remplit la liste des modèles avec ceux que propose le service (adresse et clé du formulaire)."""
+        ctx = self.ctx
+        url, cle = self.form.valeur("url"), self.form.valeur("cle")
+        if ctx.profil is None:
+            return
+        if not (url and cle):
+            if not silencieux:
+                self.form.remplit_choix("modele", [], "Renseignez l'adresse et la clé de ProxyIAg d'abord.", True)
+            return
+        self.form.remplit_choix("modele", [self.form.widgets["modele"].itemText(i)
+                                           for i in range(self.form.widgets["modele"].count())],
+                                "Interrogation du service…")
+
+        def fini(modeles):
+            self.form.remplit_choix("modele", modeles,
+                                    f"{pluriel_modeles(len(modeles))} proposé(s) par le service." if modeles else
+                                    "Le service ne propose aucun modèle pour cette clé.", not modeles)
+
+        def erreur(message):
+            self.form.remplit_choix("modele", [], message, True)
+
+        ctx.lance(lambda: maintenance.liste_modeles(ctx.transport(), url, cle), fini, erreur)
 
     def enregistre(self):
         ctx = self.ctx

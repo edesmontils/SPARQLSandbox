@@ -67,8 +67,8 @@ class Transport:
     def renomme(self, source: str, cible: str) -> None:
         raise NotImplementedError
 
-    def execute(self, commande: str, delai: int = 60) -> tuple[int, str, str]:
-        """Lance une commande shell ; renvoie (code, sortie, erreur)."""
+    def execute(self, commande: str, delai: int = 60, entree: bytes | None = None) -> tuple[int, str, str]:
+        """Lance une commande shell (``entree`` sur son entrée standard) ; renvoie (code, sortie, erreur)."""
         raise NotImplementedError
 
     def ferme(self) -> None:
@@ -139,9 +139,9 @@ class LocalTransport(Transport):
         except OSError as e:
             raise TransportError(f"{source} : {e.strerror or e}") from e
 
-    def execute(self, commande, delai=60):
+    def execute(self, commande, delai=60, entree=None):
         try:
-            r = subprocess.run(["sh", "-c", commande], capture_output=True, timeout=delai)
+            r = subprocess.run(["sh", "-c", commande], capture_output=True, timeout=delai, input=entree)
         except subprocess.TimeoutExpired as e:
             raise TransportError("Commande trop longue.") from e
         return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
@@ -250,8 +250,8 @@ class SSHTransport(Transport):
     def renomme(self, source, cible):
         self._ok(f"mv -f -- {shlex.quote(self.chemin(source))} {shlex.quote(self.chemin(cible))}")
 
-    def execute(self, commande, delai=60):
-        r = self._ssh(commande, delai=delai)
+    def execute(self, commande, delai=60, entree=None):
+        r = self._ssh(commande, entree=entree, delai=delai)
         return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
 
     def ferme(self):
