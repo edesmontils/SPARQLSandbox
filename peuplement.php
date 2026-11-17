@@ -404,7 +404,7 @@ function peupl_triples($jeu, $jeton, array $indices) {
 //------------------------------------------------------------------------------
 // Instances dans le brouillon de l'éditeur : ajout, modification, suppression à la main
 //   brouillon['instances'] = {
-//     nouvelles:  [{iri, classe, valeurs: [{p, k, v, dt, l}]}],
+//     nouvelles:  [{iri | anon: true, classe, valeurs: [{p, k, v, dt, l}]}],   (anon : nœud anonyme, créé sans IRI)
 //     modifiees:  [{iri | anon, types?: [iri…], valeurs: [...]}]   jeu complet des valeurs voulues (hors rdf:type) ;
 //                 types : jeu complet des concepts voulus (absent : inchangés)
 //     supprimees: [iri…], supprimees_anon: [identifiant…],
@@ -431,7 +431,10 @@ function inst_nettoie($b, array $prefixes) {
 		foreach ($liste as $e) {
 			if (!is_array($e)) return array(null, "Instance invalide.");
 			$anon = $k === 'modifiees' && isset($e['anon']);
-			if ($anon) {
+			if ($k === 'nouvelles' && !empty($e['anon'])) {
+				$o = array('iri' => '', 'anon' => 'nouveau', 'types' => null, 'valeurs' => array());
+				$cle = '_:nouveau'.count($sortie['nouvelles']);
+			} elseif ($anon) {
 				if (!is_string($e['anon']) || !preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $e['anon'])) return array(null, 'Identifiant de nœud anonyme invalide.');
 				$o = array('iri' => '', 'anon' => $e['anon'], 'types' => null, 'valeurs' => array());
 				$cle = '_:'.$e['anon'];
@@ -529,7 +532,7 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 	$nom = function ($iri) use ($prefixes) { return abrege_iri($iri, $prefixes); };
 	$rdftype = '<'.PREFIXES_STANDARD['rdf'].'type>';
 	$presents = array(); $courants = array(); $types_courants = array(); $anons = array();
-	$nommees = array_merge(array_keys($i['nouvelles']), array_keys(array_filter($i['modifiees'], function ($e) { return $e['iri'] !== ''; })));
+	$nommees = array_merge(array_keys(array_filter($i['nouvelles'], function ($e) { return $e['iri'] !== ''; })), array_keys(array_filter($i['modifiees'], function ($e) { return $e['iri'] !== ''; })));
 	$requetes = array();
 	if ($nommees) {
 		$liste = implode(' ', array_map('onto_iri', $nommees));
@@ -565,16 +568,19 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 		return array($p.' '.$strict, null);
 	};
 	$moins = array(); $plus = array(); $suppr = array(); $sujets = array();
+	$rang_anon = 0;
 	foreach ($i['nouvelles'] as $iri => $e) {
-		if (isset($presents[$iri])) return array('', $nb, 'L\'IRI '.$nom($iri).' est déjà utilisée dans votre copie : choisissez un autre identifiant.', array());
-		$s = onto_iri($iri);
+		$anon_neuf = $e['iri'] === '';
+		if (!$anon_neuf && isset($presents[$iri])) return array('', $nb, 'L\'IRI '.$nom($iri).' est déjà utilisée dans votre copie : choisissez un autre identifiant.', array());
+		$s = $anon_neuf ? '_:n'.(++$rang_anon) : onto_iri($iri);     // nœud anonyme : une étiquette de nœud vierge par instance
 		$plus[] = $s.' '.$rdftype.' '.onto_iri($e['classe']).' .';
 		foreach ($e['valeurs'] as $v) {
 			list($pa, $err) = $paire($v, array());
-			if (!is_null($err)) return array('', $nb, 'Instance '.$nom($iri).' : '.$err, array());
+			if (!is_null($err)) return array('', $nb, ($anon_neuf ? 'Nouveau nœud anonyme' : 'Instance '.$nom($iri)).' : '.$err, array());
 			$plus[] = $s.' '.$pa.' .';
 		}
-		$nb['nouvelles']++; $sujets[] = $iri;
+		$nb['nouvelles']++;
+		if (!$anon_neuf) $sujets[] = $iri;
 	}
 	foreach ($i['modifiees'] as $cle => $e) {
 		if ($e['anon'] !== '') continue;       // nœuds anonymes : plus bas

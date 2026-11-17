@@ -341,6 +341,11 @@
 		if (valeur && o.indexOf('value="' + echappe(valeur) + '"') < 0) o += '<option value="' + echappe(valeur) + '" selected>' + echappe(nomCourt(valeur)) + '</option>';
 		return o;
 	}
+	// Partie locale d'un identifiant saisi : le préfixe de l'espace de noms (cine:) est accepté mais facultatif
+	function sansPrefixe(texte, prefixe) {
+		var t = String(texte).trim();
+		return prefixe && t.indexOf(prefixe) === 0 ? t.slice(prefixe.length) : t;
+	}
 	function iriLocale(x) { return E.espace && x.iri.indexOf(E.espace) === 0 ? x.iri.slice(E.espace.length) : x.iri; }
 
 	function rendFiche() {
@@ -349,7 +354,7 @@
 		var t = s.t, st = statut(x, t), off = x.supprime ? ' disabled' : '';
 		var h = '<h2>' + (t === 'classe' ? '🟦 Concept' : '🔵 Propriété') + ' : ' + echappe(affiche(x)) + ' ' + badge(st) + '</h2><div class="formulaire">';
 		h += '<label for="f-label">Libellé</label><input type="text" id="f-label" maxlength="200" value="' + echappe(x.label) + '" placeholder="' + echappe(x.nom) + '"' + off + '>';
-		if (x.nouveau) h += '<label for="f-local">Identifiant</label><input type="text" class="mono" id="f-local" value="' + echappe(iriLocale(x)) + '" title="' + echappe(E.espace) + '…"' + off + '>';
+		if (x.nouveau) h += '<label for="f-local">Identifiant</label><input type="text" class="mono" id="f-local" value="' + echappe(x.nom) + '" title="' + echappe(E.espace) + '… (le préfixe est facultatif)"' + off + '>';
 		else h += '<label>Identifiant</label><input type="text" class="mono" value="' + echappe(x.nom) + '" title="' + echappe(x.iri) + '" disabled>';
 		if (t === 'classe') {
 			h += '<label>Sous-classe de</label><div class="parents">' + x.parents.map(function (p) {
@@ -390,12 +395,12 @@
 		if (lab) lab.addEventListener('input', function (ev) {
 			x.label = ev.target.value;
 			if (x.label && !x.llang && !x.orig.label) x.llang = 'fr';
-			if (x.nouveau && x.iriAuto) { renomme(x, t, E.espace + unique(slug(x.label || 'element', t === 'classe'), x)); var l = $('#f-local'); if (l) l.value = iriLocale(x); }
+			if (x.nouveau && x.iriAuto) { renomme(x, t, E.espace + unique(slug(x.label || 'element', t === 'classe'), x)); var l = $('#f-local'); if (l) l.value = x.nom; }
 			rendLeger();
 		});
 		champ('#f-local', function (v) {
-			var l = v.trim();
-			if (!/^[\p{L}\p{N}_-]+$/u.test(l)) { toast('Identifiant : lettres, chiffres, _ et - seulement'); return; }
+			var l = sansPrefixe(v, E.prefixe);
+			if (!/^[\p{L}\p{N}_-]+$/u.test(l)) { toast('Identifiant « ' + v.trim() + ' » refusé : lettres, chiffres, _ et - seulement' + (E.prefixe ? ', avec ou sans ' + E.prefixe : '')); return; }
 			var iri = E.espace + l;
 			if (iri !== x.iri && (cl(iri) || pr(iri))) { toast('Cet identifiant existe déjà'); return; }
 			x.iriAuto = false; renomme(x, t, iri);
@@ -517,7 +522,7 @@
 			if (p.nouveau || modifie(p, 'prop')) b.props.push({ iri: p.iri, label: p.label, llang: p.llang, domain: p.domain, range: p.range });
 		});
 		if (nbInst()) b.instances = {
-			nouvelles: D.nouvelles.map(function (n) { return { iri: n.iri, classe: n.classe, valeurs: n.valeurs }; }),
+			nouvelles: D.nouvelles.map(function (n) { return n.anon ? { anon: true, classe: n.classe, valeurs: n.valeurs } : { iri: n.iri, classe: n.classe, valeurs: n.valeurs }; }),
 			modifiees: Object.keys(D.modifiees).map(function (k) {
 				var m = D.modifiees[k], o = { types: m.types.map(function (t) { return t.iri; }), valeurs: m.valeurs };
 				if (m.anon) o.anon = m.anon; else o.iri = m.iri;
@@ -755,10 +760,10 @@
 	}
 	function titreInstance(valeurs, classe) {
 		var t = valeurs.filter(function (v) { return v.k === 'lit' && String(v.v).trim() && /(label|name|nom|titre|title)$/i.test(v.p); })[0] ||
-			valeurs.filter(function (v) { return v.k === 'lit' && String(v.v).trim() && !v.dt; })[0];
+			valeurs.filter(function (v) { return v.k === 'lit' && String(v.v).trim() && (!v.dt || v.dt === XSD + 'string'); })[0];
 		return t ? String(t.v).trim() : '';
 	}
-	function proposeLocal(f) {
+	function proposeLocal(f) {   // identifiant proposé pour une instance nommée
 		var base = titreInstance(f.valeurs) ? slug(titreInstance(f.valeurs), false) : slug((cl(f.classe) ? affiche(cl(f.classe)) : 'instance'), false) + 1;
 		var local = base, k = 1;
 		while (iriInstanceExiste(espaceInstances() + local)) local = base + (++k);
@@ -803,7 +808,7 @@
 		if (!nbInst()) return '';
 		var l = [];
 		D.nouvelles.forEach(function (n, i) {
-			l.push('<li>＋ ' + echappe(cl(n.classe) ? affiche(cl(n.classe)) : nomCourt(n.classe)) + ' « ' + echappe(n.titre || n.local) + ' » <button type="button" class="lien-mini" data-ab="nouvelle-edite" data-id="' + i + '">modifier</button> <button type="button" class="lien-mini" data-ab="nouvelle-annule" data-id="' + i + '">retirer</button></li>');
+			l.push('<li>＋ ' + echappe(cl(n.classe) ? affiche(cl(n.classe)) : nomCourt(n.classe)) + ' « ' + echappe(n.titre || n.local || 'sans titre') + ' »' + (n.anon ? ' (nœud anonyme)' : '') + ' <button type="button" class="lien-mini" data-ab="nouvelle-edite" data-id="' + i + '">modifier</button> <button type="button" class="lien-mini" data-ab="nouvelle-annule" data-id="' + i + '">retirer</button></li>');
 		});
 		Object.keys(D.modifiees).forEach(function (iri) {
 			l.push('<li>✎ ' + echappe(D.modifiees[iri].nom) + ' <button type="button" class="lien-mini" data-ab="edite" data-id="' + echappe(iri) + '">modifier</button> <button type="button" class="lien-mini" data-ab="modif-annule" data-id="' + echappe(iri) + '">annuler</button></li>');
@@ -840,7 +845,8 @@
 			h += '<div class="if-ligne"><span class="if-p">Concept</span><select id="if-classe" class="champ">' + E.classes.filter(function (c) { return !c.supprime; }).map(function (c) {
 				return '<option value="' + echappe(c.iri) + '"' + (c.iri === F.classe ? ' selected' : '') + '>' + echappe(affiche(c)) + '</option>';
 			}).join('') + '</select><span></span></div>' +
-				'<div class="if-ligne"><span class="if-p">Identifiant</span><input type="text" id="if-local" class="champ" value="' + echappe(F.local) + '" title="' + echappe(espaceInstances()) + '…"><span></span></div>';
+				'<div class="if-ligne"><span class="if-p">Nœud anonyme</span><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="if-anon"' + (F.anon ? ' checked' : '') + '> sans identifiant (comme les rôles)</label><span></span></div>' +
+				(F.anon ? '' : '<div class="if-ligne"><span class="if-p">Identifiant</span><input type="text" id="if-local" class="champ" value="' + echappe(prefixeInstances() + F.local) + '" title="' + echappe(espaceInstances()) + '…"><span></span></div>');
 		} else {
 			h += '<div class="if-ligne"><span class="if-p">Concept</span><div class="parents">' + F.types.map(function (t) {
 				return '<span class="puce-parent" title="' + echappe(t.iri) + '">' + echappe(cl(t.iri) ? affiche(cl(t.iri)) : t.nom) +
@@ -894,11 +900,15 @@
 			return { p: v.p, k: v.k, v: String(v.v).trim(), dt: v.k === 'lit' && !v.l ? (v.dt || '') : '', l: v.k === 'lit' ? (v.l || '') : '' };
 		});
 		if (F.mode === 'nouvelle') {
-			if (!/^[\p{L}\p{N}_-]+$/u.test(F.local)) { toast('Identifiant : lettres, chiffres, _ et - seulement'); return; }
-			var iri = espaceInstances() + F.local;
-			var autre = F.idx >= 0 && D.nouvelles[F.idx] && D.nouvelles[F.idx].iri === iri;
-			if (!autre && iriInstanceExiste(iri)) { toast('Cet identifiant existe déjà'); return; }
-			var entree = { iri: iri, local: F.local, classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
+			var iri = '', entree;
+			if (F.anon) entree = { iri: '', anon: true, local: '', classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
+			else {
+				if (!/^[\p{L}\p{N}_-]+$/u.test(F.local)) { toast('Identifiant « ' + F.local + ' » refusé : lettres, chiffres, _ et - seulement'); return; }
+				iri = espaceInstances() + F.local;
+				var autre = F.idx >= 0 && D.nouvelles[F.idx] && D.nouvelles[F.idx].iri === iri;
+				if (!autre && iriInstanceExiste(iri)) { toast('Cet identifiant existe déjà'); return; }
+				entree = { iri: iri, local: F.local, classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
+			}
 			if (F.idx >= 0) D.nouvelles[F.idx] = entree; else D.nouvelles.push(entree);
 		} else if (signature(valeurs, F.types) === F.orig) delete D.modifiees[F.cle];
 		else D.modifiees[F.cle] = { iri: F.iri, anon: F.anon, nom: F.nom, classe: F.classe, types: F.types, valeurs: valeurs, orig: F.orig, entrants: F.entrants };
@@ -979,7 +989,7 @@
 			var act = ab.dataset.ab, ident = ab.dataset.id;
 			if (act === 'nouvelle') ouvreNouvelle();
 			else if (act === 'edite') ouvreEdition(ident);
-			else if (act === 'nouvelle-edite') { var n = D.nouvelles[+ident]; F = { mode: 'nouvelle', idx: +ident, classe: n.classe, valeurs: JSON.parse(JSON.stringify(n.valeurs)), iriAuto: false, local: n.local }; rendInstances(); }
+			else if (act === 'nouvelle-edite') { var n = D.nouvelles[+ident]; F = { mode: 'nouvelle', idx: +ident, classe: n.classe, anon: !!n.anon, valeurs: JSON.parse(JSON.stringify(n.valeurs)), iriAuto: false, local: n.local }; rendInstances(); }
 			else if (act === 'nouvelle-annule') { D.nouvelles.splice(+ident, 1); rend(); }
 			else if (act === 'modif-annule') { delete D.modifiees[ident]; rend(); }
 			else if (act === 'annule-sup') { delete D.supprimees[ident]; rend(); }
@@ -1021,8 +1031,8 @@
 		var li = e.target.closest('.if-ligne[data-k]');
 		if (li && e.target.dataset.champ) {
 			var v = F.valeurs[+li.dataset.k]; v[e.target.dataset.champ] = e.target.value;
-			if (F.mode === 'nouvelle' && F.iriAuto && e.target.dataset.champ === 'v') { F.local = proposeLocal(F); var l = $('#if-local'); if (l) l.value = F.local; }
-		} else if (e.target.id === 'if-local') { F.local = e.target.value.trim(); F.iriAuto = false; }
+			if (F.mode === 'nouvelle' && F.iriAuto && e.target.dataset.champ === 'v') { F.local = proposeLocal(F); var l = $('#if-local'); if (l) l.value = prefixeInstances() + F.local; }
+		} else if (e.target.id === 'if-local') { F.local = sansPrefixe(e.target.value, prefixeInstances()); F.iriAuto = false; }
 	});
 	document.addEventListener('change', function (e) {
 		if (!F) return;
@@ -1032,6 +1042,8 @@
 			F.valeurs = proprietesPour(F.classe).slice(0, 10).map(function (p) { return valeurVide(p.iri); }).filter(function (v) { return !garde.some(function (g) { return g.p === v.p; }); }).concat(garde);
 			if (F.iriAuto) F.local = proposeLocal(F);
 			rendInstances();
+		} else if (e.target.id === 'if-anon') {
+			F.anon = e.target.checked; rendInstances();
 		} else if (e.target.id === 'if-type-ajout' && e.target.value) {
 			var cn = cl(e.target.value);
 			F.types.push({ iri: e.target.value, nom: cn ? cn.nom : e.target.value });

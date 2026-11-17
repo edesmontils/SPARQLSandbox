@@ -490,6 +490,28 @@ execute_sparql('cinema', 'INSERT DATA { _:a a <'.$ci['cine:Cinema']['iri'].'> ; 
 list($mi3, ) = modele_instances('cinema');
 $dup = null; foreach ($mi3['classes'] as $c) if ($c['nom'] === 'cine:Cinema') foreach ($c['items'] as $it) if ($it['iri'] === '') $dup = substr($it['nom'], 2);
 verifie(!is_null($dup) && $mauvais(array('supprimees_anon' => array($dup)), 'même contenu'), 'anonyme : nœuds identiques, suppression refusée');
+
+// Création de nœuds anonymes : un nœud distinct par instance, même dans un seul enregistrement
+reinitialise_jeu('cinema');
+list($mi, ) = modele_instances('cinema');
+$ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;
+$avant = $ic['cine:Role']['n'];
+$acteur = $ic['cine:Acteur']['items'][0];
+list($ok, $h, , $sujets) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => array('nouvelles' => array(
+	array('anon' => true, 'classe' => $ci['cine:Role']['iri'], 'valeurs' => array(
+		array('p' => $esp.'personnage', 'k' => 'lit', 'v' => 'Anonyme A', 'dt' => '', 'l' => ''),
+		array('p' => $esp.'acteur', 'k' => 'iri', 'v' => $acteur['nom'], 'dt' => '', 'l' => ''))),
+	array('anon' => true, 'classe' => $ci['cine:Role']['iri'], 'valeurs' => array(array('p' => $esp.'personnage', 'k' => 'lit', 'v' => 'Anonyme B', 'dt' => '', 'l' => ''))),
+))));
+verifie($ok && !$sujets, 'anonyme : deux nœuds créés ('.strip_tags($h).')');
+list($mi2, ) = modele_instances('cinema');
+$ic2 = array(); foreach ($mi2['classes'] as $c) $ic2[$c['nom']] = $c;
+verifie($ic2['cine:Role']['n'] == $avant + 2, 'anonyme : deux rôles de plus');
+verifie($q('ASK { ?b a <'.$ci['cine:Role']['iri'].'> ; <'.$esp.'personnage> "Anonyme A" ; <'.$esp.'acteur> <'.$acteur['iri'].'> . FILTER(isBlank(?b)) }')
+	&& $q('ASK { ?b a <'.$ci['cine:Role']['iri'].'> ; <'.$esp.'personnage> "Anonyme B" . FILTER(isBlank(?b)) }')
+	&& !$q('ASK { ?b <'.$esp.'personnage> "Anonyme A" ; <'.$esp.'personnage> "Anonyme B" }'), 'anonyme : valeurs et référence, deux nœuds distincts');
+verifie($mauvais(array('nouvelles' => array(array('anon' => true, 'classe' => $ci['cine:Role']['iri'], 'valeurs' => array(array('p' => $esp.'annee', 'k' => 'lit', 'v' => 'x', 'dt' => $xsdi, 'l' => ''))))), 'invalide'), 'anonyme : valeur invalide refusée aussi pour un nœud anonyme');
+reinitialise_jeu('cinema');
 reinitialise_jeu('cinema');
 reinitialise_jeu('cinema');
 $a = array('anomalies' => array(anomalie('RDFS', 'a'), anomalie('RDFS', 'b')));
