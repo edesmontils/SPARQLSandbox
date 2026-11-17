@@ -47,6 +47,7 @@ header('Cache-Control: no-store');
     <h1>🧬 Éditeur d'ontologie <small>jeu « <?php echo html($jeux[$jeu]['titre']); ?> » · votre copie</small></h1>
     <div class="groupe">
       <span class="etat" id="etat">Chargement…</span>
+      <button type="button" class="btn secondaire" id="b-controle" title="Contrôler la cohérence de votre copie avec vos modifications, sans rien enregistrer">🔍 Contrôler</button>
       <button type="button" class="btn secondaire" id="b-formes" title="Formes SHACL que votre ontologie fait naître (cardinalités, propriétés fonctionnelles, concepts disjoints)">🛡️ Formes SHACL</button>
       <button type="button" class="btn secondaire" id="b-prefixes" title="Voir, ajouter ou retirer des préfixes (vocabulaires standards ou métier)">🏷️ Préfixes</button>
       <button type="button" class="btn vert" id="b-enreg" disabled>💾 Enregistrer</button>
@@ -140,6 +141,7 @@ header('Cache-Control: no-store');
     <button type="button" class="btn vert" id="s-enreg">💾 Enregistrer et quitter</button>
   </div>
 </dialog>
+<dialog id="dlg-controle" aria-label="Contrôle de cohérence"></dialog>
 <dialog id="dlg-formes" aria-label="Formes SHACL"></dialog>
 <dialog id="dlg-prefixes" aria-label="Préfixes de la copie"></dialog>
 <div class="toast" id="toast" role="status"></div>

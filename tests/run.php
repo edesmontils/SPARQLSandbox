@@ -502,6 +502,23 @@ list($ok, , , ) = enregistre_ontologie('cinema', array('classes' => array(), 'pr
 verifie($ok && !$q('ASK { GRAPH <'.ONTO_GRAPHE_CONTRAINTES.'> { <'.$esp.'duree> ?c ?n } }'), 'formes dérivées : la propriété supprimée emporte sa cardinalité');
 reinitialise_jeu('cinema');
 
+// Contrôle de cohérence du brouillon : rien n'est écrit, le rapport est celui du panneau « Cohérence » plus les modifications
+reinitialise_jeu('cinema');
+list($mo, ) = modele_ontologie('cinema');
+$ci = array(); foreach ($mo['classes'] as $c) $ci[$c['nom']] = $c;
+$esp = $mo['espace'];
+$brouillon_i = array('classes' => array(), 'props' => array(), 'instances' => array('nouvelles' => array(array('iri' => $esp.'sans_realisateur', 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(
+	array('p' => $esp.'titre', 'k' => 'lit', 'v' => 'Sans réalisateur', 'dt' => '', 'l' => 'fr'), array('p' => $esp.'annee', 'k' => 'lit', 'v' => '2020', 'dt' => $xsdi, 'l' => ''))))));
+list($ok, $h0) = controle_brouillon('cinema', array());
+verifie($ok && strpos($h0, 'Aucune modification en cours') !== false, 'contrôle : sans brouillon, l\'état de la copie');
+list($ok, $h1) = controle_brouillon('cinema', $brouillon_i);
+verifie($ok && strpos($h1, 'avec vos modifications non enregistrées') !== false, 'contrôle : avec un brouillon d\'instance');
+if ($avecShacl) verifie(strpos($h1, 'Nouvelles, à cause de vos modifications') !== false && strpos($h1, 'réalisateur') !== false, 'contrôle : un film sans réalisateur est signalé comme nouvelle anomalie');
+verifie(!$q('ASK { <'.$esp.'sans_realisateur> ?p ?o }'), 'contrôle : rien n\'est enregistré dans la copie');
+verifie(!is_array(glob(DOSSIER_TMP.'/*.essai*')) || !glob(DOSSIER_TMP.'/*.essai*'), 'contrôle : la copie jetable est supprimée');
+verifie(!controle_brouillon('cinema', array('classes' => array(array('iri' => 'pas une iri'))))[0], 'contrôle : brouillon invalide refusé');
+reinitialise_jeu('cinema');
+
 // Instances à la main : ajout, modification, suppression dans le même enregistrement que l'ontologie
 list($mi, ) = modele_instances('cinema');
 $ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;

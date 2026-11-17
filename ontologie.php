@@ -152,7 +152,8 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		if (voc_est_meta($l[0])) continue;
 		if (!isset($pr[$l[0]])) $pr[$l[0]] = array('dom' => array(), 'ran' => array());
 		if (!is_null($l[1]) && !voc_est_meta($l[1])) { $pr[$l[0]]['dom'][$l[1]] = true; $ajoute($l[1], false); }
-		if (!is_null($l[2]) && !voc_est_meta($l[2])) { $pr[$l[0]]['ran'][$l[2]] = true; $ajoute($l[2], false); }
+		// la portée rdfs:Literal (un texte libre) est gardée : c'est elle qui dit qu'une valeur peut porter une langue
+		if (!is_null($l[2]) && (!voc_est_meta($l[2]) || $l[2] === PREFIXES_STANDARD['rdfs'].'Literal')) { $pr[$l[0]]['ran'][$l[2]] = true; $ajoute($l[2], false); }
 	}
 	// relations : le prédicat donne la clé ; une relation vers un concept ou une propriété y fait entrer la cible
 	$rel_pred = array();
@@ -452,21 +453,30 @@ function onto_mise_a_jour(array $courant, array $b) {
 	return array(implode(" ;\n", $ops), $n);
 }
 
+// Mise à jour SPARQL qui amène la copie au brouillon (ontologie et instances) ; ne touche à rien.
+// Renvoie array(message d'erreur|null, texte de la mise à jour ('' s'il n'y a rien), nombre d'éléments d'ontologie changés,
+// nombres d'instances par genre, IRI des instances ajoutées ou modifiées, brouillon d'instances nettoyé, modèle courant)
+function maj_du_brouillon($jeu, $brouillon) {
+	$vide = array(null, '', 0, array(), array(), array(), null);
+	list($b, $erreur) = onto_nettoie_brouillon($brouillon);
+	if (is_null($b)) return array($erreur) + $vide;
+	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
+	list($bi, $erreur) = inst_nettoie($brouillon['instances'] ?? array(), $prefixes);
+	if (is_null($bi)) return array($erreur) + $vide;
+	list($courant, $erreur) = modele_ontologie($jeu);
+	if (is_null($courant)) return array($erreur) + $vide;
+	list($maj, $n) = onto_mise_a_jour($courant, $b);
+	list($majI, $nb, $erreur, $sujets) = inst_mise_a_jour($jeu, $bi, $prefixes);
+	if (!is_null($erreur)) return array($erreur) + $vide;
+	return array(null, implode(" ;\n", array_filter(array($maj, $majI), 'strlen')), $n, $nb, $sujets, $bi, $courant);
+}
+
 // Applique le brouillon (ontologie et instances) à la copie de session, en une seule mise à jour :
 // tout ou rien. Renvoie array(ok, HTML du message, modèle de l'ontologie à jour|null, IRI des instances ajoutées ou modifiées)
 function enregistre_ontologie($jeu, $brouillon) {
 	$ko = function ($m) { return array(false, "<p class='statut ko'>❌ ".html($m)."</p>", null, array()); };
-	list($b, $erreur) = onto_nettoie_brouillon($brouillon);
-	if (is_null($b)) return $ko($erreur);
-	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
-	list($bi, $erreur) = inst_nettoie($brouillon['instances'] ?? array(), $prefixes);
-	if (is_null($bi)) return $ko($erreur);
-	list($courant, $erreur) = modele_ontologie($jeu);
-	if (is_null($courant)) return $ko($erreur);
-	list($maj, $n) = onto_mise_a_jour($courant, $b);
-	list($majI, $nb, $erreur, $sujets) = inst_mise_a_jour($jeu, $bi, $prefixes);
+	list($erreur, $tout, $n, $nb, $sujets, $bi, $courant) = maj_du_brouillon($jeu, $brouillon);
 	if (!is_null($erreur)) return $ko($erreur);
-	$tout = implode(" ;\n", array_filter(array($maj, $majI), 'strlen'));
 	if ($tout === '') return array(true, "<p class='statut ok'>Rien à enregistrer : votre copie est déjà à jour.</p>", $courant, array());
 	$r = execute_sparql($jeu, $tout);
 	if (!$r['ok']) return array(false, affiche_resultat($r, array()), null, array());
@@ -481,6 +491,52 @@ function enregistre_ontologie($jeu, $brouillon) {
 	if ($nb['modifiees']) $parts[] = $nb['modifiees']." instance".($nb['modifiees'] > 1 ? 's' : '')." modifiée".($nb['modifiees'] > 1 ? 's' : '');
 	if ($nb['supprimees']) $parts[] = $nb['supprimees']." instance".($nb['supprimees'] > 1 ? 's' : '')." supprimée".($nb['supprimees'] > 1 ? 's' : '');
 	return array(true, "<p class='statut ok'>✅ Enregistré : ".implode(', ', $parts).".</p>".affiche_corps($r, prefixes_jeu($jeu)), $nouveau, $sujets);
+}
+
+// Contrôle de cohérence de la copie AVEC le brouillon, sans rien enregistrer : la mise à jour est jouée sur une copie
+// jetable de la copie, qui passe les mêmes contrôles (RDFS, formes du jeu et formes dérivées) que le panneau « Cohérence »
+// de la page principale. Sans modification en cours, c'est exactement le rapport de ce panneau.
+// Renvoie array(ok, HTML)
+function controle_brouillon($jeu, $brouillon) {
+	$ko = function ($m) { return array(false, "<p class='statut ko'>❌ ".html($m)."</p>"); };
+	list($erreur, $tout, $n, $nb, $sujets, $bi, $courant) = maj_du_brouillon($jeu, $brouillon);
+	if (!is_null($erreur)) return $ko($erreur);
+	$copie = store_copie($jeu, $erreur);
+	if (is_null($copie)) return $ko($erreur);
+	if ($tout === '') {
+		return array(true, "<p class='astuce'>Aucune modification en cours : voici l'état de votre copie.</p>".affiche_coherence(coherence_copie($jeu, $copie)));
+	}
+	if (strlen($tout) > LONGUEUR_MAX_REQUETE) return $ko('Trop de modifications à la fois pour être contrôlées : enregistrez-en une partie.');
+	$place = reserve_execution();
+	if (is_null($place)) return $ko('Trop de requêtes en cours depuis votre poste : réessayez dans un instant.');
+	$v = verrou('copie_'.basename($copie));
+	$tmp = $copie.'.essai'.getmypid();
+	try {
+		supprime_dossier($tmp);
+		if (!copie_dossier($copie, $tmp)) return $ko('Copie de travail impossible.');
+		$r = lance_oxigraph(array('update', '--location', $tmp), $tout);
+		if (!is_null($m = message_execution($r))) return $ko($m);
+		$avant = coherence_copie($jeu, $copie);
+		$apres = controle_coherence($jeu, $tmp);
+	} finally {
+		supprime_dossier($tmp);
+		libere($v);
+		libere($place);
+	}
+	list($nouvelles, $corrigees) = difference_coherence($avant, $apres);
+	$restantes = array();
+	$cles = array(); foreach ($nouvelles as $a) $cles[cle_anomalie($a)] = true;
+	foreach ($apres['anomalies'] as $a) if (!isset($cles[cle_anomalie($a)])) $restantes[] = $a;
+	$na = count($apres['anomalies']);
+	$h = "<p class='astuce'>Contrôle de votre copie <strong>avec vos modifications non enregistrées</strong> (rien n'est écrit dans votre copie).</p>";
+	if ($na == 0) $h .= "<p class='statut ok'>✅ Aucune incohérence".($corrigees ? ' : vos modifications en corrigent '.count($corrigees) : '').'.</p>';
+	else $h .= "<p class='statut avertissement'>⚠️ $na incohérence".($na > 1 ? 's' : '').($apres['tronque'] ? ' (au moins)' : '').' avec vos modifications ('
+		.count($nouvelles).' nouvelle'.(count($nouvelles) > 1 ? 's' : '').', '.count($restantes).' déjà présente'.(count($restantes) > 1 ? 's' : '').', '.count($corrigees).' corrigée'.(count($corrigees) > 1 ? 's' : '').').</p>';
+	if ($nouvelles) $h .= "<h3>Nouvelles, à cause de vos modifications</h3>".liste_anomalies($nouvelles);
+	if ($corrigees) $h .= "<h3>Corrigées par vos modifications</h3>".liste_anomalies($corrigees);
+	if ($restantes) $h .= "<h3>Déjà présentes dans votre copie</h3>".liste_anomalies($restantes);
+	foreach ($apres['notes'] as $note) $h .= "<p class='astuce'>".html($note)."</p>";
+	return array(true, $h);
 }
 
 // Ontologie « effective » : le modèle courant avec le brouillon appliqué (éléments ajoutés,

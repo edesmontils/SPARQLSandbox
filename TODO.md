@@ -36,8 +36,7 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   `peuplement.php`) : graphe et liste éditables (sous-classes multiples, flèches ré-accrochables par
   leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA
   (général ou ciblé), axiomes RDFS/OWL des concepts et propriétés (sous-propriété, inverse, équivalences,
-  disjonction, caractéristiques, genre, annotations) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
-  contrôle de cohérence ontologie/instance dans l'éditeur ; formes SHACL dérivées de l'ontologie (cardinalités, propriété fonctionnelle,
+  disjonction, caractéristiques, genre, annotations) ; tout est un brouillon enregistré d'un coup dans la copie. Le bouton « Contrôler » existe. Reste : formes SHACL dérivées de l'ontologie (cardinalités, propriété fonctionnelle,
   concepts disjoints) faites ; à traduire encore : `owl:InverseFunctionalProperty`, symétrie, irréflexivité, `sh:in` (valeurs permises).
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
@@ -50,19 +49,17 @@ servent de référence.
 
 ### P1 — bloquant ou confusant
 
-- **T4 — `cine:titre` non conservé à l'enregistrement (langue perdue)** : `rdfs:range rdfs:Literal`
-  (`donnees/cinema/ontologie.ttl:24`) ; le type observé `rdf:langString` remplace `rdfs:Literal`
-  (`vocabulaire.php:105`), mais la langue n'est pas transmise au brouillon (`js/editeur.js:57,876` ;
-  le champ `l` doit être propagé via `peuplement.php:254` et `ontologie.php` `enregistre_ontologie`).
-  Piste : garder `@lang` dans le brouillon et à l'enregistrement.
-- **T6 — instances en cours d'ajout invisibles** : un nouveau film avec un nouveau réalisateur
-  n'apparaît pas dans la liste (`js/editeur.js` `rendInstances()`, brouillon `instances`).
-  Piste : afficher les instances « nouveau » du brouillon (badge, rouvrables).
-- **T2 — incohérences différentes entre page principale et éditeur** : le panneau « Cohérence »
-  (`coherence.php` `controle_coherence`, action `explorer` de `controler.php`) et la vue
-  « Formes SHACL » de l'éditeur (action `formes`) ne montrent pas les mêmes anomalies.
-  Piste : un seul rapport (RDFS + SHACL, formes du jeu + formes dérivées du brouillon) dans les
-  deux pages ; le bouton de contrôle de cohérence dans l'éditeur est déjà listé plus haut.
+- **T4 — langue des textes libres** (fait) : `cine:titre` a pour portée `rdfs:Literal`, que le modèle de l'ontologie ignorait ;
+  elle est gardée (`ontologie.php`), et un nouveau texte libre prend la langue par défaut (`fr`) dans le formulaire d'instance
+  (`js/editeur.js` `valeurVide`), modifiable ; liste de langues proposée.
+- **T6 — instances du brouillon invisibles** (fait) : elles apparaissent en tête de leur concept (`classesAffichees` de
+  `js/editeur.js`), avec le badge « à enregistrer », rouvrables ou retirables ; un concept qui n'a que des instances du
+  brouillon est montré aussi.
+- **T2 — rapport de cohérence unique** (fait) : le bouton « 🔍 Contrôler » de l'éditeur (action `controle`,
+  `controle_brouillon()` dans `ontologie.php`) joue le brouillon sur une copie jetable et lui applique les mêmes
+  contrôles que le panneau « Cohérence » (RDFS, formes du jeu, formes dérivées) ; sans brouillon, c'est exactement
+  ce rapport. « 🛡️ Formes SHACL » montre les formes, pas les anomalies. Piste : surligner dans le graphe les éléments
+  en cause.
 - **T8 — l'IA insère des triplets incohérents (incomplets)** : `peuplement.php` `peupl_valide()`
   ne vérifie que la structure. Piste : valider les propositions contre les formes (pyshacl sur un
   store temporaire, comme `controles_shacl`) ou les marquer via `difference_coherence`.

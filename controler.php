@@ -2,6 +2,7 @@
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
 // ontologie (jeu), ontologie_enregistrer (jeu, brouillon64 : ontologie, instances, propositions de l'IA), instances (jeu),
+// controle (jeu, brouillon64) : cohérence de la copie avec le brouillon, sans rien écrire,
 // formes (jeu, brouillon64) : formes SHACL de l'ontologie et du jeu,
 // prefixes (jeu), prefixe_ajouter (jeu, prefixe, iri), prefixe_retirer (jeu, prefixe) : préfixes de la copie,
 // instance (jeu, iri ou anon), ia_peupler (jeu, mode, quantite, consigne, brouillon64) :
@@ -110,6 +111,12 @@ case 'instance':
 	list($modele, $erreur) = modele_instance($jeu, (string)param('iri'), (string)param('anon'));
 	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
 	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	exit;
+case 'controle':
+	$brouillon = brouillon_recu();
+	if (is_null($brouillon)) reponse(false, "<p class='statut ko'>❌ Brouillon reçu illisible.</p>", 400);
+	list($ok, $h) = controle_brouillon($jeu, $brouillon);
+	echo json_encode(array('ok' => $ok, 'html' => $h), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'formes':
 	// formes SHACL que l'ontologie (brouillon compris) fait naître, et celles du jeu

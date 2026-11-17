@@ -585,4 +585,8 @@ a.btn { display: inline-block; text-decoration: none; }
 #dlg-formes h3 { margin: 14px 0 6px; font-size: 1em; }
 pre.turtle { margin: 0 0 8px; padding: 10px 12px; max-height: 300px; overflow: auto; background: var(--sb-surface-2); border: 1px solid var(--sb-border); border-radius: var(--sb-radius-sm); font-size: .84em; white-space: pre-wrap; word-break: break-word; }
 .ax-nb { width: 5em; padding: 3px 6px; display: inline-block; }
+.inst.nouveau-brouillon { border-color: var(--sb-ok-border); background: var(--sb-ok-soft); }
+#dlg-controle { max-width: 820px; }
+#dlg-controle h2 { margin-top: 0; }
+#dlg-controle h3 { margin: 14px 0 6px; font-size: 1em; }
 

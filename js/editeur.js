@@ -7,7 +7,7 @@
 
 	var donnees = JSON.parse(document.getElementById('donnees').textContent);
 	var XSD = 'http://www.w3.org/2001/XMLSchema#', RDFS = 'http://www.w3.org/2000/01/rdf-schema#', RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
-	var LARGEUR = 170, ECART_Y = 90;
+	var LARGEUR = 170, ECART_Y = 90, LANGUE_DEFAUT = 'fr';
 
 	function $(s) { return document.querySelector(s); }
 	function echappe(t) {
@@ -870,10 +870,12 @@
 	];
 	function valeurVide(piri) {
 		var std = !pr(piri) && PROPS_STD.filter(function (x) { return x.iri === piri; })[0];
-		if (std) return { p: piri, nom: std.nom, k: std.k, v: '', dt: '', l: '' };
+		if (std) return { p: piri, nom: std.nom, k: std.k, v: '', dt: '', l: std.k === 'lit' ? LANGUE_DEFAUT : '' };
 		var p = pr(piri), r = p && p.range;
 		if (r && !litteral(r)) return { p: piri, k: 'iri', v: '', dt: '', l: '' };
-		return { p: piri, k: 'lit', v: '', dt: r && r !== RDFS + 'Literal' && r !== RDF + 'langString' ? r : '', l: '' };
+		// un texte libre (portée rdfs:Literal ou rdf:langString) prend la langue par défaut : sans elle, « Alien » n'est pas « Alien »@fr
+		var texteLibre = r === RDFS + 'Literal' || r === RDF + 'langString';
+		return { p: piri, k: 'lit', v: '', dt: r && !texteLibre ? r : '', l: texteLibre ? LANGUE_DEFAUT : '' };
 	}
 	function signature(valeurs, types) {
 		return JSON.stringify([valeurs.filter(function (v) { return v.k !== 'bn' && String(v.v).trim() !== ''; })
@@ -911,12 +913,19 @@
 		h += rendBrouillonInstances();
 		h += '<p class="astuce">Les individus de votre copie, par concept. Sélectionnez un concept dans le graphe pour voir les siens.' + (I.tronque ? ' <strong>Liste tronquée.</strong>' : '') + '</p>';
 		if (!I.classes.length) h += '<p class="astuce">Aucune instance : ajoutez-en une, ou peuplez l\'instance avec l\'IA (onglet voisin).</p>';
-		I.classes.forEach(function (c) {
-			var ouvert = !!ouverts[c.iri];
+		classesAffichees().forEach(function (c) {
+			var ouvert = !!ouverts[c.iri], attente = c.attente || [], nAttente = attente.length;
 			var nIA = c.items.filter(function (it) { return it.iri && iaIris[it.iri]; }).length;
 			h += '<div class="inst-classe' + (c.iri === selIri ? ' sel' : '') + '"><button type="button" class="lien-mini inst-tete" data-ic="' + echappe(c.iri) + '" aria-expanded="' + ouvert + '" style="display:flex;width:100%;justify-content:space-between;font-weight:600;padding:5px 2px">' +
-				'<span>' + (ouvert ? '▾ ' : '▸ ') + echappe(c.nom) + (nIA ? ' <span class="badge ia">' + nIA + ' IA</span>' : '') + '</span><span>' + c.n + '</span></button>';
+				'<span>' + (ouvert ? '▾ ' : '▸ ') + echappe(c.nom) + (nIA ? ' <span class="badge ia">' + nIA + ' IA</span>' : '') + '</span><span>' + c.n + (nAttente ? ' <span class="badge new" title="à enregistrer">+' + nAttente + '</span>' : '') + '</span></button>';
 			if (ouvert) {
+				attente.forEach(function (a) {   // instances du brouillon : en tête de leur concept
+					if (a.n) h += '<div class="inst nouveau-brouillon"><div class="tete"><strong>' + echappe(a.n.titre || a.n.local || 'sans titre') + '</strong><span class="badge new">à enregistrer</span>' + (a.n.anon ? '<span class="badge">anonyme</span>' : '') +
+						'<button type="button" class="lien-mini" data-ab="nouvelle-edite" data-id="' + a.i + '" title="Modifier">✎</button><button type="button" class="lien-mini" data-ab="nouvelle-annule" data-id="' + a.i + '" title="Retirer du brouillon">✕</button></div>' +
+						(a.n.local ? '<div class="vals">' + echappe(a.n.local) + '</div>' : '') + '<div class="vals">' + a.n.valeurs.map(function (v) { return echappe(nomValeur(v)) + ' = ' + echappe(v.v) + (v.l ? '@' + echappe(v.l) : ''); }).join(' · ') + '</div></div>';
+					else h += '<div class="inst nouveau-ia"><div class="tete"><strong>' + echappe(a.p.titre) + '</strong><span class="badge ia">IA</span><span class="badge new">à enregistrer</span>' +
+						'<button type="button" class="lien-mini" data-ab="ia-retire" data-id="' + a.p.i + '" title="Retirer du brouillon">✕</button></div>' + (a.p.detail.length ? '<div class="vals">' + a.p.detail.map(echappe).join(' · ') + '</div>' : '') + '</div>';
+				});
 				c.items.forEach(function (it) {
 					var vals = it.props.map(function (p) { return echappe(p.p) + ' = ' + echappe(p.v) + (p.l ? '@' + echappe(p.l) : ''); }).join(' · ');
 					var cle = cleItem(it), supprime = D.supprimees[cle] !== undefined, modifie_ = D.modifiees[cle];
@@ -932,6 +941,21 @@
 			h += '</div>';
 		});
 		zone.innerHTML = h;
+	}
+	// Nom d'une propriété d'après son IRI (déclarée ou standard)
+	function nomValeur(v) { var p = pr(v.p); return p ? affiche(p) : (v.nom || nomDe(v.p)); }
+	// Concepts montrés dans l'onglet : ceux de la copie, et ceux qui n'ont que des instances du brouillon ; chacun avec ce qui l'attend
+	function classesAffichees() {
+		var classes = I.classes.map(function (c) { return Object.assign({}, c, { attente: [] }); }), parIri = {}, parNom = {};
+		classes.forEach(function (c) { parIri[c.iri] = c; parNom[c.nom] = c; });
+		var entree = function (iri, nom) {
+			var c = parIri[iri] || (nom !== undefined && parNom[nom]);
+			if (!c) { var e = cl(iri) || E.classes.filter(function (x) { return x.nom === nom; })[0]; c = { iri: e ? e.iri : iri, nom: e ? e.nom : (nom || nomDe(iri)), n: 0, plus: 0, items: [], attente: [] }; classes.push(c); parIri[c.iri] = c; parNom[c.nom] = c; }
+			return c;
+		};
+		D.nouvelles.forEach(function (n, i) { entree(n.classe).attente.push({ i: i, n: n }); });
+		D.ia.filter(function (p) { return p.genre === 'nouveau'; }).forEach(function (p) { entree('', p.cible).attente.push({ p: p }); });
+		return classes.sort(function (a, b) { return a.nom.localeCompare(b.nom); });
 	}
 	function rendBrouillonInstances() {
 		if (!nbInst()) return '';
@@ -962,7 +986,7 @@
 		else {
 			var type = /#(integer|int|long|decimal|double|float)$/.test(v.dt) ? 'number' : /#date$/.test(v.dt) ? 'date' : 'text';
 			h += '<span style="display:flex;gap:4px"><input type="' + type + '" class="champ" step="any" data-champ="v" value="' + echappe(v.v) + '"' + (v.dt && type === 'text' && v.dt !== XSD + 'string' ? ' placeholder="' + echappe(nomCourt(v.dt)) + '"' : '') + '>' +
-				(texte ? '<input type="text" class="champ" data-champ="l" value="' + echappe(v.l) + '" placeholder="langue" title="Langue du texte (fr, en…), facultative" style="width:4.5em">' : '') + '</span>';
+				(texte ? '<input type="text" class="champ" data-champ="l" value="' + echappe(v.l) + '" placeholder="langue" list="dl-langues" title="Langue du texte (fr, en…), facultative : un texte sans langue n\'est pas le même qu\'un texte @fr" style="width:4.5em">' : '') + '</span>';
 		}
 		return h + '<button type="button" class="lien-mini" data-rm-val="' + k + '" aria-label="Retirer cette valeur">✕</button></div>';
 	}
@@ -994,7 +1018,7 @@
 			'<optgroup label="RDFS / OWL">' + PROPS_STD.map(function (x) { return '<option value="' + echappe(x.iri) + '">' + echappe(x.nom) + '</option>'; }).join('') + '</optgroup></select>';
 		var noms = [];
 		(I ? I.classes : []).forEach(function (c) { c.items.forEach(function (it) { if (it.iri && noms.length < 600) noms.push('<option value="' + echappe(it.nom) + '" label="' + echappe(it.titre || '') + '">'); }); });
-		h += '<datalist id="dl-inst">' + noms.join('') + '</datalist>';
+		h += '<datalist id="dl-inst">' + noms.join('') + '</datalist><datalist id="dl-langues"><option value="fr"><option value="en"><option value="de"><option value="es"><option value="it"></datalist>';
 		h += '<div class="boutons"><button type="button" class="btn vert petit" id="if-ok">✔ Valider</button><button type="button" class="btn secondaire petit" id="if-annule">Annuler</button>' +
 			(F.mode === 'edition' && !F.bn ? '<button type="button" class="btn danger petit" id="if-suppr">🗑️ Supprimer l\'instance</button>' : '') + '</div>' +
 			'<p class="astuce">Rien n\'est écrit dans votre copie avant « Enregistrer ».</p></div>';
@@ -1041,6 +1065,7 @@
 				entree = { iri: iri, local: F.local, classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
 			}
 			if (F.idx >= 0) D.nouvelles[F.idx] = entree; else D.nouvelles.push(entree);
+			ouverts[F.classe] = true;
 		} else if (signature(valeurs, F.types) === F.orig) delete D.modifiees[F.cle];
 		else D.modifiees[F.cle] = { iri: F.iri, anon: F.anon, nom: F.nom, classe: F.classe, types: F.types, valeurs: valeurs, orig: F.orig, entrants: F.entrants };
 		F = null;
@@ -1097,12 +1122,26 @@
 		if (!cochees.length) { toast('Cochez au moins une proposition'); return; }
 		var prises = propositions.liste.filter(function (p) { return cochees.indexOf(String(p.i)) >= 0; });
 		D.iaJeton = propositions.jeton;
-		prises.forEach(function (p) { D.ia.push(p); });
+		prises.forEach(function (p) { D.ia.push(p); var c = E.classes.filter(function (x) { return x.nom === p.cible; })[0]; if (c) ouverts[c.iri] = true; });
 		propositions.liste = propositions.liste.filter(function (p) { return cochees.indexOf(String(p.i)) < 0; });
 		message('');
 		rend(); rendPropositions();
 		toast('✨ ' + prises.length + ' proposition(s) ajoutée(s) au brouillon : à enregistrer');
 		ouvreOnglet('instances');
+	}
+
+	//--------------------------------------------------------------------------
+	// Contrôle de cohérence de la copie avec le brouillon (rien n'est enregistré)
+	//--------------------------------------------------------------------------
+	function ouvreControle() {
+		var d = $('#dlg-controle');
+		d.innerHTML = '<h2>🔍 Contrôle de cohérence</h2><p class="astuce">⏳ Contrôle en cours (RDFS, formes SHACL du jeu et formes de votre ontologie)…</p>';
+		if (!d.open) d.showModal();
+		appel('controle', { brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
+			d.innerHTML = '<h2>🔍 Contrôle de cohérence</h2><div aria-live="polite">' + r.html + '</div>' +
+				'<p class="astuce">Ce contrôle est le même que le panneau « 🩺 Cohérence » de la page principale, avec en plus vos modifications non enregistrées. Les formes SHACL sont visibles avec « 🛡️ Formes SHACL ».</p>' +
+				'<div class="boutons"><button type="button" class="btn" id="controle-fermer">Fermer</button></div>';
+		});
 	}
 
 	//--------------------------------------------------------------------------
@@ -1215,6 +1254,8 @@
 		if (rv && F) { F.valeurs.splice(+rv.dataset.rmVal, 1); rendInstances(); return; }
 		var id = e.target.id;
 		if (id === 'b-prefixes') ouvrePrefixes();
+		else if (id === 'b-controle') ouvreControle();
+		else if (id === 'controle-fermer') $('#dlg-controle').close();
 		else if (id === 'b-formes') ouvreFormes();
 		else if (id === 'formes-fermer') $('#dlg-formes').close();
 		else if (id === 'formes-telecharge') telechargeFormes();
