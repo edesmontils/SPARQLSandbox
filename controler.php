@@ -2,6 +2,7 @@
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
 // ontologie (jeu), ontologie_enregistrer (jeu, brouillon64 : ontologie, instances, propositions de l'IA), instances (jeu),
+// prefixes (jeu), prefixe_ajouter (jeu, prefixe, iri), prefixe_retirer (jeu, prefixe) : préfixes de la copie,
 // instance (jeu, iri ou anon), ia_peupler (jeu, mode, quantite, consigne, brouillon64) :
 // éditeur d'ontologie (editeur.php), affichage et peuplement par IA des instances (peuplement.php),
 // exercice (jeu, exercice), verifier (jeu, exercice, question, requete64),
@@ -108,6 +109,19 @@ case 'instance':
 	list($modele, $erreur) = modele_instance($jeu, (string)param('iri'), (string)param('anon'));
 	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
 	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	exit;
+case 'prefixes':
+	echo json_encode(array('ok' => true, 'prefixes' => liste_prefixes($jeu)), JSON_UNESCAPED_UNICODE);
+	exit;
+case 'prefixe_ajouter':
+	$p = (string)param('prefixe'); $iri = (string)param('iri');
+	if ($iri === '' && isset(PREFIXES_CATALOGUE[$p])) $iri = PREFIXES_CATALOGUE[$p][0];     // vocabulaire du catalogue : le préfixe suffit
+	list($ok, $m) = ajoute_prefixe($jeu, $p, $iri);
+	echo json_encode(array('ok' => $ok, 'message' => $m, 'prefixes' => liste_prefixes($jeu)), JSON_UNESCAPED_UNICODE);
+	exit;
+case 'prefixe_retirer':
+	list($ok, $m) = retire_prefixe($jeu, (string)param('prefixe'));
+	echo json_encode(array('ok' => $ok, 'message' => $m, 'prefixes' => liste_prefixes($jeu)), JSON_UNESCAPED_UNICODE);
 	exit;
 case 'reinitialiser':
 	reinitialise_jeu($jeu);

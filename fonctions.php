@@ -149,7 +149,12 @@ function retire_marge($texte) {
 }
 
 // Préfixes déclarés dans les fichiers de données d'un jeu (@prefix ou PREFIX)
+// Préfixes déclarés dans les fichiers du jeu, puis ceux que l'étudiant a ajoutés à sa copie (voir plus bas)
 function prefixes_jeu($jeu) {
+	return array_merge(prefixes_fichiers($jeu), prefixes_ajoutes($jeu));
+}
+
+function prefixes_fichiers($jeu) {
 	$jeux = liste_jeux();
 	if (!isset($jeux[$jeu])) return array();
 	$texte = '';
@@ -158,6 +163,73 @@ function prefixes_jeu($jeu) {
 	$p = array();
 	foreach ($m as $d) $p[$d[1]] = $d[2];
 	return $p;
+}
+
+//------------------------------------------------------
+// Préfixes ajoutés par l'étudiant : vocabulaires standards ou « métier », gardés en session
+// pour la copie du jeu (ils servent à abréger les IRI, dans les requêtes comme dans l'éditeur)
+//------------------------------------------------------
+
+const PREFIXES_AJOUTES_MAX = 20;
+// Vocabulaires courants proposés en un clic : préfixe => array(espace de noms, description)
+const PREFIXES_CATALOGUE = array(
+	'skos'  => array('http://www.w3.org/2004/02/skos/core#', 'SKOS : thésaurus, concepts et vocabulaires contrôlés'),
+	'dce'   => array('http://purl.org/dc/elements/1.1/', 'Dublin Core, éléments (titre, créateur, sujet…)'),
+	'org'   => array('http://www.w3.org/ns/org#', 'Organisations, unités et rôles'),
+	'prov'  => array('http://www.w3.org/ns/prov#', 'Provenance : qui a produit quoi, comment'),
+	'dcat'  => array('http://www.w3.org/ns/dcat#', 'Catalogues de jeux de données'),
+	'vcard' => array('http://www.w3.org/2006/vcard/ns#', 'Cartes de visite : personnes, adresses, contacts'),
+	'geo'   => array('http://www.w3.org/2003/01/geo/wgs84_pos#', 'Positions géographiques (latitude, longitude)'),
+	'time'  => array('http://www.w3.org/2006/time#', 'Temps : instants, intervalles, durées'),
+	'sh'    => array('http://www.w3.org/ns/shacl#', 'SHACL : formes de validation'),
+	'void'  => array('http://rdfs.org/ns/void#', 'Description de jeux de données liés'),
+	'sioc'  => array('http://rdfs.org/sioc/ns#', 'Communautés en ligne : forums, messages, utilisateurs'),
+	'gr'    => array('http://purl.org/goodrelations/v1#', 'Commerce : offres, produits, entreprises'),
+	'wd'    => array('http://www.wikidata.org/entity/', 'Wikidata : entités'),
+	'wdt'   => array('http://www.wikidata.org/prop/direct/', 'Wikidata : propriétés directes'),
+	'dbo'   => array('http://dbpedia.org/ontology/', 'DBpedia : ontologie'),
+	'dbr'   => array('http://dbpedia.org/resource/', 'DBpedia : ressources'),
+);
+
+function prefixes_ajoutes($jeu) {
+	$p = $_SESSION['prefixes'][$jeu] ?? array();
+	return is_array($p) ? $p : array();
+}
+
+// Tous les préfixes connus de la copie : standard, du jeu, ajoutés (les derniers l'emportent)
+function prefixes_connus($jeu) { return array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu)); }
+
+// Ajoute le préfixe $prefixe pour l'espace de noms $iri à la copie du jeu ; renvoie array(ok, message)
+function ajoute_prefixe($jeu, $prefixe, $iri) {
+	if (!isset(liste_jeux()[$jeu])) return array(false, 'Jeu inconnu.');
+	$prefixe = trim((string)$prefixe); $iri = trim((string)$iri);
+	if (!preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,19}$/D', $prefixe)) return array(false, 'Préfixe invalide : une lettre puis des lettres, chiffres, _ ou - (20 caractères au plus).');
+	if (strlen($iri) > 200 || !preg_match('#^https?://[^\s<>"{}|\\^`]+[\#/]$#D', $iri))
+		return array(false, "Espace de noms invalide : une adresse http(s) qui se termine par # ou / (par exemple http://example.org/meteo#).");
+	$connus = prefixes_connus($jeu);
+	if (isset($connus[$prefixe])) return $connus[$prefixe] === $iri ? array(true, "Le préfixe $prefixe: est déjà défini pour cet espace de noms.") : array(false, "Le préfixe $prefixe: est déjà utilisé pour <".$connus[$prefixe].'>.');
+	$autre = array_search($iri, $connus, true);
+	if ($autre !== false) return array(false, "Cet espace de noms a déjà le préfixe $autre:.");
+	if (count(prefixes_ajoutes($jeu)) >= PREFIXES_AJOUTES_MAX) return array(false, 'Vous avez déjà ajouté '.PREFIXES_AJOUTES_MAX.' préfixes : retirez-en un d\'abord.');
+	$_SESSION['prefixes'][$jeu][$prefixe] = $iri;
+	return array(true, "Préfixe $prefixe: ajouté.");
+}
+
+// Retire un préfixe ajouté par l'étudiant (ceux du jeu et les standards restent) ; renvoie array(ok, message)
+function retire_prefixe($jeu, $prefixe) {
+	if (!isset(prefixes_ajoutes($jeu)[$prefixe])) return array(false, "Le préfixe $prefixe: n'a pas été ajouté : il ne peut pas être retiré.");
+	unset($_SESSION['prefixes'][$jeu][$prefixe]);
+	return array(true, "Préfixe $prefixe: retiré.");
+}
+
+// Pour la boîte de dialogue : préfixes du jeu, standards, ajoutés, et vocabulaires du catalogue pas encore définis
+function liste_prefixes($jeu) {
+	$connus = prefixes_connus($jeu);
+	$catalogue = array();
+	foreach (PREFIXES_CATALOGUE as $p => $d)
+		if (!isset($connus[$p]) && !in_array($d[0], $connus, true)) $catalogue[] = array('prefixe' => $p, 'iri' => $d[0], 'description' => $d[1]);
+	$fichiers = prefixes_fichiers($jeu);
+	return array('jeu' => $fichiers, 'standard' => array_diff_key(PREFIXES_STANDARD, $fichiers), 'ajoutes' => prefixes_ajoutes($jeu), 'catalogue' => $catalogue);
 }
 
 //======================================================
@@ -469,7 +541,7 @@ function store_copie($jeu, &$erreur = null) {
 // Revient au jeu d'origine : la copie est supprimée, la suivante sera refaite
 function reinitialise_jeu($jeu) {
 	$copie = $_SESSION['copies'][$jeu] ?? null;
-	unset($_SESSION['copies'][$jeu], $_SESSION['coherence'][$jeu]);
+	unset($_SESSION['copies'][$jeu], $_SESSION['coherence'][$jeu], $_SESSION['prefixes'][$jeu]);
 	if (is_string($copie) && dirname($copie) === DOSSIER_TMP) {
 		$v = verrou('copie_'.basename($copie));
 		supprime_dossier($copie);

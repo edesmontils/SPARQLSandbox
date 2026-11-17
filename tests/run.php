@@ -491,6 +491,27 @@ list($mi3, ) = modele_instances('cinema');
 $dup = null; foreach ($mi3['classes'] as $c) if ($c['nom'] === 'cine:Cinema') foreach ($c['items'] as $it) if ($it['iri'] === '') $dup = substr($it['nom'], 2);
 verifie(!is_null($dup) && $mauvais(array('supprimees_anon' => array($dup)), 'même contenu'), 'anonyme : nœuds identiques, suppression refusée');
 
+// Préfixes ajoutés à la copie : vocabulaire standard du catalogue, ou préfixe « métier »
+reinitialise_jeu('cinema');
+$cat0 = array_column(liste_prefixes('cinema')['catalogue'], 'prefixe');
+verifie(in_array('skos', $cat0) && !in_array('foaf', $cat0) && !in_array('cine', $cat0), 'préfixes : catalogue sans ce qui est déjà défini');
+verifie(!ajoute_prefixe('cinema', '1x', 'http://e.org/x#')[0] && !ajoute_prefixe('cinema', 'a b', 'http://e.org/x#')[0], 'préfixes : nom invalide refusé');
+verifie(!ajoute_prefixe('cinema', 'meteo', 'http://e.org/meteo')[0] && !ajoute_prefixe('cinema', 'meteo', 'ftp://e.org/meteo#')[0] && !ajoute_prefixe('cinema', 'meteo', 'http://e.org/<x>#')[0], 'préfixes : espace de noms invalide refusé');
+verifie(!ajoute_prefixe('cinema', 'cine', 'http://e.org/autre#')[0], 'préfixes : préfixe du jeu non redéfini');
+verifie(ajoute_prefixe('cinema', 'cine', 'http://example.org/cinema/vocab#')[0] && !prefixes_ajoutes('cinema'), 'préfixes : même définition = rien à faire');
+verifie(!ajoute_prefixe('cinema', 'f', PREFIXES_STANDARD['foaf'])[0], 'préfixes : un espace de noms n\'a qu\'un préfixe');
+verifie(ajoute_prefixe('cinema', 'skos', PREFIXES_CATALOGUE['skos'][0])[0] && ajoute_prefixe('cinema', 'meteo', 'http://example.org/meteo#')[0], 'préfixes : catalogue et préfixe métier ajoutés');
+$connus = prefixes_connus('cinema');
+verifie(abrege_iri('http://www.w3.org/2004/02/skos/core#Concept', $connus) === 'skos:Concept' && abrege_iri('http://example.org/meteo#Station', $connus) === 'meteo:Station', 'préfixes : IRI abrégées avec les nouveaux préfixes');
+verifie(!in_array('skos', array_column(liste_prefixes('cinema')['catalogue'], 'prefixe')) && count(liste_prefixes('cinema')['ajoutes']) == 2, 'préfixes : liste mise à jour');
+list($mo, ) = modele_ontologie('cinema');
+verifie(($mo['prefixes']['skos'] ?? '') === PREFIXES_CATALOGUE['skos'][0] && isset($mo['prefixes']['cine'], $mo['prefixes']['xsd']), 'préfixes : le modèle de l\'éditeur les porte');
+verifie(retire_prefixe('cinema', 'meteo')[0] && !retire_prefixe('cinema', 'meteo')[0] && !retire_prefixe('cinema', 'cine')[0], 'préfixes : retrait de ceux qui ont été ajoutés seulement');
+for ($k = 0; $k < PREFIXES_AJOUTES_MAX + 2; $k++) $dernier = ajoute_prefixe('cinema', 'p'.$k, 'http://e.org/p'.$k.'#');
+verifie(!$dernier[0] && count(prefixes_ajoutes('cinema')) == PREFIXES_AJOUTES_MAX, 'préfixes : nombre limité');
+reinitialise_jeu('cinema');
+verifie(!prefixes_ajoutes('cinema'), 'préfixes : retour au jeu d\'origine les efface');
+
 // Création de nœuds anonymes : un nœud distinct par instance, même dans un seul enregistrement
 reinitialise_jeu('cinema');
 list($mi, ) = modele_instances('cinema');

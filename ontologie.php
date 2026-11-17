@@ -103,6 +103,7 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 	}
 	foreach (onto_types() as $t) $sortie['types'][] = array('iri' => $t, 'nom' => $nom($t));
 	$sortie['espace'] = onto_espace(array_merge(array_keys($cl), array_keys($pr)));
+	$sortie['prefixes'] = $prefixes;   // pour abréger et résoudre les identifiants saisis dans l'éditeur
 	return $sortie;
 }
 

@@ -22,6 +22,8 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
+- **Préfixes** (fait) : l'étudiant ajoute à sa copie un vocabulaire standard (catalogue de `PREFIXES_CATALOGUE`) ou un préfixe métier,
+  gardé en session ; piste : l'exporter avec le Turtle de la copie, ou le garder avec les mémoires de requêtes.
 - **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `js/disposition.js`, `ontologie.php`,
   `peuplement.php`) : graphe et liste éditables (sous-classes multiples, flèches ré-accrochables par
   leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA

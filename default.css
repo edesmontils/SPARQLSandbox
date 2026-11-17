@@ -557,3 +557,11 @@ a.btn { display: inline-block; text-decoration: none; }
 .relier { display: flex; gap: 6px; align-items: center; }
 .relier select { flex: 1; min-width: 0; }
 
+/* Éditeur : boîte des préfixes */
+#dlg-prefixes { max-width: 760px; }
+#dlg-prefixes h2 { margin-top: 0; }
+#dlg-prefixes h3 { margin: 16px 0 6px; font-size: 1em; }
+.pref-table code { font-size: .86em; word-break: break-all; }
+.pref-metier { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.pref-metier button { grid-column: 2; justify-self: start; }
+

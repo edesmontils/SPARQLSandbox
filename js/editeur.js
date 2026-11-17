@@ -48,7 +48,7 @@
 	//--------------------------------------------------------------------------
 	// État : le brouillon
 	//--------------------------------------------------------------------------
-	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', sel: null, pos: {}, routes: {} };
+	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', prefixes: {}, sel: null, pos: {}, routes: {} };
 	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null, selSous = null, rat = null, poignees = '';
 	var vue = 'graphe', lien = null, drag = null, dernier = { t: 0, k: '' }, quitte = false, enCours = false;
 
@@ -62,9 +62,29 @@
 		var x = cl(iri) || pr(iri);
 		return x ? x.nom : iri.replace(/^.*[#\/]/, '');
 	}
+	// Nom abrégé d'une IRI avec les préfixes connus de la copie (le plus long espace de noms l'emporte)
 	function nomDe(iri) {
-		if (E.espace && iri.indexOf(E.espace) === 0) return E.prefixe + iri.slice(E.espace.length);
-		return iri.replace(/^.*[#\/]/, '');
+		var meilleur = null;
+		Object.keys(E.prefixes).forEach(function (p) {
+			var ns = E.prefixes[p];
+			if (ns && iri.indexOf(ns) === 0 && /^[\p{L}\p{N}_-]*$/u.test(iri.slice(ns.length)) && (!meilleur || ns.length > E.prefixes[meilleur].length)) meilleur = p;
+		});
+		return meilleur ? meilleur + ':' + iri.slice(E.prefixes[meilleur].length) : iri.replace(/^.*[#\/]/, '');
+	}
+	// IRI désignée par un identifiant saisi : « prefixe:local » avec n'importe quel préfixe connu, ou la seule partie
+	// locale (dans l'espace de noms par défaut) ; renvoie {iri} ou {erreur}
+	function resoutIdentifiant(texte, espaceDefaut) {
+		var t = String(texte).trim(), m = /^([A-Za-z][\w.-]*):(.*)$/.exec(t);
+		if (m) {
+			if (!E.prefixes[m[1]]) return { erreur: 'Le préfixe « ' + m[1] + ': » n\'est pas connu : ajoutez-le avec « 🏷️ Préfixes ».' };
+			espaceDefaut = E.prefixes[m[1]]; t = m[2];
+		}
+		if (!/^[\p{L}\p{N}_-]+$/u.test(t)) return { erreur: 'Identifiant « ' + String(texte).trim() + ' » refusé : lettres, chiffres, _ et - seulement, avec ou sans préfixe.' };
+		return { iri: espaceDefaut + t };
+	}
+	function prefixeDe(espace) {
+		var p = Object.keys(E.prefixes).filter(function (k) { return E.prefixes[k] === espace; })[0];
+		return p ? p + ':' : '';
 	}
 	function affiche(x) { return x.label || x.nom; }
 	function memeListe(a, b) { return a.slice().sort().join(' ') === b.slice().sort().join(' '); }
@@ -94,8 +114,8 @@
 
 	function charge(m) {
 		E.types = m.types; E.espace = m.espace;
-		var avec = m.classes.filter(function (c) { return c.iri.indexOf(m.espace) === 0 && c.nom.indexOf(':') > 0 && c.nom.indexOf('<') !== 0; })[0];
-		E.prefixe = avec ? avec.nom.slice(0, avec.nom.indexOf(':') + 1) : '';
+		E.prefixes = m.prefixes || {};
+		E.prefixe = prefixeDe(m.espace);
 		E.classes = m.classes.map(function (c) {
 			var x = Object.assign({}, c); x.parents = c.parents.slice(); x.orig = { label: c.label, comment: c.comment, parents: c.parents.slice() }; x.nouveau = false; x.supprime = false; return x;
 		});
@@ -341,11 +361,6 @@
 		if (valeur && o.indexOf('value="' + echappe(valeur) + '"') < 0) o += '<option value="' + echappe(valeur) + '" selected>' + echappe(nomCourt(valeur)) + '</option>';
 		return o;
 	}
-	// Partie locale d'un identifiant saisi : le préfixe de l'espace de noms (cine:) est accepté mais facultatif
-	function sansPrefixe(texte, prefixe) {
-		var t = String(texte).trim();
-		return prefixe && t.indexOf(prefixe) === 0 ? t.slice(prefixe.length) : t;
-	}
 	function iriLocale(x) { return E.espace && x.iri.indexOf(E.espace) === 0 ? x.iri.slice(E.espace.length) : x.iri; }
 
 	function rendFiche() {
@@ -399,9 +414,9 @@
 			rendLeger();
 		});
 		champ('#f-local', function (v) {
-			var l = sansPrefixe(v, E.prefixe);
-			if (!/^[\p{L}\p{N}_-]+$/u.test(l)) { toast('Identifiant « ' + v.trim() + ' » refusé : lettres, chiffres, _ et - seulement' + (E.prefixe ? ', avec ou sans ' + E.prefixe : '')); return; }
-			var iri = E.espace + l;
+			var r = resoutIdentifiant(v, E.espace);
+			if (r.erreur) { toast(r.erreur); return; }
+			var iri = r.iri;
 			if (iri !== x.iri && (cl(iri) || pr(iri))) { toast('Cet identifiant existe déjà'); return; }
 			x.iriAuto = false; renomme(x, t, iri);
 		});
@@ -729,10 +744,7 @@
 	function viderBrouillonInstances() { D = { nouvelles: [], modifiees: {}, supprimees: {}, ia: [], iaJeton: null }; F = null; }
 
 	function espaceInstances() { return (I && I.espace) || E.espace; }
-	function prefixeInstances() {
-		var ex = I && I.classes.reduce(function (r, c) { return r || c.items.filter(function (it) { return it.iri && it.iri.indexOf(I.espace) === 0 && it.nom.indexOf(':') > 0; })[0]; }, null);
-		return ex ? ex.nom.slice(0, ex.nom.indexOf(':') + 1) : '';
-	}
+	function prefixeInstances() { return prefixeDe(espaceInstances()); }
 	function iriInstanceExiste(iri) {
 		return D.nouvelles.some(function (n) { return n.iri === iri; }) || !!(I && I.classes.some(function (c) { return c.items.some(function (it) { return it.iri === iri; }); }));
 	}
@@ -767,7 +779,7 @@
 		var base = titreInstance(f.valeurs) ? slug(titreInstance(f.valeurs), false) : slug((cl(f.classe) ? affiche(cl(f.classe)) : 'instance'), false) + 1;
 		var local = base, k = 1;
 		while (iriInstanceExiste(espaceInstances() + local)) local = base + (++k);
-		return local.toLowerCase();
+		return prefixeInstances() + local.toLowerCase();
 	}
 
 	function rendInstances() {
@@ -846,7 +858,7 @@
 				return '<option value="' + echappe(c.iri) + '"' + (c.iri === F.classe ? ' selected' : '') + '>' + echappe(affiche(c)) + '</option>';
 			}).join('') + '</select><span></span></div>' +
 				'<div class="if-ligne"><span class="if-p">Nœud anonyme</span><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="if-anon"' + (F.anon ? ' checked' : '') + '> sans identifiant (comme les rôles)</label><span></span></div>' +
-				(F.anon ? '' : '<div class="if-ligne"><span class="if-p">Identifiant</span><input type="text" id="if-local" class="champ" value="' + echappe(prefixeInstances() + F.local) + '" title="' + echappe(espaceInstances()) + '…"><span></span></div>');
+				(F.anon ? '' : '<div class="if-ligne"><span class="if-p">Identifiant</span><input type="text" id="if-local" class="champ" value="' + echappe(F.local) + '" title="' + echappe(espaceInstances()) + '…"><span></span></div>');
 		} else {
 			h += '<div class="if-ligne"><span class="if-p">Concept</span><div class="parents">' + F.types.map(function (t) {
 				return '<span class="puce-parent" title="' + echappe(t.iri) + '">' + echappe(cl(t.iri) ? affiche(cl(t.iri)) : t.nom) +
@@ -903,8 +915,9 @@
 			var iri = '', entree;
 			if (F.anon) entree = { iri: '', anon: true, local: '', classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
 			else {
-				if (!/^[\p{L}\p{N}_-]+$/u.test(F.local)) { toast('Identifiant « ' + F.local + ' » refusé : lettres, chiffres, _ et - seulement'); return; }
-				iri = espaceInstances() + F.local;
+				var ri = resoutIdentifiant(F.local, espaceInstances());
+				if (ri.erreur) { toast(ri.erreur); return; }
+				iri = ri.iri;
 				var autre = F.idx >= 0 && D.nouvelles[F.idx] && D.nouvelles[F.idx].iri === iri;
 				if (!autre && iriInstanceExiste(iri)) { toast('Cet identifiant existe déjà'); return; }
 				entree = { iri: iri, local: F.local, classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
@@ -975,6 +988,59 @@
 	}
 
 	//--------------------------------------------------------------------------
+	// Préfixes de la copie : vocabulaires standards ou « métier » ajoutés par l'étudiant
+	//--------------------------------------------------------------------------
+	var prefs = null;
+	function rendPrefixes() {
+		var P = prefs, h = '<h2>🏷️ Préfixes</h2>' +
+			'<p class="astuce">Un préfixe abrège un espace de noms (<code>cine:Film</code> pour <code>http://example.org/cinema/vocab#Film</code>). Ceux que vous ajoutez servent partout dans votre copie (éditeur, requêtes, IA) jusqu\'au retour au jeu d\'origine. ' +
+			'Dans l\'éditeur, un identifiant s\'écrit alors <code>préfixe:nom</code> (par exemple <code>skos:Concept</code>) pour réutiliser un terme d\'un vocabulaire.</p>';
+		var ligne = function (p, ns, origine, rm) {
+			return '<tr><th scope="row"><code>' + echappe(p) + ':</code></th><td><code>' + echappe(ns) + '</code></td><td>' + origine + '</td><td>' +
+				(rm ? '<button type="button" class="lien-mini" data-pref-rm="' + echappe(p) + '" aria-label="Retirer le préfixe ' + echappe(p) + '">✕ retirer</button>' : '') + '</td></tr>';
+		};
+		h += '<div class="defile" style="max-height:220px"><table class="resultat pref-table"><thead><tr><th>Préfixe</th><th>Espace de noms</th><th>Origine</th><th></th></tr></thead><tbody>';
+		Object.keys(P.ajoutes).forEach(function (p) { h += ligne(p, P.ajoutes[p], 'ajouté', true); });
+		Object.keys(P.jeu).forEach(function (p) { h += ligne(p, P.jeu[p], 'jeu de données', false); });
+		Object.keys(P.standard).forEach(function (p) { h += ligne(p, P.standard[p], 'standard', false); });
+		h += '</tbody></table></div>';
+		h += '<h3>Ajouter un vocabulaire standard</h3>';
+		if (P.catalogue.length) h += '<div class="relier"><label for="pref-cat" class="visuellement-cache">Vocabulaire standard</label><select id="pref-cat" class="champ">' +
+			P.catalogue.map(function (c) { return '<option value="' + echappe(c.prefixe) + '">' + echappe(c.prefixe + ' — ' + c.description) + '</option>'; }).join('') +
+			'</select><button type="button" class="btn secondaire petit" id="pref-ajout-cat">＋ Ajouter</button></div>';
+		else h += '<p class="astuce">Tous les vocabulaires du catalogue sont déjà définis.</p>';
+		h += '<h3>Ou un préfixe métier</h3><div class="pref-metier"><label for="pref-nom">Préfixe</label><input type="text" id="pref-nom" class="champ" maxlength="20" placeholder="meteo" autocomplete="off">' +
+			'<label for="pref-ns">Espace de noms</label><input type="text" id="pref-ns" class="champ" maxlength="200" placeholder="http://example.org/meteo#" autocomplete="off">' +
+			'<button type="button" class="btn secondaire petit" id="pref-ajout-perso">＋ Ajouter</button></div>' +
+			'<p class="astuce">L\'espace de noms est une adresse <code>http://…</code> ou <code>https://…</code> qui se termine par <code>#</code> ou <code>/</code>.</p>' +
+			'<div id="pref-msg" aria-live="polite"></div><div class="boutons"><button type="button" class="btn" id="pref-fermer">Fermer</button></div>';
+		$('#dlg-prefixes').innerHTML = h;
+	}
+	function ouvrePrefixes() {
+		appel('prefixes').then(function (r) {
+			if (!r.ok) { message(r.html); return; }
+			prefs = r.prefixes; rendPrefixes();
+			var d = $('#dlg-prefixes'); if (!d.open) d.showModal();
+		});
+	}
+	// Après un ajout ou un retrait : les noms abrégés se mettent à jour sans toucher au brouillon
+	function prefixesChanges(P) {
+		prefs = P;
+		E.prefixes = Object.assign({}, P.standard, P.jeu, P.ajoutes);
+		E.prefixe = prefixeDe(E.espace);
+		E.classes.forEach(function (c) { c.nom = nomDe(c.iri); });
+		E.props.forEach(function (p) { p.nom = nomDe(p.iri); });
+		rend(); chargeInstances();
+	}
+	function actionPrefixe(action, champs) {
+		appel(action, champs).then(function (r) {
+			prefixesChanges(r.prefixes || prefs);
+			rendPrefixes();
+			var m = $('#pref-msg'); if (m) m.innerHTML = '<p class="statut ' + (r.ok ? 'ok' : 'ko') + '">' + (r.ok ? '✅ ' : '❌ ') + echappe(r.message || '') + '</p>';
+		});
+	}
+
+	//--------------------------------------------------------------------------
 	// Boutons, clavier, sortie
 	//--------------------------------------------------------------------------
 	document.addEventListener('click', function (e) {
@@ -984,6 +1050,8 @@
 		if (o) { ouvreOnglet(o.dataset.onglet); return; }
 		var ic = e.target.closest('[data-ic]');
 		if (ic) { ouverts[ic.dataset.ic] = !ouverts[ic.dataset.ic]; rendInstances(); return; }
+		var pr_ = e.target.closest('[data-pref-rm]');
+		if (pr_) { actionPrefixe('prefixe_retirer', { prefixe: pr_.dataset.prefRm }); return; }
 		var ab = e.target.closest('[data-ab]');
 		if (ab) {
 			var act = ab.dataset.ab, ident = ab.dataset.id;
@@ -1001,7 +1069,11 @@
 		var rv = e.target.closest('[data-rm-val]');
 		if (rv && F) { F.valeurs.splice(+rv.dataset.rmVal, 1); rendInstances(); return; }
 		var id = e.target.id;
-		if (id === 'if-ok') valideFormulaire();
+		if (id === 'b-prefixes') ouvrePrefixes();
+		else if (id === 'pref-fermer') $('#dlg-prefixes').close();
+		else if (id === 'pref-ajout-cat') actionPrefixe('prefixe_ajouter', { prefixe: $('#pref-cat').value });
+		else if (id === 'pref-ajout-perso') actionPrefixe('prefixe_ajouter', { prefixe: $('#pref-nom').value, iri: $('#pref-ns').value });
+		else if (id === 'if-ok') valideFormulaire();
 		else if (id === 'if-annule') { F = null; rendInstances(); }
 		else if (id === 'if-suppr') {
 			if (F.entrants && !window.confirm(F.entrants + ' autre(s) ressource(s) font référence à cette instance : ces liens seront supprimés avec elle. Continuer ?')) return;
@@ -1031,8 +1103,8 @@
 		var li = e.target.closest('.if-ligne[data-k]');
 		if (li && e.target.dataset.champ) {
 			var v = F.valeurs[+li.dataset.k]; v[e.target.dataset.champ] = e.target.value;
-			if (F.mode === 'nouvelle' && F.iriAuto && e.target.dataset.champ === 'v') { F.local = proposeLocal(F); var l = $('#if-local'); if (l) l.value = prefixeInstances() + F.local; }
-		} else if (e.target.id === 'if-local') { F.local = sansPrefixe(e.target.value, prefixeInstances()); F.iriAuto = false; }
+			if (F.mode === 'nouvelle' && F.iriAuto && e.target.dataset.champ === 'v') { F.local = proposeLocal(F); var l = $('#if-local'); if (l) l.value = F.local; }
+		} else if (e.target.id === 'if-local') { F.local = e.target.value.trim(); F.iriAuto = false; }
 	});
 	document.addEventListener('change', function (e) {
 		if (!F) return;
@@ -1057,6 +1129,7 @@
 		}
 	});
 	document.addEventListener('keydown', function (e) {
+		if (e.key === 'Enter' && (e.target.id === 'pref-nom' || e.target.id === 'pref-ns')) { e.preventDefault(); $('#pref-ajout-perso').click(); return; }
 		if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.noeud')) { e.preventDefault(); e.target.click(); return; }
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 		if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
