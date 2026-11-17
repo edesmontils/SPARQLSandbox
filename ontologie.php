@@ -6,7 +6,8 @@
 //   classes : iri, nom, label (+ langue), comment (+ langue), parents (super-classes), n (instances),
 //             et les relations de onto_relations() : equiv (owl:equivalentClass), disjoint (owl:disjointWith),
 //             voir (rdfs:seeAlso), defini (rdfs:isDefinedBy)
-//   props   : iri, nom, label, comment (+ langues), domain, range (une seule valeur chacun), decl, relations
+//   props   : iri, nom, label, comment (+ langues), domain, range (une seule valeur chacun), decl, min, max (cardinalité
+//             SHACL, '' si non fixée), relations
 //             (superprops : rdfs:subPropertyOf, equiv : owl:equivalentProperty, inverse : owl:inverseOf, voir, defini),
 //             carac (caractéristiques OWL : fonctionnelle, symétrique…), genre (objet | donnee : owl:ObjectProperty ou DatatypeProperty)
 // Les autres déclarations (plusieurs domaines, annotations…) ne sont jamais touchées : la mise à
@@ -19,6 +20,10 @@ const ONTO_LIBELLE_MAX = 200;
 const ONTO_COMMENTAIRE_MAX = 1000;
 const ONTO_LANGUE_DEFAUT = 'fr';
 const ONTO_ESPACE_DEFAUT = 'http://example.org/ontologie#';
+// Graphe nommé de la copie qui garde les contraintes de cardinalité voulues par l'étudiant (<propriété> sh:minCount n ; sh:maxCount m).
+// Les formes SHACL sont dérivées de l'ontologie et de ces cardinalités à chaque contrôle (coherence.php, formes_depuis_modele()).
+const ONTO_GRAPHE_CONTRAINTES = 'urn:sparqlsandbox:contraintes';
+const ONTO_CARDINALITE_MAX = 1000;
 
 // Relations entre éléments de l'ontologie, et annotations : type d'élément => clé => array(prédicat, titre, genre de cible
 // ('classe', 'prop' : un élément de l'ontologie ; 'iri' : n'importe quelle IRI))
@@ -83,7 +88,7 @@ function onto_meta() {
 // Un élément « vide » du type $k (classes | props) : valeurs par défaut des champs que l'éditeur gère
 function onto_vide($k) {
 	$o = array('label' => '', 'llang' => '', 'comment' => '', 'clang' => '');
-	if ($k === 'classes') $o['parents'] = array(); else $o = array_merge($o, array('domain' => '', 'range' => '', 'carac' => array(), 'genre' => ''));
+	if ($k === 'classes') $o['parents'] = array(); else $o = array_merge($o, array('domain' => '', 'range' => '', 'carac' => array(), 'genre' => '', 'min' => '', 'max' => ''));
 	foreach (onto_relations()[$k] as $cle => $_) $o[$cle] = array();
 	return $o;
 }
@@ -126,7 +131,8 @@ function onto_espace(array $iris) {
 //   $comments  [x, texte, langue]    rdfs:comment
 //   $axiomes   [s, p, o]             relations de onto_relations() entre IRI
 //   $speciaux  [s, type]             types owl des propriétés : caractéristiques et genre
-function construit_modele_ontologie(array $classes, array $parents, array $props, array $instances, array $labels, array $comments, array $axiomes, array $speciaux, array $prefixes) {
+//   $contraintes [p, 'min'|'max', n] cardinalités voulues (graphe ONTO_GRAPHE_CONTRAINTES)
+function construit_modele_ontologie(array $classes, array $parents, array $props, array $instances, array $labels, array $comments, array $axiomes, array $speciaux, array $contraintes, array $prefixes) {
 	$cl = array();   // iri => decl
 	$ajoute = function ($iri, $decl) use (&$cl) {
 		if (!is_string($iri) || voc_est_meta($iri) || voc_est_litteral($iri)) return;
@@ -169,6 +175,8 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		if (isset($carac_par_iri[$l[1]])) $car[$l[0]][$carac_par_iri[$l[1]]] = true;
 		elseif (isset($genre_par_iri[$l[1]])) $genre[$l[0]] = $genre_par_iri[$l[1]];
 	}
+	$card = array();
+	foreach ($contraintes as $l) $card[$l[0]][$l[1]] = (string)(int)$l[2];
 	$textes = function (array $lignes) {
 		$t = array();
 		foreach ($lignes as $l) $t[$l[0]][] = array($l[1], $l[2]);
@@ -199,7 +207,8 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		list($comment, $cl_) = onto_choisit_litteral($comments[$iri] ?? array());
 		$cs = array_keys($car[$iri] ?? array()); sort($cs);
 		$e = array('iri' => $iri, 'nom' => $nom($iri), 'label' => $label, 'llang' => $ll, 'comment' => $comment, 'clang' => $cl_,
-			'domain' => $dom ? $dom[0] : '', 'range' => $ran ? $ran[0] : '', 'carac' => $cs, 'genre' => $genre[$iri] ?? '');
+			'domain' => $dom ? $dom[0] : '', 'range' => $ran ? $ran[0] : '', 'carac' => $cs, 'genre' => $genre[$iri] ?? '',
+			'min' => $card[$iri]['min'] ?? '', 'max' => $card[$iri]['max'] ?? '');
 		foreach (onto_relations()['props'] as $cle => $_) $e[$cle] = $liste('props', $iri, $cle);
 		$sortie['props'][] = $e;
 	}
@@ -210,15 +219,11 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 	return $sortie;
 }
 
-// Lit le modèle de l'ontologie de la copie de session ; renvoie array(modèle|null, message d'erreur)
-function modele_ontologie($jeu) {
-	$copie = store_copie($jeu, $erreur);
-	if (is_null($copie)) return array(null, $erreur);
-	$place = reserve_execution();
-	if (is_null($place)) return array(null, 'Trop de requêtes en cours depuis votre poste : réessayez dans un instant.');
-	$v = verrou('copie_'.basename($copie));
+// Lit le modèle de l'ontologie du store $store (sans verrou : l'appelant le tient déjà, ou n'en a pas besoin) ;
+// renvoie array(modèle|null, message d'erreur)
+function lit_ontologie_store($jeu, $store) {
 	$pre = 'PREFIX rdf: <'.PREFIXES_STANDARD['rdf'].'> PREFIX rdfs: <'.PREFIXES_STANDARD['rdfs'].'> '
-		.'PREFIX owl: <'.PREFIXES_STANDARD['owl'].'> ';
+		.'PREFIX owl: <'.PREFIXES_STANDARD['owl'].'> PREFIX sh: <http://www.w3.org/ns/shacl#> ';
 	$lim = ' LIMIT '.ONTO_LIGNES_MAX;
 	$requetes = array(
 		'classes' => 'SELECT DISTINCT ?c WHERE { ?c a ?t . VALUES ?t { rdfs:Class owl:Class } FILTER(isIRI(?c)) }'.$lim,
@@ -232,21 +237,16 @@ function modele_ontologie($jeu) {
 		// relations et annotations (onto_relations), caractéristiques et genre OWL des propriétés
 		'axiomes' => 'SELECT ?s ?p ?o WHERE { ?s ?p ?o . VALUES ?p { '.implode(' ', array_map('onto_iri', onto_predicats())).' } FILTER(isIRI(?s) && isIRI(?o)) }'.$lim,
 		'speciaux' => 'SELECT ?s ?t WHERE { ?s a ?t . VALUES ?t { '.implode(' ', array_map('onto_iri', onto_types_speciaux())).' } FILTER(isIRI(?s)) }'.$lim,
+		// cardinalités voulues, gardées dans un graphe nommé à part
+		'contraintes' => 'SELECT ?p ?c ?n WHERE { GRAPH <'.ONTO_GRAPHE_CONTRAINTES.'> { ?p ?c ?n . VALUES ?c { sh:minCount sh:maxCount } FILTER(isIRI(?p)) } }'.$lim,
 	);
 	$lignes = array();
-	$echec = null;
 	foreach ($requetes as $cle => $q) {
-		$r = lance_oxigraph(array('query', '--location', $copie, '--results-format', 'json'), $pre.$q);
+		$r = lance_oxigraph(array('query', '--location', $store, '--results-format', 'json'), $pre.$q);
 		$j = $r['code'] === 0 ? json_decode($r['sortie'], true) : null;
-		if (!is_array($j)) {
-			$echec = $r['delai'] ? "La lecture de l'ontologie a pris trop de temps." : ($r['erreur'] !== '' ? message_oxigraph($r['erreur']) : 'Lecture impossible.');
-			break;
-		}
+		if (!is_array($j)) return array(null, $r['delai'] ? "La lecture de l'ontologie a pris trop de temps." : ($r['erreur'] !== '' ? message_oxigraph($r['erreur']) : 'Lecture impossible.'));
 		$lignes[$cle] = $j['results']['bindings'] ?? array();
 	}
-	libere($v);
-	libere($place);
-	if (!is_null($echec)) return array(null, $echec);
 	$val = 'voc_valeur';
 	$instances = array();
 	foreach ($lignes['instances'] as $l) $instances[$val($l, 'c')] = (int)$val($l, 'n');
@@ -258,7 +258,22 @@ function modele_ontologie($jeu) {
 		array_map(function ($l) use ($val) { return array($val($l, 'p'), $val($l, 'dom'), $val($l, 'ran')); }, $lignes['props']),
 		$instances, $textes($lignes['labels']), $textes($lignes['comments']),
 		array_map(function ($l) use ($val) { return array($val($l, 's'), $val($l, 'p'), $val($l, 'o')); }, $lignes['axiomes']),
-		array_map(function ($l) use ($val) { return array($val($l, 's'), $val($l, 't')); }, $lignes['speciaux']), $prefixes), '');
+		array_map(function ($l) use ($val) { return array($val($l, 's'), $val($l, 't')); }, $lignes['speciaux']),
+		array_map(function ($l) use ($val) { return array($val($l, 'p'), substr($val($l, 'c'), -8) === 'minCount' ? 'min' : 'max', $val($l, 'n')); }, $lignes['contraintes']),
+		$prefixes), '');
+}
+
+// Lit le modèle de l'ontologie de la copie de session ; renvoie array(modèle|null, message d'erreur)
+function modele_ontologie($jeu) {
+	$copie = store_copie($jeu, $erreur);
+	if (is_null($copie)) return array(null, $erreur);
+	$place = reserve_execution();
+	if (is_null($place)) return array(null, 'Trop de requêtes en cours depuis votre poste : réessayez dans un instant.');
+	$v = verrou('copie_'.basename($copie));
+	$r = lit_ontologie_store($jeu, $copie);
+	libere($v);
+	libere($place);
+	return $r;
 }
 
 //------------------------------------------------------------------------------
@@ -333,6 +348,13 @@ function onto_nettoie_brouillon($b) {
 				$g = $e['genre'] ?? '';
 				if (!is_string($g) || ($g !== '' && !isset(onto_genres()[$g]))) return array(null, 'Genre de propriété inconnu.');
 				$o['genre'] = $g;
+				foreach (array('min', 'max') as $c) {
+					$v = $e[$c] ?? '';
+					if (is_int($v)) $v = (string)$v;
+					if (!is_string($v) || !preg_match('/^\d{0,4}$/D', $v) || (int)$v > ONTO_CARDINALITE_MAX) return array(null, 'Cardinalité invalide (un entier de 0 à '.ONTO_CARDINALITE_MAX.').');
+					$o[$c] = $v === '' ? '' : (string)(int)$v;
+				}
+				if ($o['min'] !== '' && $o['max'] !== '' && (int)$o['min'] > (int)$o['max']) return array(null, 'La cardinalité minimale ne peut pas dépasser la maximale.');
 			}
 			$sortie[$k][$o['iri']] = $o;
 		}
@@ -363,18 +385,23 @@ function onto_mise_a_jour(array $courant, array $b) {
 	$parIri = function (array $liste) { $m = array(); foreach ($liste as $e) $m[$e['iri']] = $e; return $m; };
 	$cc = $parIri($courant['classes']); $cp = $parIri($courant['props']);
 	$moins = array(); $plus = array(); $suppr = array(); $n = 0;
+	$moinsG = array(); $plusG = array();   // cardinalités, dans le graphe nommé des contraintes
 	$iriSi = function ($v) { return $v === '' ? '' : onto_iri($v); };
 	$texte = function ($t, $l) { return $t === '' ? '' : onto_litteral($t, $l); };
 
 	foreach ($b['supprimes']['classes'] as $iri => $_) if (isset($cc[$iri])) { $suppr[] = "DELETE WHERE { ".onto_iri($iri)." ?p ?o }"; $n++; }
-	foreach ($b['supprimes']['props'] as $iri => $_) if (isset($cp[$iri])) { $suppr[] = "DELETE WHERE { ".onto_iri($iri)." ?p ?o }"; $n++; }
+	foreach ($b['supprimes']['props'] as $iri => $_) if (isset($cp[$iri])) {
+		$suppr[] = "DELETE WHERE { ".onto_iri($iri)." ?p ?o }";
+		$suppr[] = "DELETE WHERE { GRAPH <".ONTO_GRAPHE_CONTRAINTES."> { ".onto_iri($iri)." ?c ?n } }";   // sa cardinalité part avec elle
+		$n++;
+	}
 
 	foreach (array('classes' => $cc, 'props' => $cp) as $k => $existants) {
 		foreach ($b[$k] as $iri => $e) {
 			if (isset($b['supprimes'][$k][$iri])) continue;
 			$s = onto_iri($iri);
 			$o = $existants[$iri] ?? null;
-			$avant = count($moins) + count($plus);
+			$avant = count($moins) + count($plus) + count($moinsG) + count($plusG);
 			if (is_null($o)) { // nouvel élément
 				$plus[] = $s.' '.$type.' '.onto_iri($k === 'classes' ? $RDFS.'Class' : $RDF.'Property').' .';
 				$o = onto_vide($k);
@@ -394,6 +421,14 @@ function onto_mise_a_jour(array $courant, array $b) {
 				$cs = onto_caracteristiques();
 				foreach (array_diff($o['carac'], $e['carac']) as $c) $moins[] = "$s $type ".onto_iri($cs[$c][0])." .";
 				foreach (array_diff($e['carac'], $o['carac']) as $c) $plus[] = "$s $type ".onto_iri($cs[$c][0])." .";
+				// cardinalité SHACL voulue : une valeur par borne, dans le graphe des contraintes
+				$entier = function ($v) { return '"'.$v.'"^^<'.PREFIXES_STANDARD['xsd'].'integer>'; };
+				foreach (array('min' => 'minCount', 'max' => 'maxCount') as $c => $pred) {
+					if ($o[$c] === $e[$c]) continue;
+					$pg = onto_iri('http://www.w3.org/ns/shacl#'.$pred);
+					if ($o[$c] !== '') $moinsG[] = "$s $pg ".$entier($o[$c])." .";
+					if ($e[$c] !== '') $plusG[] = "$s $pg ".$entier($e[$c])." .";
+				}
 				$gs = onto_genres();
 				if ($o['genre'] !== $e['genre']) {
 					if ($o['genre'] !== '') $moins[] = "$s $type ".onto_iri($gs[$o['genre']])." .";
@@ -404,12 +439,15 @@ function onto_mise_a_jour(array $courant, array $b) {
 				foreach (array_diff($o[$cle], $e[$cle]) as $v) $moins[] = "$s ".onto_iri($d[0])." ".onto_iri($v)." .";
 				foreach (array_diff($e[$cle], $o[$cle]) as $v) $plus[] = "$s ".onto_iri($d[0])." ".onto_iri($v)." .";
 			}
-			if (count($moins) + count($plus) > $avant) $n++;
+			if (count($moins) + count($plus) + count($moinsG) + count($plusG) > $avant) $n++;
 		}
 	}
 	$ops = array();
+	$g = '<'.ONTO_GRAPHE_CONTRAINTES.'>';
 	if ($moins) $ops[] = "DELETE DATA {\n  ".implode("\n  ", $moins)."\n}";
+	if ($moinsG) $ops[] = "DELETE DATA {\n  GRAPH $g {\n    ".implode("\n    ", $moinsG)."\n  }\n}";
 	if ($plus) $ops[] = "INSERT DATA {\n  ".implode("\n  ", $plus)."\n}";
+	if ($plusG) $ops[] = "INSERT DATA {\n  GRAPH $g {\n    ".implode("\n    ", $plusG)."\n  }\n}";
 	$ops = array_merge($ops, $suppr);
 	return array(implode(" ;\n", $ops), $n);
 }
@@ -453,7 +491,7 @@ function onto_applique_brouillon(array $courant, array $b, array $prefixes) {
 		$m = array();
 		foreach ($courant[$k] as $e) $m[$e['iri']] = $e;
 		foreach ($b['supprimes'][$k] as $iri => $_) unset($m[$iri]);
-		$champs = array_merge(array('label', 'llang', 'comment', 'clang'), $k === 'classes' ? array('parents') : array('domain', 'range', 'carac', 'genre'), array_keys(onto_relations()[$k]));
+		$champs = array_merge(array('label', 'llang', 'comment', 'clang'), $k === 'classes' ? array('parents') : array('domain', 'range', 'carac', 'genre', 'min', 'max'), array_keys(onto_relations()[$k]));
 		foreach ($b[$k] as $iri => $e) {
 			if (isset($b['supprimes'][$k][$iri])) continue;
 			$o = $m[$iri] ?? array_merge(array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes)), onto_vide($k), $k === 'classes' ? array('n' => 0, 'decl' => true) : array());

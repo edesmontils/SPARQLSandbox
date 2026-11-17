@@ -92,11 +92,11 @@
 	function relationsDe(t) { return (E.meta.relations || {})[t === 'classe' ? 'classes' : 'props'] || []; }
 	function cleRelations(t) { return relationsDe(t).map(function (r) { return r.cle; }); }
 	// Champs que l'éditeur sait modifier
-	function champsDe(t) { return (t === 'classe' ? ['label', 'comment', 'parents'] : ['label', 'comment', 'domain', 'range', 'carac', 'genre']).concat(cleRelations(t)); }
+	function champsDe(t) { return (t === 'classe' ? ['label', 'comment', 'parents'] : ['label', 'comment', 'domain', 'range', 'carac', 'genre', 'min', 'max']).concat(cleRelations(t)); }
 	function copieChamps(x, t) { var o = {}; champsDe(t).forEach(function (k) { o[k] = Array.isArray(x[k]) ? x[k].slice() : x[k]; }); return o; }
 	function valeursVides(t) {
 		var o = { label: '', comment: '' };
-		if (t === 'classe') o.parents = []; else { o.domain = ''; o.range = ''; o.carac = []; o.genre = ''; }
+		if (t === 'classe') o.parents = []; else { o.domain = ''; o.range = ''; o.carac = []; o.genre = ''; o.min = ''; o.max = ''; }
 		cleRelations(t).forEach(function (k) { o[k] = []; });
 		return o;
 	}
@@ -397,10 +397,17 @@
 	}
 	// Bloc « Axiomes RDFS / OWL et annotations » de la fiche d'un concept (t = 'classe') ou d'une propriété ('prop')
 	function blocAxiomes(x, t, off) {
-		var n = relationsDe(t).reduce(function (s, r) { return s + x[r.cle].length; }, 0) + (t === 'prop' ? x.carac.length + (x.genre ? 1 : 0) : 0);
+		var n = relationsDe(t).reduce(function (s, r) { return s + x[r.cle].length; }, 0) + (t === 'prop' ? x.carac.length + (x.genre ? 1 : 0) + (x.min !== '' ? 1 : 0) + (x.max !== '' ? 1 : 0) : 0);
 		var ouvert = axOuvert === null ? n > 0 : axOuvert;
 		var h = '<details class="axiomes" id="f-axiomes"' + (ouvert ? ' open' : '') + '><summary>Axiomes RDFS / OWL et annotations' + (n ? ' <span class="nb">(' + n + ')</span>' : '') + '</summary><div class="ax">';
 		if (t === 'prop') {
+			// cardinalité voulue : elle devient une forme SHACL (sh:minCount, sh:maxCount) pour les instances du domaine
+			var fonct = x.carac.indexOf('fonctionnelle') >= 0;
+			h += '<div class="ax-ligne"><span class="ax-t">Forme SHACL</span><div>Au moins <input type="number" class="champ ax-nb" id="f-min" min="0" max="1000" value="' + echappe(x.min) + '" placeholder="0"' + off + ' aria-label="Nombre minimal de valeurs"> ' +
+				'et au plus <input type="number" class="champ ax-nb" id="f-max" min="0" max="1000" value="' + echappe(x.max) + '" placeholder="∞"' + off + ' aria-label="Nombre maximal de valeurs"> valeur(s)' +
+				(x.domain ? ' par instance de ' + echappe(cl(x.domain) ? affiche(cl(x.domain)) : nomCourt(x.domain)) : ' (sans domaine : seul le maximum est contrôlé)') + '.' +
+				(fonct ? '<p class="alerte" style="color:var(--sb-ink-soft)">Propriété fonctionnelle : au plus 1 valeur, quoi qu\'on écrive ici.</p>' : '') +
+				'<p class="astuce" style="margin:4px 0 0">Les types (domaine, portée) sont déjà contrôlés par les contrôles RDFS ; ces bornes ajoutent une forme SHACL, visible avec « 🛡️ Formes SHACL ».</p></div></div>';
 			h += '<div class="ax-ligne"><label class="ax-t" for="f-genre">Genre OWL</label><div><select id="f-genre"' + off + '><option value="">non précisé</option>' +
 				'<option value="objet"' + (x.genre === 'objet' ? ' selected' : '') + '>propriété objet (owl:ObjectProperty)</option>' +
 				'<option value="donnee"' + (x.genre === 'donnee' ? ' selected' : '') + '>propriété de donnée (owl:DatatypeProperty)</option></select>' +
@@ -440,6 +447,10 @@
 		f.querySelectorAll('[data-add-iri-btn]').forEach(function (b) { b.addEventListener('click', function () { ajouteIri(b.dataset.addIriBtn); }); });
 		f.querySelectorAll('[data-add-iri]').forEach(function (i) { i.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ajouteIri(i.dataset.addIri); } }); });
 		var g = $('#f-genre'); if (g) g.addEventListener('change', function () { x.genre = g.value; rend(); });
+		['min', 'max'].forEach(function (c) {
+			var i = $('#f-' + c);
+			if (i) i.addEventListener('change', function () { x[c] = i.value === '' ? '' : String(Math.max(0, Math.min(1000, parseInt(i.value, 10) || 0))); rend(); });
+		});
 		f.querySelectorAll('[data-carac]').forEach(function (c) {
 			c.addEventListener('change', function () { x.carac = x.carac.filter(function (v) { return v !== c.dataset.carac; }); if (c.checked) x.carac.push(c.dataset.carac); rend(); });
 		});
@@ -1095,6 +1106,33 @@
 	}
 
 	//--------------------------------------------------------------------------
+	// Formes SHACL : celles que l'ontologie (brouillon compris) fait naître, et celles du jeu
+	//--------------------------------------------------------------------------
+	var formes = null;
+	function ouvreFormes() {
+		appel('formes', { brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
+			if (!r.ok) { message(r.html); return; }
+			formes = r;
+			var h = '<h2>🛡️ Formes SHACL</h2><p class="astuce">Une forme SHACL dit ce que les données doivent respecter. Celles de <strong>votre ontologie</strong> suivent ce que vous définissez : ' +
+				'une cardinalité voulue sur une propriété, une propriété fonctionnelle (au plus une valeur), deux concepts disjoints. Elles sont recalculées à chaque contrôle et s\'ajoutent à celles du jeu ' +
+				'(écrites par l\'enseignant). Les types sont déjà contrôlés par les contrôles RDFS.' + (nbModifs() ? ' <strong>Vos modifications non enregistrées y sont comprises.</strong>' : '') + '</p>' +
+				'<h3>Dérivées de votre ontologie</h3>' + (r.derivees ? '<pre class="turtle" tabindex="0">' + echappe(r.derivees) + '</pre>' :
+					'<p class="astuce">Aucune pour l\'instant : fixez une cardinalité sur une propriété (fiche, « Forme SHACL »), marquez-la fonctionnelle, ou déclarez deux concepts disjoints.</p>');
+			if (r.jeu) h += '<details><summary>Formes du jeu de données (enseignant)</summary><pre class="turtle" tabindex="0">' + echappe(r.jeu) + '</pre></details>';
+			h += '<div class="boutons"><button type="button" class="btn secondaire" id="formes-telecharge"' + (r.derivees || r.jeu ? '' : ' disabled') + '>⬇️ Télécharger (Turtle)</button><button type="button" class="btn" id="formes-fermer">Fermer</button></div>';
+			$('#dlg-formes').innerHTML = h;
+			var d = $('#dlg-formes'); if (!d.open) d.showModal();
+		});
+	}
+	function telechargeFormes() {
+		var texte = (formes.jeu ? '# Formes du jeu de données\n' + formes.jeu + '\n\n' : '') + (formes.derivees ? '# Formes dérivées de l\'ontologie\n' + formes.derivees : '');
+		var a = document.createElement('a');
+		a.href = URL.createObjectURL(new Blob([texte], { type: 'text/turtle;charset=utf-8' }));
+		a.download = 'formes-' + donnees.jeu + '.ttl';
+		document.body.appendChild(a); a.click(); a.remove();
+	}
+
+	//--------------------------------------------------------------------------
 	// Préfixes de la copie : vocabulaires standards ou « métier » ajoutés par l'étudiant
 	//--------------------------------------------------------------------------
 	var prefs = null;
@@ -1177,6 +1215,9 @@
 		if (rv && F) { F.valeurs.splice(+rv.dataset.rmVal, 1); rendInstances(); return; }
 		var id = e.target.id;
 		if (id === 'b-prefixes') ouvrePrefixes();
+		else if (id === 'b-formes') ouvreFormes();
+		else if (id === 'formes-fermer') $('#dlg-formes').close();
+		else if (id === 'formes-telecharge') telechargeFormes();
 		else if (id === 'pref-fermer') $('#dlg-prefixes').close();
 		else if (id === 'pref-ajout-cat') actionPrefixe('prefixe_ajouter', { prefixe: $('#pref-cat').value });
 		else if (id === 'pref-ajout-perso') actionPrefixe('prefixe_ajouter', { prefixe: $('#pref-nom').value, iri: $('#pref-ns').value });

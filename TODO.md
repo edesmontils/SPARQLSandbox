@@ -21,7 +21,15 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   `owl:inverseOf`), traduction d'un sous-ensemble de SHACL en SPARQL pour se passer de pyshacl
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
-- **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
+- **Import et export en Turtle** : l'export de la copie, de l'ontologie seule ou des instances seules existe
+  (`export.php`, boutons sous le diagramme du vocabulaire). À faire :
+  - **import** d'un fichier Turtle (téléversement) dans la copie, pour l'ontologie, les instances ou les deux,
+    avec choix entre fusionner et remplacer (`LOAD` reste interdit : le fichier est lu par Oxigraph à l'arrivée) ;
+    limites de taille et de nombre de triplets, rejet d'un fichier mal formé avec la ligne en cause, copie intacte
+    en cas d'échec, `@prefix` du fichier proposés comme préfixes ajoutés, cohérence recalculée après l'import ;
+  - **boutons dans l'éditeur** (importer, exporter) et reprise du brouillon d'ontologie après un import ;
+  - **export** avec les préfixes ajoutés par l'étudiant, d'un résultat de requête (CSV, Turtle) et d'autres
+    sérialisations (N-Triples, RDF/XML, JSON-LD).
 - **Préfixes** (fait) : l'étudiant ajoute à sa copie un vocabulaire standard (catalogue de `PREFIXES_CATALOGUE`) ou un préfixe métier,
   gardé en session ; piste : l'exporter avec le Turtle de la copie, ou le garder avec les mémoires de requêtes.
 - **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `js/disposition.js`, `ontologie.php`,
@@ -29,8 +37,8 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA
   (général ou ciblé), axiomes RDFS/OWL des concepts et propriétés (sous-propriété, inverse, équivalences,
   disjonction, caractéristiques, genre, annotations) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
-  contrôle de cohérence ontologie/instance dans l'éditeur, les contrôles OWL de ces axiomes (propriété fonctionnelle, concepts disjoints, inverse) et des formes SHACL
-  générées avec l'ontologie.
+  le bouton de contrôle de cohérence ontologie/instance dans l'éditeur ; formes SHACL dérivées de l'ontologie (cardinalités, propriété fonctionnelle,
+  concepts disjoints) faites ; à traduire encore : `owl:InverseFunctionalProperty`, symétrie, irréflexivité, `sh:in` (valeurs permises).
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.

@@ -450,6 +450,58 @@ $pe = array(); foreach ($eff['props'] as $p) $pe[$p['iri']] = $p;
 verifie($pe[$esp.'nouvelle']['carac'] === array('transitive') && $pe[$esp.'nouvelle']['inverse'] === array(), 'axiomes : ontologie effective avec les axiomes du brouillon');
 reinitialise_jeu('cinema');
 
+// Formes SHACL dérivées de l'ontologie : cardinalités voulues, propriété fonctionnelle, concepts disjoints
+reinitialise_jeu('cinema');
+$q = function ($r) { $x = execute_sparql('cinema', $r); return $x['ok'] && $x['resultat'] === true; };
+list($mo, ) = modele_ontologie('cinema');
+$ci = array(); foreach ($mo['classes'] as $c) $ci[$c['nom']] = $c;
+$esp = $mo['espace']; $xsdi = PREFIXES_STANDARD['xsd'].'integer';
+$brut = function (array $props, array $classes = array()) { return array('classes' => $classes, 'props' => $props, 'supprimes' => array('classes' => array(), 'props' => array())); };
+$prop_duree = function ($min, $max, $carac = array()) use ($esp, $ci, $xsdi) {
+	return array('iri' => $esp.'duree', 'label' => 'durée', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'domain' => $ci['cine:Film']['iri'], 'range' => $xsdi,
+		'superprops' => array(), 'equiv' => array(), 'inverse' => array(), 'voir' => array(), 'defini' => array(), 'carac' => $carac, 'genre' => '', 'min' => $min, 'max' => $max);
+};
+verifie(formes_depuis_modele($mo) === '', 'formes dérivées : aucune pour une ontologie sans cardinalité ni disjonction');
+verifie(!is_null(onto_nettoie_brouillon($brut(array($prop_duree('1', '2'))))[0]) && is_null(onto_nettoie_brouillon($brut(array($prop_duree('3', '2'))))[0])
+	&& is_null(onto_nettoie_brouillon($brut(array($prop_duree('x', ''))))[0]) && is_null(onto_nettoie_brouillon($brut(array($prop_duree('99999', ''))))[0]), 'formes dérivées : cardinalités invalides refusées');
+list($ok, $h, $m2, ) = enregistre_ontologie('cinema', $brut(array($prop_duree('1', '2'))));
+$pd = array(); foreach ($m2['props'] as $p) $pd[$p['nom']] = $p;
+verifie($ok && $pd['cine:duree']['min'] === '1' && $pd['cine:duree']['max'] === '2', 'formes dérivées : cardinalité enregistrée et relue ('.strip_tags($h).')');
+verifie($q('ASK { GRAPH <'.ONTO_GRAPHE_CONTRAINTES.'> { <'.$esp.'duree> <http://www.w3.org/ns/shacl#minCount> 1 ; <http://www.w3.org/ns/shacl#maxCount> 2 } }')
+	&& !$q('ASK { <'.$esp.'duree> <http://www.w3.org/ns/shacl#minCount> ?n }'), 'formes dérivées : gardée dans le graphe nommé, pas dans les données');
+$ttl = formes_depuis_modele($m2);
+verifie(strpos($ttl, '@prefix cine:') !== false && strpos($ttl, 'sh:targetClass cine:Film') !== false && strpos($ttl, 'sh:minCount 1') !== false && strpos($ttl, 'sh:maxCount 2') !== false
+	&& strpos($ttl, 'de 1 à 2 valeurs pour cine:duree') !== false, 'formes dérivées : forme lisible, avec préfixes');
+$copie = store_copie('cinema');
+$cn = function () use ($copie) { $r = controle_coherence('cinema', $copie); return array_filter($r['anomalies'], function ($a) { return $a['source'] === 'SHACL' && strpos($a['message'], 'cine:duree') !== false; }); };
+if ($avecShacl) {
+	verifie(count($cn()) == 9, 'formes dérivées : les 9 films sans durée sont signalés ('.count($cn()).')');
+	$films = array(); $x = execute_sparql('cinema', 'SELECT ?f WHERE { ?f a <'.$ci['cine:Film']['iri'].'> } ORDER BY ?f');
+	foreach ($x['resultat']['lignes'] as $l) $films[] = $l['f']['value'];
+	execute_sparql('cinema', 'INSERT DATA { <'.$films[0].'> <'.$esp.'duree> 100 . <'.$films[1].'> <'.$esp.'duree> 1, 2, 3 }');
+	$m = array_map(function ($a) { return $a['message']; }, array_values($cn()));
+	verifie(count($m) == 8 && count(array_filter($m, function ($t) { return strpos($t, 'de 1 à 2 valeurs') !== false; })) == 8, 'formes dérivées : une durée de plus, et trop de durées');
+}
+// propriété fonctionnelle : au plus une valeur, sans rien écrire d'autre
+$tout = $brut(array($prop_duree('', '', array('fonctionnelle'))));
+list($ok, , $m3, ) = enregistre_ontologie('cinema', $tout);
+verifie($ok && strpos(formes_depuis_modele($m3), 'sh:maxCount 1') !== false && strpos(formes_depuis_modele($m3), 'sh:minCount') === false && strpos(formes_depuis_modele($m3), 'fonctionnelle') !== false, 'formes dérivées : fonctionnelle = au plus une valeur');
+verifie(!$q('ASK { GRAPH <'.ONTO_GRAPHE_CONTRAINTES.'> { <'.$esp.'duree> ?c ?n } }'), 'formes dérivées : bornes retirées du graphe quand on les vide');
+// concepts disjoints
+$disj = array(array_merge(array('iri' => $ci['cine:Film']['iri'], 'label' => 'Film', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parents' => array(), 'equiv' => array(), 'voir' => array(), 'defini' => array()),
+	array('disjoint' => array($ci['cine:Cinema']['iri']))));
+list($ok, , $m4, ) = enregistre_ontologie('cinema', $brut(array(), $disj));
+verifie($ok && strpos(formes_depuis_modele($m4), 'sh:not') !== false && strpos(formes_depuis_modele($m4), 'sont disjoints') !== false, 'formes dérivées : concepts disjoints');
+if ($avecShacl) {
+	execute_sparql('cinema', 'INSERT DATA { <'.$esp.'hybride> a <'.$ci['cine:Film']['iri'].'>, <'.$ci['cine:Cinema']['iri'].'> }');
+	$r = controle_coherence('cinema', $copie);
+	verifie(count(array_filter($r['anomalies'], function ($a) { return $a['source'] === 'SHACL' && strpos($a['message'], 'sont disjoints') !== false; })) == 1, 'formes dérivées : une instance des deux concepts disjoints est signalée');
+}
+// la propriété supprimée emporte sa cardinalité
+list($ok, , , ) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'supprimes' => array('classes' => array(), 'props' => array($esp.'duree'))));
+verifie($ok && !$q('ASK { GRAPH <'.ONTO_GRAPHE_CONTRAINTES.'> { <'.$esp.'duree> ?c ?n } }'), 'formes dérivées : la propriété supprimée emporte sa cardinalité');
+reinitialise_jeu('cinema');
+
 // Instances à la main : ajout, modification, suppression dans le même enregistrement que l'ontologie
 list($mi, ) = modele_instances('cinema');
 $ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;

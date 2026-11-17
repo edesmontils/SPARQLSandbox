@@ -140,34 +140,98 @@ function controles_rdfs($store, $prefixes) {
 
 // Validation SHACL du graphe par défaut de $store avec les formes du jeu.
 // Renvoie array(anomalies, tronqué, note) ; note : message si la validation n'a pas pu être faite.
+// Formes SHACL dérivées de l'ontologie : elles suivent ce que l'étudiant définit (propriété nouvelle ou modifiée,
+// caractéristique OWL, cardinalité voulue, concepts disjoints) sans qu'il écrive de SHACL. Elles s'ajoutent aux formes
+// du jeu (celles de l'enseignant). Seul ce que les contrôles RDFS ne couvrent pas est exprimé ici :
+//   - cardinalité d'une propriété : sh:minCount / sh:maxCount (voulues dans l'éditeur), et sh:maxCount 1 si elle est
+//     owl:FunctionalProperty, pour les instances de son domaine (ou tout sujet qui l'utilise, sans domaine) ;
+//   - deux concepts owl:disjointWith : aucune instance des deux à la fois.
+// (Les types, domaine et portée sont déjà vérifiés par les contrôles RDFS ; les autres caractéristiques OWL ne sont
+// pas traduites.) $m : modèle de l'ontologie (lit_ontologie_store()). Renvoie le Turtle, ou '' s'il n'y a rien.
+function formes_depuis_modele(array $m) {
+	$prefixes = $m['prefixes'] ?? PREFIXES_STANDARD;
+	$utilises = array();
+	// IRI en nom abrégé (avec sa déclaration @prefix) quand c'est possible, sinon entre chevrons
+	$I = function ($iri) use ($prefixes, &$utilises) {
+		$meilleur = null;
+		foreach ($prefixes as $p => $ns) {
+			if ($ns !== '' && strpos($iri, $ns) === 0 && preg_match('/^[A-Za-z_][A-Za-z0-9_-]*$/D', substr($iri, strlen($ns))) && (is_null($meilleur) || strlen($ns) > strlen($prefixes[$meilleur]))) $meilleur = $p;
+		}
+		if (is_null($meilleur) || !preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/D', $meilleur)) return '<'.$iri.'>';
+		$utilises[$meilleur] = $prefixes[$meilleur];
+		return $meilleur.':'.substr($iri, strlen($prefixes[$meilleur]));
+	};
+	$nom = function ($iri) use ($prefixes) { return abrege_iri($iri, $prefixes); };
+	$msg = function ($t) { return onto_litteral($t, 'fr'); };
+	$blocs = array();
+	foreach ($m['props'] as $p) {
+		$min = $p['min'] !== '' ? (int)$p['min'] : 0;
+		$max = $p['max'] !== '' ? (int)$p['max'] : null;
+		$fonctionnelle = in_array('fonctionnelle', $p['carac'], true);
+		if ($fonctionnelle) $max = is_null($max) ? 1 : min($max, 1);
+		if ($p['domain'] === '' && is_null($max)) continue;      // sans domaine, un minimum ne dit rien : tout sujet a déjà au moins une valeur
+		if ($min === 0 && is_null($max)) continue;
+		$borne = $min > 0 && !is_null($max) ? ($min === $max ? "exactement $min" : "de $min à $max") : ($min > 0 ? "au moins $min" : "au plus $max");
+		$sujet = $p['domain'] !== '' ? 'une instance de '.$nom($p['domain']) : 'un sujet de '.$nom($p['iri']);
+		$texte = ucfirst($sujet).' a '.$borne.' valeur'.(($max ?? $min) > 1 ? 's' : '').' pour '.$nom($p['iri'])
+			.($fonctionnelle ? ' (propriété fonctionnelle).' : '.');
+		$blocs[] = "[ a sh:PropertyShape ;\n"
+			.($p['domain'] !== '' ? '    sh:targetClass '.$I($p['domain'])." ;\n" : '    sh:targetSubjectsOf '.$I($p['iri'])." ;\n")
+			.'    sh:path '.$I($p['iri'])." ;\n"
+			.($min > 0 ? "    sh:minCount $min ;\n" : '').(!is_null($max) ? "    sh:maxCount $max ;\n" : '')
+			.'    sh:message '.$msg($texte)." ] .\n";
+	}
+	$vus = array();
+	foreach ($m['classes'] as $c) {
+		foreach ($c['disjoint'] as $d) {
+			$paire = array($c['iri'], $d); sort($paire);
+			if ($c['iri'] === $d || isset($vus[implode(' ', $paire)])) continue;
+			$vus[implode(' ', $paire)] = true;
+			$blocs[] = "[ a sh:NodeShape ;\n    sh:targetClass ".$I($c['iri'])." ;\n    sh:not [ a sh:NodeShape ; sh:class ".$I($d)." ] ;\n    sh:message "
+				.$msg('Les concepts '.$nom($c['iri']).' et '.$nom($d).' sont disjoints : une instance ne peut pas être des deux.')." ] .\n";
+		}
+	}
+	if (!$blocs) return '';
+	$entete = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n";
+	foreach ($utilises as $p => $ns) if ($p !== 'sh') $entete .= "@prefix $p: <$ns> .\n";
+	return $entete."\n".implode("\n", $blocs);
+}
+
+// Formes dérivées de l'ontologie du store $store ('' si aucune)
+function formes_derivees($jeu, $store) {
+	list($m, $erreur) = lit_ontologie_store($jeu, $store);
+	return is_null($m) ? '' : formes_depuis_modele($m);
+}
+
 function controles_shacl($jeu, $store, $prefixes) {
 	$jeux = liste_jeux();
 	$formes = $jeux[$jeu]['formes'] ?? array();
-	if (!$formes) return array(array(), false, null);
+	$derivees = formes_derivees($jeu, $store);     // formes tirées de l'ontologie de ce store
+	if (!$formes && $derivees === '') return array(array(), false, null, false);
 	if (is_null(chemin_programme('pyshacl')))
-		return array(array(), false, "Formes SHACL non vérifiées : pyshacl n'est pas installé sur le serveur.");
+		return array(array(), false, "Formes SHACL non vérifiées : pyshacl n'est pas installé sur le serveur.", false);
 	$base = DOSSIER_TMP.'/shacl_'.getmypid().'_'.bin2hex(random_bytes(4));
 	$donnees = $base.'.nt';
-	$fichierFormes = $formes[0];
+	$fichierFormes = $formes ? $formes[0] : $base.'_formes.ttl';
 	try {
 		$r = lance_oxigraph(array('dump', '--location', $store, '--graph', 'default', '--format', 'nt', '--file', $donnees), '', 10);
-		if ($r['code'] !== 0) return array(array(), false, "Formes SHACL non vérifiées : export des données impossible.");
-		if (count($formes) > 1) { // pyshacl ne lit qu'un fichier de formes
+		if ($r['code'] !== 0) return array(array(), false, "Formes SHACL non vérifiées : export des données impossible.", false);
+		if (count($formes) > 1 || $derivees !== '') { // pyshacl ne lit qu'un fichier de formes : celles du jeu, puis celles de l'ontologie
 			$fichierFormes = $base.'_formes.ttl';
 			$tout = '';
 			foreach ($formes as $f) $tout .= (string)file_get_contents($f)."\n";
-			file_put_contents($fichierFormes, $tout);
+			file_put_contents($fichierFormes, $tout.$derivees);
 		}
 		$r = lance_programme('pyshacl', array('-s', $fichierFormes, '-sf', 'turtle', '-df', 'nt', '-f', 'json-ld', $donnees), '', DELAI_SHACL);
 	} finally {
 		@unlink($donnees);
-		if ($fichierFormes !== $formes[0]) @unlink($fichierFormes);
+		if (!$formes || $fichierFormes !== $formes[0]) @unlink($fichierFormes);
 	}
-	if ($r['delai']) return array(array(), false, "Formes SHACL non vérifiées : la validation a dépassé ".DELAI_SHACL." secondes.");
+	if ($r['delai']) return array(array(), false, "Formes SHACL non vérifiées : la validation a dépassé ".DELAI_SHACL." secondes.", false);
 	$j = json_decode($r['sortie'], true);
 	if (!is_array($j)) {
 		error_log("SPARQLSandbox : validation SHACL de $jeu impossible : ".mb_substr($r['erreur'], 0, 500));
-		return array(array(), false, "Formes SHACL non vérifiées : la validation a échoué (voir le journal du serveur).");
+		return array(array(), false, "Formes SHACL non vérifiées : la validation a échoué (voir le journal du serveur).", false);
 	}
 	$noeuds = isset($j['@graph']) ? $j['@graph'] : (isset($j[0]) ? $j : array($j));
 	$sh = 'http://www.w3.org/ns/shacl#';
@@ -189,7 +253,7 @@ function controles_shacl($jeu, $store, $prefixes) {
 	}
 	usort($anomalies, function ($a, $b) { return strcmp($a['message'], $b['message']); });
 	$tronque = count($anomalies) > ANOMALIES_MAX;
-	return array(array_slice($anomalies, 0, ANOMALIES_MAX), $tronque, null);
+	return array(array_slice($anomalies, 0, ANOMALIES_MAX), $tronque, null, true);
 }
 
 // Rapport de cohérence de $store pour le jeu $jeu :
@@ -197,11 +261,10 @@ function controles_shacl($jeu, $store, $prefixes) {
 function controle_coherence($jeu, $store) {
 	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
 	list($anomalies, $tronque) = controles_rdfs($store, $prefixes);
-	list($shacl, $tronqueShacl, $note) = controles_shacl($jeu, $store, $prefixes);
-	$jeux = liste_jeux();
+	list($shacl, $tronqueShacl, $note, $actif) = controles_shacl($jeu, $store, $prefixes);
 	return array('anomalies' => array_merge($anomalies, $shacl), 'tronque' => $tronque || $tronqueShacl,
 	             'notes' => is_null($note) ? array() : array($note),
-	             'shacl' => !empty($jeux[$jeu]['formes']) && is_null($note));
+	             'shacl' => $actif && is_null($note));
 }
 
 // Rapport du jeu d'origine, calculé une fois par version du jeu (cache dans le dossier de
