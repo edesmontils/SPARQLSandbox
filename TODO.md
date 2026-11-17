@@ -27,8 +27,10 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
 - **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `js/disposition.js`, `ontologie.php`,
   `peuplement.php`) : graphe et liste éditables (sous-classes multiples, flèches ré-accrochables par
   leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA
-  (général ou ciblé) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
-  contrôle de cohérence ontologie/instance dans l'éditeur, et des formes SHACL générées avec l'ontologie.
+  (général ou ciblé), axiomes RDFS/OWL des concepts et propriétés (sous-propriété, inverse, équivalences,
+  disjonction, caractéristiques, genre, annotations) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
+  contrôle de cohérence ontologie/instance dans l'éditeur, les contrôles OWL de ces axiomes (propriété fonctionnelle, concepts disjoints, inverse) et des formes SHACL
+  générées avec l'ontologie.
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.

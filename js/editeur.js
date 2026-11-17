@@ -48,7 +48,7 @@
 	//--------------------------------------------------------------------------
 	// État : le brouillon
 	//--------------------------------------------------------------------------
-	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', prefixes: {}, sel: null, pos: {}, routes: {} };
+	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', prefixes: {}, meta: { relations: {}, carac: [] }, sel: null, pos: {}, routes: {} }, axOuvert = null;
 	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null, selSous = null, rat = null, poignees = '';
 	var vue = 'graphe', lien = null, drag = null, dernier = { t: 0, k: '' }, quitte = false, enCours = false;
 
@@ -88,10 +88,21 @@
 	}
 	function affiche(x) { return x.label || x.nom; }
 	function memeListe(a, b) { return a.slice().sort().join(' ') === b.slice().sort().join(' '); }
+	// Relations OWL/RDFS d'un concept ('classe') ou d'une propriété ('prop') : [{cle, titre, cible}] (décrites par le serveur, ontologie.php)
+	function relationsDe(t) { return (E.meta.relations || {})[t === 'classe' ? 'classes' : 'props'] || []; }
+	function cleRelations(t) { return relationsDe(t).map(function (r) { return r.cle; }); }
+	// Champs que l'éditeur sait modifier
+	function champsDe(t) { return (t === 'classe' ? ['label', 'comment', 'parents'] : ['label', 'comment', 'domain', 'range', 'carac', 'genre']).concat(cleRelations(t)); }
+	function copieChamps(x, t) { var o = {}; champsDe(t).forEach(function (k) { o[k] = Array.isArray(x[k]) ? x[k].slice() : x[k]; }); return o; }
+	function valeursVides(t) {
+		var o = { label: '', comment: '' };
+		if (t === 'classe') o.parents = []; else { o.domain = ''; o.range = ''; o.carac = []; o.genre = ''; }
+		cleRelations(t).forEach(function (k) { o[k] = []; });
+		return o;
+	}
 	function modifie(x, t) {
 		var o = x.orig;
-		if (x.label !== o.label) return true;
-		return t === 'classe' ? (x.comment !== o.comment || memeListe(x.parents, o.parents) === false) : (x.domain !== o.domain || x.range !== o.range);
+		return champsDe(t).some(function (k) { return Array.isArray(x[k]) ? !memeListe(x[k], o[k] || []) : x[k] !== o[k]; });
 	}
 	// Super-classe sélectionnée (flèche « sous-classe de » choisie) pour le concept x
 	function parentSel(x) { return selSous && E.sel && E.sel.t === 'classe' && E.sel.iri === x.iri && selSous.iri === x.iri ? selSous.parent : null; }
@@ -114,13 +125,14 @@
 
 	function charge(m) {
 		E.types = m.types; E.espace = m.espace;
+		E.meta = m.meta || { relations: {}, carac: [] };
 		E.prefixes = m.prefixes || {};
 		E.prefixe = prefixeDe(m.espace);
 		E.classes = m.classes.map(function (c) {
-			var x = Object.assign({}, c); x.parents = c.parents.slice(); x.orig = { label: c.label, comment: c.comment, parents: c.parents.slice() }; x.nouveau = false; x.supprime = false; return x;
+			var x = Object.assign({}, c); champsDe('classe').forEach(function (k) { if (Array.isArray(x[k])) x[k] = x[k].slice(); }); x.orig = copieChamps(x, 'classe'); x.nouveau = false; x.supprime = false; return x;
 		});
 		E.props = m.props.map(function (p) {
-			var x = Object.assign({}, p); x.orig = { label: p.label, domain: p.domain, range: p.range }; x.nouveau = false; x.supprime = false; return x;
+			var x = Object.assign({}, p); champsDe('prop').forEach(function (k) { if (Array.isArray(x[k])) x[k] = x[k].slice(); }); x.orig = copieChamps(x, 'prop'); x.nouveau = false; x.supprime = false; return x;
 		});
 		if (E.sel && !(E.sel.t === 'classe' ? cl(E.sel.iri) : pr(E.sel.iri))) E.sel = null;
 		if (!E.sel && E.classes.length) E.sel = { t: 'classe', iri: E.classes[0].iri };
@@ -363,6 +375,76 @@
 	}
 	function iriLocale(x) { return E.espace && x.iri.indexOf(E.espace) === 0 ? x.iri.slice(E.espace.length) : x.iri; }
 
+	// IRI saisie dans une relation vers « n'importe quelle IRI » : <iri>, adresse http(s) ou préfixe:nom (préfixe connu)
+	function resoutIri(texte) {
+		var t = String(texte).trim().replace(/^<(.*)>$/, '$1');
+		if (/^https?:\/\/[^\s<>"{}|\\^`]+$/.test(t)) return { iri: t };
+		var m = /^([A-Za-z][\w.-]*):([^\s<>"{}|\\^`]+)$/.exec(t);
+		if (m && E.prefixes[m[1]]) return { iri: E.prefixes[m[1]] + m[2] };
+		if (m && !/^\/\//.test(m[2])) return { erreur: 'Le préfixe « ' + m[1] + ': » n\'est pas connu : ajoutez-le avec « 🏷️ Préfixes », ou saisissez l\'adresse complète.' };
+		return { erreur: 'IRI attendue : une adresse http(s), ou préfixe:nom.' };
+	}
+	// Libellé affiché pour la cible d'une relation
+	function nomCible(iri, cible) {
+		if (cible === 'classe' && cl(iri)) return affiche(cl(iri));
+		if (cible === 'prop' && pr(iri)) return affiche(pr(iri));
+		return nomDe(iri) === iri.replace(/^.*[#\/]/, '') && /^https?:/.test(iri) ? iri : nomDe(iri);
+	}
+	function alerteGenre(x) {
+		if (x.genre === 'objet' && x.range && litteral(x.range)) return 'Une propriété objet a pour portée un concept, pas un type de données.';
+		if (x.genre === 'donnee' && x.range && !litteral(x.range)) return 'Une propriété de donnée a pour portée un type de données, pas un concept.';
+		return '';
+	}
+	// Bloc « Axiomes RDFS / OWL et annotations » de la fiche d'un concept (t = 'classe') ou d'une propriété ('prop')
+	function blocAxiomes(x, t, off) {
+		var n = relationsDe(t).reduce(function (s, r) { return s + x[r.cle].length; }, 0) + (t === 'prop' ? x.carac.length + (x.genre ? 1 : 0) : 0);
+		var ouvert = axOuvert === null ? n > 0 : axOuvert;
+		var h = '<details class="axiomes" id="f-axiomes"' + (ouvert ? ' open' : '') + '><summary>Axiomes RDFS / OWL et annotations' + (n ? ' <span class="nb">(' + n + ')</span>' : '') + '</summary><div class="ax">';
+		if (t === 'prop') {
+			h += '<div class="ax-ligne"><label class="ax-t" for="f-genre">Genre OWL</label><div><select id="f-genre"' + off + '><option value="">non précisé</option>' +
+				'<option value="objet"' + (x.genre === 'objet' ? ' selected' : '') + '>propriété objet (owl:ObjectProperty)</option>' +
+				'<option value="donnee"' + (x.genre === 'donnee' ? ' selected' : '') + '>propriété de donnée (owl:DatatypeProperty)</option></select>' +
+				(alerteGenre(x) ? '<p class="alerte">⚠️ ' + echappe(alerteGenre(x)) + '</p>' : '') + '</div></div>';
+			h += '<div class="ax-ligne"><span class="ax-t">Caractéristiques</span><div class="carac">' + (E.meta.carac || []).map(function (c) {
+				return '<label title="' + echappe(c.aide) + '"><input type="checkbox" data-carac="' + echappe(c.cle) + '"' + (x.carac.indexOf(c.cle) >= 0 ? ' checked' : '') + off + '> ' + echappe(c.titre) + '</label>';
+			}).join('') + '</div></div>';
+		}
+		relationsDe(t).forEach(function (r) {
+			h += '<div class="ax-ligne"><span class="ax-t">' + echappe(r.titre) + '</span><div class="parents">' + x[r.cle].map(function (v) {
+				return '<span class="puce-parent" title="' + echappe(v) + '">' + echappe(nomCible(v, r.cible)) + (off ? '' :
+					' <button type="button" class="lien-mini" data-rm-rel="' + echappe(r.cle) + '" data-iri="' + echappe(v) + '" aria-label="Retirer ' + echappe(nomCible(v, r.cible)) + ' de « ' + echappe(r.titre) + ' »">✕</button>') + '</span>';
+			}).join('');
+			if (!off) {
+				if (r.cible === 'iri') h += '<input type="text" class="champ ax-iri" data-add-iri="' + echappe(r.cle) + '" placeholder="http://… ou préfixe:nom" aria-label="Ajouter : ' + echappe(r.titre) + '"><button type="button" class="btn secondaire petit" data-add-iri-btn="' + echappe(r.cle) + '">＋</button>';
+				else {
+					var choix = (r.cible === 'classe' ? E.classes : E.props).filter(function (o) { return !o.supprime && o.iri !== x.iri && x[r.cle].indexOf(o.iri) < 0; });
+					h += '<select data-add-rel="' + echappe(r.cle) + '" aria-label="Ajouter : ' + echappe(r.titre) + '"><option value="">＋ ajouter…</option>' + choix.map(function (o) {
+						return '<option value="' + echappe(o.iri) + '">' + echappe(affiche(o)) + '</option>';
+					}).join('') + '</select>';
+				}
+			}
+			h += '</div></div>';
+		});
+		return h + '<p class="astuce" style="margin:6px 0 0">Ces axiomes décrivent l\'ontologie et sont écrits dans votre copie ; Oxigraph ne raisonne pas dessus, mais vos requêtes peuvent les lire.</p></div></details>';
+	}
+	function brancheAxiomes(x, t) {
+		var f = $('#fiche'), ajouteIri = function (cle) {
+			var champ = f.querySelector('[data-add-iri="' + cle + '"]'), r = resoutIri(champ.value);
+			if (r.erreur) { toast(r.erreur); return; }
+			if (x[cle].indexOf(r.iri) < 0) x[cle].push(r.iri);
+			rend();
+		};
+		var d = $('#f-axiomes'); if (d) d.addEventListener('toggle', function () { axOuvert = d.open; });
+		f.querySelectorAll('[data-rm-rel]').forEach(function (b) { b.addEventListener('click', function () { x[b.dataset.rmRel] = x[b.dataset.rmRel].filter(function (v) { return v !== b.dataset.iri; }); rend(); }); });
+		f.querySelectorAll('select[data-add-rel]').forEach(function (se) { se.addEventListener('change', function () { var k = se.dataset.addRel; if (se.value && x[k].indexOf(se.value) < 0) x[k].push(se.value); rend(); }); });
+		f.querySelectorAll('[data-add-iri-btn]').forEach(function (b) { b.addEventListener('click', function () { ajouteIri(b.dataset.addIriBtn); }); });
+		f.querySelectorAll('[data-add-iri]').forEach(function (i) { i.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ajouteIri(i.dataset.addIri); } }); });
+		var g = $('#f-genre'); if (g) g.addEventListener('change', function () { x.genre = g.value; rend(); });
+		f.querySelectorAll('[data-carac]').forEach(function (c) {
+			c.addEventListener('change', function () { x.carac = x.carac.filter(function (v) { return v !== c.dataset.carac; }); if (c.checked) x.carac.push(c.dataset.carac); rend(); });
+		});
+	}
+
 	function rendFiche() {
 		var f = $('#fiche'), s = E.sel, x = s && (s.t === 'classe' ? cl(s.iri) : pr(s.iri));
 		if (!x) { f.innerHTML = '<div class="vide">Sélectionnez un concept ou une propriété,<br>ou créez-en un.</div>'; return; }
@@ -384,9 +466,12 @@
 				E.classes.filter(function (c) { return !c.supprime; }).map(function (c) { return '<option value="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</option>'; }).join('') +
 				'</select><button type="button" class="btn secondaire petit" id="f-relier"' + off + '>＋ Propriété</button></div>';
 			h += '<label for="f-comment">Commentaire</label><textarea id="f-comment" rows="3" maxlength="1000"' + off + '>' + echappe(x.comment) + '</textarea>';
+			h += '<div class="plein">' + blocAxiomes(x, t, off) + '</div>';
 		} else {
 			h += '<label for="f-domain">Domaine (sujet)</label><select id="f-domain"' + off + '>' + options(x.domain, true, true, false) + '</select>';
 			h += '<label for="f-range">Portée (objet)</label><select id="f-range"' + off + '>' + options(x.range, true, true, true) + '</select>';
+			h += '<label for="f-comment">Commentaire</label><textarea id="f-comment" rows="2" maxlength="1000"' + off + '>' + echappe(x.comment) + '</textarea>';
+			h += '<div class="plein">' + blocAxiomes(x, t, off) + '</div>';
 			h += '<div class="plein astuce" style="margin:0">' + (x.range && litteral(x.range) ? '↪ Propriété de <strong>donnée</strong> : la valeur est un littéral.' : '↪ Propriété <strong>objet</strong> : elle relie deux ressources.') + '</div>';
 		}
 		h += '</div>';
@@ -427,6 +512,7 @@
 		champ('#f-comment', function (v) { x.comment = v; if (x.comment && !x.clang && !x.orig.comment) x.clang = 'fr'; });
 		champ('#f-domain', function (v) { x.domain = v; });
 		champ('#f-range', function (v) { x.range = v; });
+		brancheAxiomes(x, t);
 		var rl = $('#f-relier'); if (rl) rl.addEventListener('click', function () {
 			var cible = $('#f-relier-cible').value;
 			if (cible) liaison('prop', x.iri, cible); else liaison('attr', x.iri);
@@ -474,16 +560,18 @@
 		var ancien = x.iri;
 		if (iri === ancien) return;
 		E.pos[iri] = E.pos[ancien]; delete E.pos[ancien];
-		E.classes.forEach(function (c) { c.parents = c.parents.map(function (p) { return p === ancien ? iri : p; }); });
-		E.props.forEach(function (p) { if (p.domain === ancien) p.domain = iri; if (p.range === ancien) p.range = iri; });
+		var echange = function (v) { return v === ancien ? iri : v; };
+		E.classes.forEach(function (c) { c.parents = c.parents.map(echange); cleRelations('classe').forEach(function (k) { c[k] = c[k].map(echange); }); });
+		E.props.forEach(function (p) { if (p.domain === ancien) p.domain = iri; if (p.range === ancien) p.range = iri; cleRelations('prop').forEach(function (k) { p[k] = p[k].map(echange); }); });
 		if (E.sel && E.sel.iri === ancien) E.sel.iri = iri;
 		x.iri = iri; x.nom = nomDe(iri);
 	}
 	function nouvelElement(t, label, base) {
 		var iri = E.espace + unique(slug(base, t === 'classe'), null);
 		var o = { iri: iri, nom: nomDe(iri), label: label, llang: 'fr', nouveau: true, supprime: false, iriAuto: true };
-		if (t === 'classe') { o.comment = ''; o.clang = ''; o.parents = []; o.n = 0; o.decl = true; o.orig = { label: '', comment: '', parents: [] }; E.classes.push(o); }
-		else { o.domain = ''; o.range = ''; o.orig = { label: '', domain: '', range: '' }; E.props.push(o); }
+		Object.assign(o, valeursVides(t), { label: label, clang: '' });
+		o.orig = valeursVides(t);
+		if (t === 'classe') { o.n = 0; o.decl = true; E.classes.push(o); } else E.props.push(o);
 		E.sel = { t: t, iri: iri };
 		return o;
 	}
@@ -502,8 +590,13 @@
 	// Supprimer un concept détache ce qui s'y réfère (sous-classes, domaines, portées) : on garde de quoi défaire
 	function supprime(x, t) {
 		var casc = [];
+		// les relations des autres éléments vers celui-ci sont détachées (de quoi les rétablir)
+		var meme = t === 'classe' ? E.classes : E.props, cles = (t === 'classe' ? ['parents'] : []).concat(relationsDe(t).filter(function (r) { return r.cible === t; }).map(function (r) { return r.cle; }));
+		meme.forEach(function (o) {
+			if (o === x) return;
+			cles.forEach(function (k) { if (o[k].indexOf(x.iri) >= 0) { casc.push([o, k, x.iri]); o[k] = o[k].filter(function (v) { return v !== x.iri; }); } });
+		});
 		if (t === 'classe') {
-			E.classes.forEach(function (c) { if (c.parents.indexOf(x.iri) >= 0) { casc.push([c, 'parents', x.iri]); c.parents = c.parents.filter(function (p) { return p !== x.iri; }); } });
 			E.props.forEach(function (p) {
 				if (p.domain === x.iri) { casc.push([p, 'domain', p.domain]); p.domain = ''; }
 				if (p.range === x.iri) { casc.push([p, 'range', p.range]); p.range = ''; }
@@ -519,22 +612,27 @@
 	function restaure(x, t) {
 		x.supprime = false;
 		(x.cascade || []).forEach(function (c) {
-			if (c[1] === 'parents') { if (c[0].parents.indexOf(c[2]) < 0) c[0].parents.push(c[2]); }
+			if (Array.isArray(c[0][c[1]])) { if (c[0][c[1]].indexOf(c[2]) < 0) c[0][c[1]].push(c[2]); }
 			else if (c[0][c[1]] === '') c[0][c[1]] = c[2];
 		});
 		x.cascade = [];
 		rend();
 	}
 
+	function elementBrouillon(x, t) {
+		var o = { iri: x.iri, label: x.label, llang: x.llang || '', comment: x.comment, clang: x.clang || '' };
+		champsDe(t).forEach(function (k) { if (k !== 'label' && k !== 'comment') o[k] = Array.isArray(x[k]) ? x[k].slice() : x[k]; });
+		return o;
+	}
 	function brouillon() {
 		var b = { classes: [], props: [], supprimes: { classes: [], props: [] } };
 		E.classes.forEach(function (c) {
 			if (c.supprime) { if (!c.nouveau) b.supprimes.classes.push(c.iri); return; }
-			if (c.nouveau || modifie(c, 'classe')) b.classes.push({ iri: c.iri, label: c.label, llang: c.llang, comment: c.comment, clang: c.clang, parents: c.parents.slice() });
+			if (c.nouveau || modifie(c, 'classe')) b.classes.push(elementBrouillon(c, 'classe'));
 		});
 		E.props.forEach(function (p) {
 			if (p.supprime) { if (!p.nouveau) b.supprimes.props.push(p.iri); return; }
-			if (p.nouveau || modifie(p, 'prop')) b.props.push({ iri: p.iri, label: p.label, llang: p.llang, domain: p.domain, range: p.range });
+			if (p.nouveau || modifie(p, 'prop')) b.props.push(elementBrouillon(p, 'prop'));
 		});
 		if (nbInst()) b.instances = {
 			nouvelles: D.nouvelles.map(function (n) { return n.anon ? { anon: true, classe: n.classe, valeurs: n.valeurs } : { iri: n.iri, classe: n.classe, valeurs: n.valeurs }; }),
@@ -753,7 +851,15 @@
 		return E.props.filter(function (p) { return !p.supprime && p.domain && lignees.indexOf(p.domain) >= 0; });
 	}
 	// Valeur vide pour la propriété p : référence vers une instance, ou littéral du type de sa portée
+	// Propriétés RDFS / OWL toujours proposées pour une instance, même hors de l'ontologie
+	var PROPS_STD = [
+		{ iri: RDFS + 'label', nom: 'rdfs:label', k: 'lit' }, { iri: RDFS + 'comment', nom: 'rdfs:comment', k: 'lit' },
+		{ iri: RDFS + 'seeAlso', nom: 'rdfs:seeAlso', k: 'iri' }, { iri: RDFS + 'isDefinedBy', nom: 'rdfs:isDefinedBy', k: 'iri' },
+		{ iri: 'http://www.w3.org/2002/07/owl#sameAs', nom: 'owl:sameAs', k: 'iri' }
+	];
 	function valeurVide(piri) {
+		var std = !pr(piri) && PROPS_STD.filter(function (x) { return x.iri === piri; })[0];
+		if (std) return { p: piri, nom: std.nom, k: std.k, v: '', dt: '', l: '' };
 		var p = pr(piri), r = p && p.range;
 		if (r && !litteral(r)) return { p: piri, k: 'iri', v: '', dt: '', l: '' };
 		return { p: piri, k: 'lit', v: '', dt: r && r !== RDFS + 'Literal' && r !== RDF + 'langString' ? r : '', l: '' };
@@ -873,7 +979,8 @@
 		var ap = proprietesFormulaire(), autres = E.props.filter(function (p) { return !p.supprime && ap.indexOf(p) < 0; });
 		var opt = function (p) { return '<option value="' + echappe(p.iri) + '">' + echappe(affiche(p)) + '</option>'; };
 		h += '<select id="if-ajout" class="champ" aria-label="Ajouter une valeur"><option value="">＋ ajouter une valeur…</option>' + ap.map(opt).join('') +
-			(autres.length ? '<optgroup label="Autres propriétés">' + autres.map(opt).join('') + '</optgroup>' : '') + '</select>';
+			(autres.length ? '<optgroup label="Autres propriétés">' + autres.map(opt).join('') + '</optgroup>' : '') +
+			'<optgroup label="RDFS / OWL">' + PROPS_STD.map(function (x) { return '<option value="' + echappe(x.iri) + '">' + echappe(x.nom) + '</option>'; }).join('') + '</optgroup></select>';
 		var noms = [];
 		(I ? I.classes : []).forEach(function (c) { c.items.forEach(function (it) { if (it.iri && noms.length < 600) noms.push('<option value="' + echappe(it.nom) + '" label="' + echappe(it.titre || '') + '">'); }); });
 		h += '<datalist id="dl-inst">' + noms.join('') + '</datalist>';

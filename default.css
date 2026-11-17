@@ -565,3 +565,17 @@ a.btn { display: inline-block; text-decoration: none; }
 .pref-metier { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; }
 .pref-metier button { grid-column: 2; justify-self: start; }
 
+/* Éditeur : axiomes RDFS / OWL */
+.axiomes { border: 1px solid var(--sb-border); border-radius: var(--sb-radius-sm); background: var(--sb-surface-2); }
+.axiomes > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; font-size: .94em; }
+.axiomes .nb { font-weight: 400; color: var(--sb-ink-faint); }
+.axiomes .ax { padding: 4px 12px 10px; }
+.ax-ligne { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; align-items: start; margin: 7px 0; }
+.ax-ligne .ax-t { font-size: .9em; color: var(--sb-ink-soft); font-weight: 600; padding-top: 4px; }
+.ax-ligne select, .ax-ligne .ax-iri { padding: 4px 8px; border: 1px solid var(--sb-border-strong); border-radius: var(--sb-radius-sm); background: #fff; font: inherit; font-size: .92em; max-width: 100%; }
+.ax-ligne .ax-iri { min-width: 12em; flex: 1; }
+.carac { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.carac label { font-size: .92em; cursor: help; }
+.alerte { margin: 4px 0 0; font-size: .86em; color: #7a5a00; }
+@media (max-width: 600px) { .ax-ligne { grid-template-columns: minmax(0, 1fr); } }
+

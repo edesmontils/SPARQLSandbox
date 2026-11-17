@@ -406,6 +406,50 @@ verifie(substr_count($maj, 'DELETE DATA') == 1 && substr_count($maj, 'subClassOf
 verifie(is_null(onto_nettoie_brouillon(array('classes' => array(array('iri' => $act['iri'], 'parents' => array('pas une iri'))), 'props' => array()))[0]), 'éditeur : super-classe invalide refusée');
 reinitialise_jeu('cinema');
 
+// Axiomes RDFS et OWL : relations, caractéristiques, genre, annotations
+reinitialise_jeu('cinema');
+$q = function ($r) { $x = execute_sparql('cinema', $r); return $x['ok'] && $x['resultat'] === true; };
+list($mo, ) = modele_ontologie('cinema');
+$ci = array(); foreach ($mo['classes'] as $c) $ci[$c['nom']] = $c;
+$pi = array(); foreach ($mo['props'] as $p) $pi[$p['nom']] = $p;
+$esp = $mo['espace']; $OWL = PREFIXES_STANDARD['owl']; $RDFS = PREFIXES_STANDARD['rdfs'];
+verifie(isset($mo['meta']['relations']['props']) && count($mo['meta']['carac']) == 7 && $pi['cine:titre']['carac'] === array() && $pi['cine:titre']['genre'] === '', 'axiomes : le modèle décrit les champs et les vides');
+$pf = $pi['cine:realisePar']; $cf = $ci['cine:Film'];
+$nouveaux = array(
+	'classes' => array(array_merge(array('iri' => $cf['iri'], 'label' => $cf['label'], 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parents' => array(),
+		'equiv' => array('http://schema.org/Movie'), 'disjoint' => array($ci['cine:Cinema']['iri']), 'voir' => array('http://fr.wikipedia.org/wiki/Film'), 'defini' => array()))),
+	'props' => array(
+		array('iri' => $pf['iri'], 'label' => '', 'llang' => '', 'comment' => 'Le réalisateur d\'un film', 'clang' => '', 'domain' => $pf['domain'], 'range' => $pf['range'],
+			'superprops' => array($esp.'contribuePar'), 'equiv' => array(), 'inverse' => array($esp.'realise'), 'voir' => array(), 'defini' => array(),
+			'carac' => array('fonctionnelle'), 'genre' => 'objet'),
+		array('iri' => $esp.'realise', 'label' => 'réalise', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'domain' => $pf['range'], 'range' => $pf['domain'],
+			'superprops' => array(), 'equiv' => array(), 'inverse' => array($pf['iri']), 'voir' => array(), 'defini' => array(), 'carac' => array('transitive', 'symetrique'), 'genre' => 'objet'),
+	),
+	'supprimes' => array('classes' => array(), 'props' => array()));
+list($ok, $h, $m2, ) = enregistre_ontologie('cinema', $nouveaux);
+verifie($ok, 'axiomes : enregistrés ('.strip_tags($h).')');
+$c2 = array(); foreach ($m2['classes'] as $c) $c2[$c['nom']] = $c;
+$p2 = array(); foreach ($m2['props'] as $p) $p2[$p['nom']] = $p;
+verifie($c2['cine:Film']['equiv'] === array('http://schema.org/Movie') && $c2['cine:Film']['disjoint'] === array($ci['cine:Cinema']['iri']) && $c2['cine:Film']['voir'] === array('http://fr.wikipedia.org/wiki/Film'), 'axiomes : équivalent, disjoint et voir aussi d\'un concept relus');
+verifie($p2['cine:realisePar']['carac'] === array('fonctionnelle') && $p2['cine:realisePar']['genre'] === 'objet' && $p2['cine:realisePar']['inverse'] === array($esp.'realise') && $p2['cine:realisePar']['comment'] === 'Le réalisateur d\'un film', 'axiomes : caractéristique, genre, inverse et commentaire d\'une propriété relus');
+verifie($p2['cine:realisePar']['superprops'] === array($esp.'contribuePar') && isset($p2['cine:contribuePar']), 'axiomes : sous-propriété relue, la propriété visée entre dans le modèle');
+verifie($p2['cine:realise']['carac'] === array('symetrique', 'transitive') && $p2['cine:realise']['label'] === 'réalise', 'axiomes : nouvelle propriété avec ses caractéristiques');
+verifie($q('ASK { <'.$pf['iri'].'> a <'.$OWL.'FunctionalProperty>, <'.$OWL.'ObjectProperty> ; <'.$OWL.'inverseOf> <'.$esp.'realise> ; <'.$RDFS.'subPropertyOf> <'.$esp.'contribuePar> }')
+	&& $q('ASK { <'.$cf['iri'].'> <'.$OWL.'disjointWith> <'.$ci['cine:Cinema']['iri'].'> ; <'.$OWL.'equivalentClass> <http://schema.org/Movie> }'), 'axiomes : triplets OWL et RDFS écrits');
+// idempotence, puis retrait ciblé : seuls les triplets qui changent sont touchés
+$b = onto_nettoie_brouillon($nouveaux)[0];
+verifie(onto_mise_a_jour($m2, $b)[0] === '', 'axiomes : rien à refaire après l\'enregistrement');
+$moins = $nouveaux; $moins['props'][0]['carac'] = array(); $moins['props'][0]['genre'] = 'donnee'; $moins['classes'][0]['disjoint'] = array();
+list($maj, ) = onto_mise_a_jour($m2, onto_nettoie_brouillon($moins)[0]);
+verifie(substr_count($maj, 'FunctionalProperty') == 1 && substr_count($maj, 'DELETE DATA') == 1 && substr_count($maj, 'DatatypeProperty') == 1 && substr_count($maj, 'disjointWith') == 1 && strpos($maj, 'inverseOf') === false, 'axiomes : retrait et changement de genre ciblés');
+verifie(is_null(onto_nettoie_brouillon(array('classes' => array(), 'props' => array(array('iri' => $esp.'x', 'carac' => array('magique'))), 'supprimes' => array('classes' => array(), 'props' => array())))[0])
+	&& is_null(onto_nettoie_brouillon(array('classes' => array(), 'props' => array(array('iri' => $esp.'x', 'genre' => 'autre')), 'supprimes' => array('classes' => array(), 'props' => array())))[0])
+	&& is_null(onto_nettoie_brouillon(array('classes' => array(), 'props' => array(array('iri' => $esp.'x', 'inverse' => array('pas une iri'))), 'supprimes' => array('classes' => array(), 'props' => array())))[0]), 'axiomes : caractéristique, genre et IRI invalides refusés');
+$eff = onto_applique_brouillon($m2, onto_nettoie_brouillon(array('classes' => array(), 'props' => array(array('iri' => $esp.'nouvelle', 'carac' => array('transitive'), 'genre' => 'objet')), 'supprimes' => array('classes' => array(), 'props' => array())))[0], array());
+$pe = array(); foreach ($eff['props'] as $p) $pe[$p['iri']] = $p;
+verifie($pe[$esp.'nouvelle']['carac'] === array('transitive') && $pe[$esp.'nouvelle']['inverse'] === array(), 'axiomes : ontologie effective avec les axiomes du brouillon');
+reinitialise_jeu('cinema');
+
 // Instances à la main : ajout, modification, suppression dans le même enregistrement que l'ontologie
 list($mi, ) = modele_instances('cinema');
 $ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;

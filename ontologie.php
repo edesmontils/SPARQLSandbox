@@ -3,8 +3,12 @@
 // SPARQL qui applique les changements faits par l'étudiant (page editeur.php, js/editeur.js).
 //
 // Le modèle ne garde que ce que l'éditeur sait modifier :
-//   classes : iri, nom, label (+ langue), comment (+ langue), parents (super-classes), n (instances)
-//   props   : iri, nom, label (+ langue), domain, range (une seule valeur chacun), decl
+//   classes : iri, nom, label (+ langue), comment (+ langue), parents (super-classes), n (instances),
+//             et les relations de onto_relations() : equiv (owl:equivalentClass), disjoint (owl:disjointWith),
+//             voir (rdfs:seeAlso), defini (rdfs:isDefinedBy)
+//   props   : iri, nom, label, comment (+ langues), domain, range (une seule valeur chacun), decl, relations
+//             (superprops : rdfs:subPropertyOf, equiv : owl:equivalentProperty, inverse : owl:inverseOf, voir, defini),
+//             carac (caractéristiques OWL : fonctionnelle, symétrique…), genre (objet | donnee : owl:ObjectProperty ou DatatypeProperty)
 // Les autres déclarations (plusieurs domaines, annotations…) ne sont jamais touchées : la mise à
 // jour n'efface que les triplets que l'éditeur a lus, un par un (DELETE DATA), jamais en bloc,
 // sauf pour la suppression d'un élément (toutes ses déclarations, pas ses instances).
@@ -15,6 +19,74 @@ const ONTO_LIBELLE_MAX = 200;
 const ONTO_COMMENTAIRE_MAX = 1000;
 const ONTO_LANGUE_DEFAUT = 'fr';
 const ONTO_ESPACE_DEFAUT = 'http://example.org/ontologie#';
+
+// Relations entre éléments de l'ontologie, et annotations : type d'élément => clé => array(prédicat, titre, genre de cible
+// ('classe', 'prop' : un élément de l'ontologie ; 'iri' : n'importe quelle IRI))
+function onto_relations() {
+	$R = PREFIXES_STANDARD['rdfs']; $O = PREFIXES_STANDARD['owl'];
+	$voir = array($R.'seeAlso', 'voir aussi', 'iri');
+	$defini = array($R.'isDefinedBy', 'défini par', 'iri');
+	return array(
+		'classes' => array(
+			'equiv' => array($O.'equivalentClass', 'équivalent à', 'classe'),
+			'disjoint' => array($O.'disjointWith', 'disjoint de', 'classe'),
+			'voir' => $voir, 'defini' => $defini),
+		'props' => array(
+			'superprops' => array($R.'subPropertyOf', 'sous-propriété de', 'prop'),
+			'equiv' => array($O.'equivalentProperty', 'équivalente à', 'prop'),
+			'inverse' => array($O.'inverseOf', 'inverse de', 'prop'),
+			'voir' => $voir, 'defini' => $defini),
+	);
+}
+
+// Caractéristiques OWL d'une propriété : clé => array(classe OWL, titre, aide)
+function onto_caracteristiques() {
+	$O = PREFIXES_STANDARD['owl'];
+	return array(
+		'fonctionnelle' => array($O.'FunctionalProperty', 'fonctionnelle', 'au plus une valeur par sujet'),
+		'fonctionnelle_inverse' => array($O.'InverseFunctionalProperty', 'fonctionnelle inverse', 'une valeur ne peut venir que d\'un sujet (comme un identifiant)'),
+		'symetrique' => array($O.'SymmetricProperty', 'symétrique', 'si A p B alors B p A'),
+		'asymetrique' => array($O.'AsymmetricProperty', 'asymétrique', 'si A p B alors jamais B p A'),
+		'transitive' => array($O.'TransitiveProperty', 'transitive', 'si A p B et B p C alors A p C'),
+		'reflexive' => array($O.'ReflexiveProperty', 'réflexive', 'tout élément est lié à lui-même'),
+		'irreflexive' => array($O.'IrreflexiveProperty', 'irréflexive', 'aucun élément n\'est lié à lui-même'),
+	);
+}
+
+// Genre OWL d'une propriété : clé => classe OWL
+function onto_genres() {
+	$O = PREFIXES_STANDARD['owl'];
+	return array('objet' => $O.'ObjectProperty', 'donnee' => $O.'DatatypeProperty');
+}
+
+// Prédicats des relations, et types OWL spéciaux (caractéristiques, genre)
+function onto_predicats() {
+	$p = array();
+	foreach (onto_relations() as $t) foreach ($t as $d) $p[$d[0]] = $d[0];
+	return array_values($p);
+}
+function onto_types_speciaux() {
+	$t = array();
+	foreach (onto_caracteristiques() as $d) $t[] = $d[0];
+	return array_merge($t, array_values(onto_genres()));
+}
+
+// Ce que le client a besoin de savoir pour dessiner les champs d'axiomes
+function onto_meta() {
+	$rel = array();
+	foreach (onto_relations() as $k => $t) foreach ($t as $cle => $d) $rel[$k][] = array('cle' => $cle, 'titre' => $d[1], 'cible' => $d[2]);
+	$car = array();
+	foreach (onto_caracteristiques() as $cle => $d) $car[] = array('cle' => $cle, 'titre' => $d[1], 'aide' => $d[2]);
+	return array('relations' => $rel, 'carac' => $car);
+}
+
+// Un élément « vide » du type $k (classes | props) : valeurs par défaut des champs que l'éditeur gère
+function onto_vide($k) {
+	$o = array('label' => '', 'llang' => '', 'comment' => '', 'clang' => '');
+	if ($k === 'classes') $o['parents'] = array(); else $o = array_merge($o, array('domain' => '', 'range' => '', 'carac' => array(), 'genre' => ''));
+	foreach (onto_relations()[$k] as $cle => $_) $o[$cle] = array();
+	return $o;
+}
 
 // Types de données proposés comme portée d'une propriété
 function onto_types() {
@@ -52,7 +124,9 @@ function onto_espace(array $iris) {
 //   $instances [c => nombre]         instances par classe
 //   $labels    [x, texte, langue]    rdfs:label
 //   $comments  [x, texte, langue]    rdfs:comment
-function construit_modele_ontologie(array $classes, array $parents, array $props, array $instances, array $labels, array $comments, array $prefixes) {
+//   $axiomes   [s, p, o]             relations de onto_relations() entre IRI
+//   $speciaux  [s, type]             types owl des propriétés : caractéristiques et genre
+function construit_modele_ontologie(array $classes, array $parents, array $props, array $instances, array $labels, array $comments, array $axiomes, array $speciaux, array $prefixes) {
 	$cl = array();   // iri => decl
 	$ajoute = function ($iri, $decl) use (&$cl) {
 		if (!is_string($iri) || voc_est_meta($iri) || voc_est_litteral($iri)) return;
@@ -74,6 +148,27 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		if (!is_null($l[1]) && !voc_est_meta($l[1])) { $pr[$l[0]]['dom'][$l[1]] = true; $ajoute($l[1], false); }
 		if (!is_null($l[2]) && !voc_est_meta($l[2])) { $pr[$l[0]]['ran'][$l[2]] = true; $ajoute($l[2], false); }
 	}
+	// relations : le prédicat donne la clé ; une relation vers un concept ou une propriété y fait entrer la cible
+	$rel_pred = array();
+	foreach (onto_relations() as $k => $t) foreach ($t as $cle => $d) $rel_pred[$d[0]][] = array($k, $cle, $d[2]);
+	$rel = array('classes' => array(), 'props' => array());   // k => iri => cle => iri => true
+	foreach ($axiomes as $l) {
+		foreach ($rel_pred[$l[1]] ?? array() as $d) {
+			list($k, $cle, $cible) = $d;
+			$connu = $k === 'classes' ? isset($cl[$l[0]]) : isset($pr[$l[0]]);
+			if (!$connu || voc_est_meta($l[0])) continue;
+			if ($cible === 'classe') $ajoute($l[2], false);
+			elseif ($cible === 'prop' && !voc_est_meta($l[2]) && !isset($pr[$l[2]])) $pr[$l[2]] = array('dom' => array(), 'ran' => array());
+			$rel[$k][$l[0]][$cle][$l[2]] = true;
+		}
+	}
+	$car = array(); $genre = array();
+	$carac_par_iri = array(); foreach (onto_caracteristiques() as $cle => $d) $carac_par_iri[$d[0]] = $cle;
+	$genre_par_iri = array_flip(onto_genres());
+	foreach ($speciaux as $l) {
+		if (isset($carac_par_iri[$l[1]])) $car[$l[0]][$carac_par_iri[$l[1]]] = true;
+		elseif (isset($genre_par_iri[$l[1]])) $genre[$l[0]] = $genre_par_iri[$l[1]];
+	}
 	$textes = function (array $lignes) {
 		$t = array();
 		foreach ($lignes as $l) $t[$l[0]][] = array($l[1], $l[2]);
@@ -82,6 +177,7 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 	$labels = $textes($labels);
 	$comments = $textes($comments);
 	$nom = function ($iri) use ($prefixes) { return abrege_iri($iri, $prefixes); };
+	$liste = function ($k, $iri, $cle) use ($rel) { $v = array_keys($rel[$k][$iri][$cle] ?? array()); sort($v); return $v; };
 
 	ksort($cl);
 	$sortie = array('classes' => array(), 'props' => array(), 'types' => array(), 'espace' => '');
@@ -90,20 +186,27 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		sort($p);
 		list($label, $ll) = onto_choisit_litteral($labels[$iri] ?? array());
 		list($comment, $cl_) = onto_choisit_litteral($comments[$iri] ?? array());
-		$sortie['classes'][] = array('iri' => $iri, 'nom' => $nom($iri), 'label' => $label, 'llang' => $ll,
+		$e = array('iri' => $iri, 'nom' => $nom($iri), 'label' => $label, 'llang' => $ll,
 			'comment' => $comment, 'clang' => $cl_, 'parents' => $p, 'n' => (int)($instances[$iri] ?? 0), 'decl' => $decl);
+		foreach (onto_relations()['classes'] as $cle => $_) $e[$cle] = $liste('classes', $iri, $cle);
+		$sortie['classes'][] = $e;
 	}
 	ksort($pr);
 	foreach ($pr as $iri => $d) {
 		$dom = array_keys($d['dom']); sort($dom);
 		$ran = array_keys($d['ran']); sort($ran);
 		list($label, $ll) = onto_choisit_litteral($labels[$iri] ?? array());
-		$sortie['props'][] = array('iri' => $iri, 'nom' => $nom($iri), 'label' => $label, 'llang' => $ll,
-			'domain' => $dom ? $dom[0] : '', 'range' => $ran ? $ran[0] : '');
+		list($comment, $cl_) = onto_choisit_litteral($comments[$iri] ?? array());
+		$cs = array_keys($car[$iri] ?? array()); sort($cs);
+		$e = array('iri' => $iri, 'nom' => $nom($iri), 'label' => $label, 'llang' => $ll, 'comment' => $comment, 'clang' => $cl_,
+			'domain' => $dom ? $dom[0] : '', 'range' => $ran ? $ran[0] : '', 'carac' => $cs, 'genre' => $genre[$iri] ?? '');
+		foreach (onto_relations()['props'] as $cle => $_) $e[$cle] = $liste('props', $iri, $cle);
+		$sortie['props'][] = $e;
 	}
 	foreach (onto_types() as $t) $sortie['types'][] = array('iri' => $t, 'nom' => $nom($t));
 	$sortie['espace'] = onto_espace(array_merge(array_keys($cl), array_keys($pr)));
 	$sortie['prefixes'] = $prefixes;   // pour abréger et résoudre les identifiants saisis dans l'éditeur
+	$sortie['meta'] = onto_meta();
 	return $sortie;
 }
 
@@ -126,6 +229,9 @@ function modele_ontologie($jeu) {
 		'instances' => 'SELECT ?c (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?c . FILTER(isIRI(?c)) } GROUP BY ?c'.$lim,
 		'labels' => 'SELECT ?x ?l (LANG(?l) AS ?g) WHERE { ?x rdfs:label ?l . FILTER(isIRI(?x) && isLiteral(?l)) }'.$lim,
 		'comments' => 'SELECT ?x ?l (LANG(?l) AS ?g) WHERE { ?x rdfs:comment ?l . FILTER(isIRI(?x) && isLiteral(?l)) }'.$lim,
+		// relations et annotations (onto_relations), caractéristiques et genre OWL des propriétés
+		'axiomes' => 'SELECT ?s ?p ?o WHERE { ?s ?p ?o . VALUES ?p { '.implode(' ', array_map('onto_iri', onto_predicats())).' } FILTER(isIRI(?s) && isIRI(?o)) }'.$lim,
+		'speciaux' => 'SELECT ?s ?t WHERE { ?s a ?t . VALUES ?t { '.implode(' ', array_map('onto_iri', onto_types_speciaux())).' } FILTER(isIRI(?s)) }'.$lim,
 	);
 	$lignes = array();
 	$echec = null;
@@ -150,7 +256,9 @@ function modele_ontologie($jeu) {
 		array_map(function ($l) use ($val) { return $val($l, 'c'); }, $lignes['classes']),
 		array_map(function ($l) use ($val) { return array($val($l, 'c'), $val($l, 'sup')); }, $lignes['parents']),
 		array_map(function ($l) use ($val) { return array($val($l, 'p'), $val($l, 'dom'), $val($l, 'ran')); }, $lignes['props']),
-		$instances, $textes($lignes['labels']), $textes($lignes['comments']), $prefixes), '');
+		$instances, $textes($lignes['labels']), $textes($lignes['comments']),
+		array_map(function ($l) use ($val) { return array($val($l, 's'), $val($l, 'p'), $val($l, 'o')); }, $lignes['axiomes']),
+		array_map(function ($l) use ($val) { return array($val($l, 's'), $val($l, 't')); }, $lignes['speciaux']), $prefixes), '');
 }
 
 //------------------------------------------------------------------------------
@@ -203,6 +311,29 @@ function onto_nettoie_brouillon($b) {
 				$o['parents'][$v] = $v;
 			}
 			$o['parents'] = array_values($o['parents']);
+			foreach (onto_relations()[$k] as $cle => $_d) {
+				$vs = $e[$cle] ?? array();
+				if (!is_array($vs) || count($vs) > 30) return array(null, 'Trop de valeurs pour « '.$cle.' ».');
+				$o[$cle] = array();
+				foreach ($vs as $v) {
+					if (!onto_iri_valide($v)) return array(null, 'IRI invalide dans le brouillon.');
+					$o[$cle][$v] = $v;
+				}
+				$o[$cle] = array_values($o[$cle]);
+			}
+			if ($k === 'props') {
+				$cs = $e['carac'] ?? array();
+				if (!is_array($cs)) return array(null, 'Caractéristiques invalides.');
+				$o['carac'] = array();
+				foreach ($cs as $c) {
+					if (!is_string($c) || !isset(onto_caracteristiques()[$c])) return array(null, 'Caractéristique OWL inconnue.');
+					$o['carac'][$c] = $c;
+				}
+				$o['carac'] = array_values($o['carac']);
+				$g = $e['genre'] ?? '';
+				if (!is_string($g) || ($g !== '' && !isset(onto_genres()[$g]))) return array(null, 'Genre de propriété inconnu.');
+				$o['genre'] = $g;
+			}
 			$sortie[$k][$o['iri']] = $o;
 		}
 		$sup = $b['supprimes'][$k] ?? array();
@@ -246,20 +377,32 @@ function onto_mise_a_jour(array $courant, array $b) {
 			$avant = count($moins) + count($plus);
 			if (is_null($o)) { // nouvel élément
 				$plus[] = $s.' '.$type.' '.onto_iri($k === 'classes' ? $RDFS.'Class' : $RDF.'Property').' .';
-				$o = array('label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parents' => array(), 'domain' => '', 'range' => '');
+				$o = onto_vide($k);
 				if ($e['label'] !== '' && $e['llang'] === '') $e['llang'] = ONTO_LANGUE_DEFAUT;
 				if ($e['comment'] !== '' && $e['clang'] === '') $e['clang'] = ONTO_LANGUE_DEFAUT;
 			}
 			// le libellé garde sa langue d'origine ; s'il change seul de langue, c'est un remplacement
 			onto_remplace($moins, $plus, $s, $label, $texte($o['label'], $o['llang']), $texte($e['label'], $e['llang'] !== '' || $o['label'] === '' ? $e['llang'] : $o['llang']));
+			onto_remplace($moins, $plus, $s, $comment, $texte($o['comment'], $o['clang']), $texte($e['comment'], $e['clang'] !== '' || $o['comment'] === '' ? $e['clang'] : $o['clang']));
 			if ($k === 'classes') {
-				onto_remplace($moins, $plus, $s, $comment, $texte($o['comment'], $o['clang']), $texte($e['comment'], $e['clang'] !== '' || $o['comment'] === '' ? $e['clang'] : $o['clang']));
 				// super-classes : on retire celles qui ont disparu, on ajoute les nouvelles (les autres ne bougent pas)
 				foreach (array_diff($o['parents'], $e['parents']) as $v) $moins[] = "$s $sous ".onto_iri($v)." .";
 				foreach (array_diff($e['parents'], $o['parents']) as $v) $plus[] = "$s $sous ".onto_iri($v)." .";
 			} else {
 				onto_remplace($moins, $plus, $s, $domain, $iriSi($o['domain']), $iriSi($e['domain']));
 				onto_remplace($moins, $plus, $s, $range, $iriSi($o['range']), $iriSi($e['range']));
+				$cs = onto_caracteristiques();
+				foreach (array_diff($o['carac'], $e['carac']) as $c) $moins[] = "$s $type ".onto_iri($cs[$c][0])." .";
+				foreach (array_diff($e['carac'], $o['carac']) as $c) $plus[] = "$s $type ".onto_iri($cs[$c][0])." .";
+				$gs = onto_genres();
+				if ($o['genre'] !== $e['genre']) {
+					if ($o['genre'] !== '') $moins[] = "$s $type ".onto_iri($gs[$o['genre']])." .";
+					if ($e['genre'] !== '') $plus[] = "$s $type ".onto_iri($gs[$e['genre']])." .";
+				}
+			}
+			foreach (onto_relations()[$k] as $cle => $d) {   // relations et annotations : seulement ce qui a changé
+				foreach (array_diff($o[$cle], $e[$cle]) as $v) $moins[] = "$s ".onto_iri($d[0])." ".onto_iri($v)." .";
+				foreach (array_diff($e[$cle], $o[$cle]) as $v) $plus[] = "$s ".onto_iri($d[0])." ".onto_iri($v)." .";
 			}
 			if (count($moins) + count($plus) > $avant) $n++;
 		}
@@ -310,13 +453,11 @@ function onto_applique_brouillon(array $courant, array $b, array $prefixes) {
 		$m = array();
 		foreach ($courant[$k] as $e) $m[$e['iri']] = $e;
 		foreach ($b['supprimes'][$k] as $iri => $_) unset($m[$iri]);
+		$champs = array_merge(array('label', 'llang', 'comment', 'clang'), $k === 'classes' ? array('parents') : array('domain', 'range', 'carac', 'genre'), array_keys(onto_relations()[$k]));
 		foreach ($b[$k] as $iri => $e) {
 			if (isset($b['supprimes'][$k][$iri])) continue;
-			$o = $m[$iri] ?? ($k === 'classes'
-				? array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parents' => array(), 'n' => 0, 'decl' => true)
-				: array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'domain' => '', 'range' => ''));
-			foreach (array('label', 'llang', 'comment', 'clang', 'parents', 'domain', 'range') as $c)
-				if (array_key_exists($c, $o) && array_key_exists($c, $e)) $o[$c] = $e[$c];
+			$o = $m[$iri] ?? array_merge(array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes)), onto_vide($k), $k === 'classes' ? array('n' => 0, 'decl' => true) : array());
+			foreach ($champs as $c) if (array_key_exists($c, $o) && array_key_exists($c, $e)) $o[$c] = $e[$c];
 			$m[$iri] = $o;
 		}
 		$courant[$k] = array_values($m);

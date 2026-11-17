@@ -118,12 +118,21 @@ function peupl_texte_ontologie(array $onto, array $prefixes) {
 		$t .= '- '.$c['nom'].($c['label'] !== '' ? ' « '.$c['label'].' »' : '');
 		if ($c['parents']) $t .= ' (sous-classe de '.implode(', ', array_map($nom, $c['parents'])).')';
 		if ($c['comment'] !== '') $t .= ' — '.mb_substr($c['comment'], 0, 200);
+		foreach (array('equiv' => 'équivalent à', 'disjoint' => 'disjoint de') as $cle => $titre)
+			if ($c[$cle]) $t .= ' ['.$titre.' '.implode(', ', array_map($nom, $c[$cle])).']';
 		$t .= "\n";
 	}
 	$t .= "\nPropriétés (nom : domaine → portée) :\n";
 	foreach ($onto['props'] as $p) {
 		$t .= '- '.$p['nom'].($p['label'] !== '' ? ' « '.$p['label'].' »' : '').' : '
-			.($p['domain'] !== '' ? $nom($p['domain']) : '?').' → '.($p['range'] !== '' ? $nom($p['range']) : '?')."\n";
+			.($p['domain'] !== '' ? $nom($p['domain']) : '?').' → '.($p['range'] !== '' ? $nom($p['range']) : '?');
+		// contraintes que les données doivent respecter
+		$contraintes = array();
+		foreach ($p['carac'] as $c) $contraintes[] = onto_caracteristiques()[$c][1].' ('.onto_caracteristiques()[$c][2].')';
+		if ($p['inverse']) $contraintes[] = 'inverse de '.implode(', ', array_map($nom, $p['inverse']));
+		if ($p['superprops']) $contraintes[] = 'sous-propriété de '.implode(', ', array_map($nom, $p['superprops']));
+		if ($contraintes) $t .= ' ['.implode(' ; ', $contraintes).']';
+		$t .= "\n";
 	}
 	return rtrim($t);
 }
