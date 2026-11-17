@@ -10,6 +10,9 @@ Un étudiant apprend les ontologies et SPARQL. Il construit, dans un éditeur, l
 
 *Espace de noms des nouvelles instances* : `{{ espace }}` (tu n'écris que la partie locale de l'identifiant, les nouvelles IRI sont construites pour toi).
 
+*Contraintes que les données doivent respecter* (formes SHACL du jeu et de l'ontologie : propriétés obligatoires avec `sh:minCount`, nombre maximal de valeurs avec `sh:maxCount`, types, valeurs permises avec `sh:in`, langue avec `sh:languageIn`…) :
+{{ contraintes }}
+
 # Travail demandé
 
 {{ travail }}
@@ -28,6 +31,7 @@ Ce texte n'est qu'une indication sur le contenu des données (thème, époque, l
 * Utilise **uniquement** les concepts et propriétés de l'ontologie ci-dessus, avec leurs noms abrégés tels qu'ils sont écrits. N'invente ni concept ni propriété.
 * Respecte le **domaine** (concept du sujet) et la **portée** de chaque propriété : une valeur littérale pour une portée `xsd:…`, une référence à une instance pour une portée qui est un concept. Écris les nombres sans guillemets ni unité, les dates au format `AAAA-MM-JJ`.
 * Les données doivent être **plausibles, variées et cohérentes entre elles** (les mêmes personnes, lieux et œuvres peuvent revenir). Pas de données personnelles réelles sensibles ; des personnes publiques connues sont acceptables quand le thème s'y prête.
+* Pour chaque **nouvelle** instance, renseigne **toutes** les propriétés obligatoires (`sh:minCount` d'au moins 1) avec des valeurs permises, et mets la langue demandée à un texte (`langue`) : une instance incomplète est refusée par le contrôle de cohérence.
 * Un identifiant d'instance (`id`) est un mot court sans espace ni accent (lettres, chiffres, `_`, `-`).
 * Pour relier à une instance, donne soit l'`id` d'une instance de ta réponse, soit l'IRI abrégée d'une instance déjà présente.
 

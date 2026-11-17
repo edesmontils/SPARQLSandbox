@@ -60,9 +60,11 @@ servent de référence.
   contrôles que le panneau « Cohérence » (RDFS, formes du jeu, formes dérivées) ; sans brouillon, c'est exactement
   ce rapport. « 🛡️ Formes SHACL » montre les formes, pas les anomalies. Piste : surligner dans le graphe les éléments
   en cause.
-- **T8 — l'IA insère des triplets incohérents (incomplets)** : `peuplement.php` `peupl_valide()`
-  ne vérifie que la structure. Piste : valider les propositions contre les formes (pyshacl sur un
-  store temporaire, comme `controles_shacl`) ou les marquer via `difference_coherence`.
+- **T8 — propositions de l'IA incohérentes** (fait) : le prompt contient maintenant les formes du jeu et celles de
+  l'ontologie (`peupl_contraintes()`), avec la consigne de renseigner les propriétés obligatoires ; chaque proposition
+  est contrôlée avant d'être montrée (`peupl_controle()` : toutes jouées sur une copie jetable, `simule_mise_a_jour()`,
+  anomalies nouvelles rattachées à l'instance concernée). Les propositions douteuses sont signalées (⚠️) et décochées ;
+  « cocher sans anomalie ». Le contrôle ne bloque jamais le peuplement.
 - **T13 — erreur de vérification peu lisible en TP** : `exercices.php` `verifie_reponse` (l. 209-223)
   dit *que* le résultat diffère, pas *quoi*. Contrainte : ne jamais montrer la solution.
   Piste : écart mis en forme (colonnes, lignes, ordre, premières valeurs différentes en évidence),

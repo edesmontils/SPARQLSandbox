@@ -493,8 +493,30 @@ function enregistre_ontologie($jeu, $brouillon) {
 	return array(true, "<p class='statut ok'>✅ Enregistré : ".implode(', ', $parts).".</p>".affiche_corps($r, prefixes_jeu($jeu)), $nouveau, $sujets);
 }
 
+// Joue la mise à jour $update sur une copie jetable de la copie de session (supprimée ensuite) et lui applique les contrôles
+// de cohérence. Renvoie array(array('avant' => rapport de la copie, 'apres' => rapport de la copie jetable) | null, message d'erreur)
+function simule_mise_a_jour($jeu, $update) {
+	$copie = store_copie($jeu, $erreur);
+	if (is_null($copie)) return array(null, $erreur);
+	$place = reserve_execution();
+	if (is_null($place)) return array(null, 'Trop de requêtes en cours depuis votre poste : réessayez dans un instant.');
+	$v = verrou('copie_'.basename($copie));
+	$tmp = $copie.'.essai'.getmypid();
+	try {
+		supprime_dossier($tmp);
+		if (!copie_dossier($copie, $tmp)) return array(null, 'Copie de travail impossible.');
+		$r = lance_oxigraph(array('update', '--location', $tmp), $update);
+		if (!is_null($m = message_execution($r))) return array(null, $m);
+		return array(array('avant' => coherence_copie($jeu, $copie), 'apres' => controle_coherence($jeu, $tmp)), '');
+	} finally {
+		supprime_dossier($tmp);
+		libere($v);
+		libere($place);
+	}
+}
+
 // Contrôle de cohérence de la copie AVEC le brouillon, sans rien enregistrer : la mise à jour est jouée sur une copie
-// jetable de la copie, qui passe les mêmes contrôles (RDFS, formes du jeu et formes dérivées) que le panneau « Cohérence »
+// jetable de la copie (simule_mise_a_jour), qui passe les mêmes contrôles que le panneau « Cohérence »
 // de la page principale. Sans modification en cours, c'est exactement le rapport de ce panneau.
 // Renvoie array(ok, HTML)
 function controle_brouillon($jeu, $brouillon) {
@@ -507,22 +529,9 @@ function controle_brouillon($jeu, $brouillon) {
 		return array(true, "<p class='astuce'>Aucune modification en cours : voici l'état de votre copie.</p>".affiche_coherence(coherence_copie($jeu, $copie)));
 	}
 	if (strlen($tout) > LONGUEUR_MAX_REQUETE) return $ko('Trop de modifications à la fois pour être contrôlées : enregistrez-en une partie.');
-	$place = reserve_execution();
-	if (is_null($place)) return $ko('Trop de requêtes en cours depuis votre poste : réessayez dans un instant.');
-	$v = verrou('copie_'.basename($copie));
-	$tmp = $copie.'.essai'.getmypid();
-	try {
-		supprime_dossier($tmp);
-		if (!copie_dossier($copie, $tmp)) return $ko('Copie de travail impossible.');
-		$r = lance_oxigraph(array('update', '--location', $tmp), $tout);
-		if (!is_null($m = message_execution($r))) return $ko($m);
-		$avant = coherence_copie($jeu, $copie);
-		$apres = controle_coherence($jeu, $tmp);
-	} finally {
-		supprime_dossier($tmp);
-		libere($v);
-		libere($place);
-	}
+	list($rapports, $erreur) = simule_mise_a_jour($jeu, $tout);
+	if (is_null($rapports)) return $ko($erreur);
+	$avant = $rapports['avant']; $apres = $rapports['apres'];
 	list($nouvelles, $corrigees) = difference_coherence($avant, $apres);
 	$restantes = array();
 	$cles = array(); foreach ($nouvelles as $a) $cles[cle_anomalie($a)] = true;

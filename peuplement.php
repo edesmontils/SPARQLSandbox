@@ -186,6 +186,19 @@ function peupl_nettoie_consigne($t) {
 	return mb_substr($t, 0, PEUPL_CONSIGNE_MAX);
 }
 
+// Formes SHACL que les données doivent respecter (celles du jeu et celles de l'ontologie), en texte pour l'IA :
+// elle y lit les propriétés obligatoires (sh:minCount), les types et les valeurs permises
+function peupl_contraintes($jeu, array $effective) {
+	$jeux = liste_jeux();
+	$t = '';
+	foreach ($jeux[$jeu]['formes'] ?? array() as $f)
+		$t .= preg_replace('/^\s*#.*$\n?/m', '', trim((string)@file_get_contents($f)))."\n\n";
+	$t = trim(mb_substr($t, 0, 6000)).(mb_strlen($t) > 6000 ? "\n[… formes coupées]" : '');
+	$der = formes_depuis_modele($effective);
+	if ($der !== '') $t .= "\n\n".trim(mb_substr($der, 0, 2500));
+	return $t === '' ? '(aucune forme définie)' : $t;
+}
+
 // Messages envoyés au modèle ; null si le modèle de prompt est absent
 function peupl_messages($jeu, $mode, $quantite, $consigne, array $effective, array $inst, array $cibles, array $classes_visees, array $prefixes, &$existants) {
 	$modele = @file_get_contents(__DIR__.'/templates/peuplement_prompt.md');
@@ -204,6 +217,7 @@ function peupl_messages($jeu, $mode, $quantite, $consigne, array $effective, arr
 		'{{ instances }}' => $texte_inst,
 		'{{ espace }}' => $inst['espace'] !== '' ? $inst['espace'] : ONTO_ESPACE_DEFAUT,
 		'{{ travail }}' => $travail,
+		'{{ contraintes }}' => peupl_contraintes($jeu, $effective),
 		'{{ quantite }}' => (string)$quantite,
 		'{{ consigne_etudiant }}' => $consigne !== '' ? $consigne : '(aucune)',
 	));
@@ -385,12 +399,37 @@ function ia_peupler($jeu, $mode, $quantite, $consigne, $brouillon) {
 		ia_rend($conf, true, 'ia_peuplement');
 		return ia_erreur("L'IA n'a rien proposé d'utilisable. Réessayez, éventuellement avec une consigne plus précise.", 502);
 	}
+	$anomalies = peupl_controle($jeu, $propositions, $courant, $b, $prefixes);
+	foreach ($propositions as $i => $p) $propositions[$i]['anomalies'] = $anomalies[$i] ?? array();
 	$jeton = bin2hex(random_bytes(8));
 	$_SESSION['peuplement'][$jeu] = array('jeton' => $jeton, 'propositions' => $propositions);
 	return array('ok' => true, 'jeton' => $jeton, 'modele' => $conf['modele'], 'tokens' => $r['tokens'],
 		'propositions' => array_map(function ($p) {
-			return array('genre' => $p['genre'], 'cible' => $p['cible'], 'titre' => $p['titre'], 'detail' => $p['detail']);
+			return array('genre' => $p['genre'], 'cible' => $p['cible'], 'titre' => $p['titre'], 'detail' => $p['detail'], 'anomalies' => $p['anomalies']);
 		}, $propositions));
+}
+
+// Contrôle les propositions avant de les montrer : toutes sont jouées ensemble, avec les changements d'ontologie du
+// brouillon, sur une copie jetable qui passe les contrôles de cohérence (RDFS, formes du jeu et de l'ontologie). Les
+// anomalies NOUVELLES qui parlent d'une instance proposée lui sont attachées : une proposition incomplète (film sans
+// réalisateur…) est ainsi signalée avant d'entrer dans la copie. Renvoie array(numéro de proposition => messages) ;
+// vide si le contrôle n'a pas pu se faire (il ne bloque jamais le peuplement).
+function peupl_controle($jeu, array $propositions, array $courant, array $b, array $prefixes) {
+	list($maj_onto, ) = onto_mise_a_jour($courant, $b);
+	$triples = array();
+	foreach ($propositions as $p) foreach ($p['triples'] as $t) $triples[] = $t;
+	if (!$triples) return array();
+	$maj = ($maj_onto !== '' ? $maj_onto." ;\n" : '')."INSERT DATA {\n  ".implode("\n  ", $triples)."\n}";
+	if (strlen($maj) > LONGUEUR_MAX_REQUETE) return array();
+	list($r, ) = simule_mise_a_jour($jeu, $maj);
+	if (is_null($r)) return array();
+	list($nouvelles, ) = difference_coherence($r['avant'], $r['apres']);
+	$sortie = array();
+	foreach ($propositions as $i => $p) {
+		$re = '/(?<![\w:.-])'.preg_quote(abrege_iri($p['sujet'], $prefixes), '/').'(?![\w-])/u';
+		foreach ($nouvelles as $a) if (preg_match($re, $a['message'])) $sortie[$i][] = mb_substr($a['message'], 0, 220);
+	}
+	return array_map(function ($l) { return array_slice(array_values(array_unique($l)), 0, 3); }, $sortie);
 }
 
 // Triplets des propositions $indices du peuplement $jeton, pour les enregistrer avec le brouillon ;

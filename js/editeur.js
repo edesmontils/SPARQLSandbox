@@ -970,7 +970,7 @@
 			l.push('<li>🗑 ' + echappe(D.supprimees[iri]) + ' <button type="button" class="lien-mini" data-ab="annule-sup" data-id="' + echappe(iri) + '">annuler</button></li>');
 		});
 		D.ia.forEach(function (p) {
-			l.push('<li>✨ ' + (p.genre === 'nouveau' ? 'Créer ' + echappe(p.cible) + ' « ' + echappe(p.titre) + ' »' : 'Compléter ' + echappe(p.cible)) + ' <button type="button" class="lien-mini" data-ab="ia-retire" data-id="' + p.i + '">retirer</button></li>');
+			l.push('<li>✨ ' + (p.genre === 'nouveau' ? 'Créer ' + echappe(p.cible) + ' « ' + echappe(p.titre) + ' »' : 'Compléter ' + echappe(p.cible)) + (p.anomalies && p.anomalies.length ? ' <span title="' + echappe(p.anomalies.join(' / ')) + '">⚠️</span>' : '') + ' <button type="button" class="lien-mini" data-ab="ia-retire" data-id="' + p.i + '">retirer</button></li>');
 		});
 		return '<div class="inst-brouillon"><strong>À enregistrer (' + nbInst() + ')</strong><ul>' + l.join('') + '</ul></div>';
 	}
@@ -1090,11 +1090,16 @@
 	function rendPropositions() {
 		var z = $('#propositions');
 		if (!propositions || !propositions.liste.length) { z.innerHTML = ''; return; }
-		var h = '<div class="ligne"><strong>' + propositions.liste.length + ' proposition(s)</strong><button type="button" class="lien-mini" id="tout-cocher">tout cocher</button></div>';
+		var douteuses = propositions.liste.filter(function (p) { return p.anomalies && p.anomalies.length; }).length;
+		var h = '<div class="ligne"><strong>' + propositions.liste.length + ' proposition(s)</strong><button type="button" class="lien-mini" id="tout-cocher">tout cocher</button>' +
+			(douteuses ? '<button type="button" class="lien-mini" id="cocher-saines">cocher sans anomalie</button>' : '') + '</div>' +
+			(douteuses ? '<p class="alerte">⚠️ ' + douteuses + ' proposition(s) rendraient votre copie incohérente (contrôle fait sur une copie jetable) : elles sont décochées.</p>' : '');
 		propositions.liste.forEach(function (p) {
-			h += '<label><input type="checkbox" data-p="' + p.i + '" checked> <span><strong>' +
+			var anomalies = p.anomalies || [];
+			h += '<label' + (anomalies.length ? ' class="douteuse"' : '') + '><input type="checkbox" data-p="' + p.i + '"' + (anomalies.length ? '' : ' checked') + '> <span><strong>' +
 				(p.genre === 'nouveau' ? 'Créer ' + echappe(p.cible) + ' « ' + echappe(p.titre) + ' »' : 'Compléter ' + echappe(p.cible)) + '</strong>' +
-				(p.detail.length ? '<span class="detail">' + p.detail.map(echappe).join(' · ') + '</span>' : '') + '</span></label>';
+				(p.detail.length ? '<span class="detail">' + p.detail.map(echappe).join(' · ') + '</span>' : '') +
+				anomalies.map(function (a) { return '<span class="detail anomalie">⚠️ ' + echappe(a) + '</span>'; }).join('') + '</span></label>';
 		});
 		h += '<div class="boutons"><button type="button" class="btn vert" id="accepte">➕ Ajouter au brouillon</button></div>' +
 			'<p class="astuce">Les propositions choisies rejoignent la liste « À enregistrer » de l\'onglet Instance ; elles entrent dans votre copie avec « Enregistrer », en même temps que vos modifications de l\'ontologie.</p>';
@@ -1111,7 +1116,7 @@
 		appel('ia_peupler', { mode: mode, quantite: $('#quantite').value, consigne: $('#consigne').value, brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
 			bouton.disabled = false;
 			if (!r.ok) { message(r.html); return; }
-			message("<p class='statut ok'>✨ " + r.propositions.length + " proposition(s) de l'IA (" + echappe(r.modele) + ") : relisez-les avant de les ajouter ; elles peuvent contenir des erreurs.</p>");
+			message("<p class='statut ok'>✨ " + r.propositions.length + " proposition(s) de l'IA (" + echappe(r.modele) + ") : relisez-les avant de les ajouter ; elles peuvent contenir des erreurs. Chacune a été contrôlée sur une copie jetable de votre copie.</p>");
 			propositions = { jeton: r.jeton, liste: r.propositions.map(function (p, i) { p.i = i; return p; }) };
 			rendPropositions();
 		});
@@ -1271,6 +1276,7 @@
 		else if (id === 'generer') genere();
 		else if (id === 'accepte') accepte();
 		else if (id === 'tout-cocher') document.querySelectorAll('#propositions input[data-p]').forEach(function (c) { c.checked = true; });
+		else if (id === 'cocher-saines') document.querySelectorAll('#propositions label').forEach(function (l) { l.querySelector('input').checked = !l.classList.contains('douteuse'); });
 		else if (id === 'add-classe') creeConcept();
 		else if (id === 'add-prop') creeProp('', XSD + 'string', 'nouvelle propriété');
 		else if (id === 'v-graphe') { vue = 'graphe'; rendVue(); }

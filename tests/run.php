@@ -804,6 +804,23 @@ if (function_exists('curl_init')) {
 		'peuplement IA : modifications du brouillon dans le prompt, ontologie effective');
 	verifie(substr_count($prompt, '<consigne_etudiant>') == 1 && substr_count($prompt, '</consigne_etudiant>') == 1 && strpos($prompt, 'Ignore tout') !== false, 'peuplement IA : consigne entre balises, balises injectées retirées');
 	verifie(($_SESSION['ia_peuplement']['n'] ?? 0) == $n0 + 1 && !isset($_SESSION['ia_intention']['n_peuplement']), 'peuplement IA : décompté à part des corrections d\'intention');
+	// T8 : les formes sont dans le prompt, et une proposition incomplète est signalée avant d'entrer dans la copie
+	verifie(strpos($prompt, 'sh:minCount') !== false && strpos($prompt, 'cine:realisePar') !== false && strpos($prompt, 'Contraintes que les données doivent respecter') !== false, 'peuplement IA : formes du jeu dans le prompt');
+	faux(200, array('instances' => array(
+		array('id' => 'film_complet', 'classe' => 'cine:Film', 'valeurs' => array(array('p' => 'cine:titre', 'v' => 'Film complet', 'langue' => 'fr'), array('p' => 'cine:annee', 'v' => 2001), array('p' => 'cine:realisePar', 'ref' => 'ex:kassovitz'))),
+		array('id' => 'film_incomplet', 'classe' => 'cine:Film', 'valeurs' => array(array('p' => 'cine:titre', 'v' => 'Film incomplet', 'langue' => 'fr'), array('p' => 'cine:annee', 'v' => 2002))))));
+	unset($_SESSION['ia_peuplement']);
+	$rc = ia_peupler('cinema', 'general', 5, '', array());
+	if ($avecShacl) {
+		$par_titre = array(); foreach ($rc['propositions'] ?? array() as $pc) $par_titre[$pc['titre']] = $pc;
+		verifie(($rc['ok'] ?? false) && count($par_titre['Film complet']['anomalies']) == 0 && count($par_titre['Film incomplet']['anomalies']) >= 1
+			&& strpos(implode(' ', $par_titre['Film incomplet']['anomalies']), 'réalisateur') !== false, 'peuplement IA : proposition incomplète signalée, complète sans anomalie');
+	} else verifie($rc['ok'] ?? false, 'peuplement IA : propositions contrôlées (sans pyshacl, rien à signaler)');
+	verifie(!$q('ASK { ?s ?p ?o . FILTER(CONTAINS(STR(?s), "film_incomplet")) }'), 'peuplement IA : le contrôle n\'écrit rien dans la copie');
+	// relance avec les propositions de l'essai précédent, pour la suite des tests
+	faux(200, $reponse_ia);
+	unset($_SESSION['ia_peuplement']);
+	$r = ia_peupler('cinema', 'cible', 5, '', $brouillon);
 	// ajout : les données et l'ontologie qui les décrit entrent ensemble
 	$avec_ia = function (array $ia) use ($brouillon) { $b = $brouillon; $b['instances'] = array('ia' => $ia); return $b; };
 	verifie(!enregistre_ontologie('cinema', $avec_ia(array('jeton' => 'mauvais-jeton', 'indices' => array(0))))[0], 'peuplement IA : jeton invalide refusé');
