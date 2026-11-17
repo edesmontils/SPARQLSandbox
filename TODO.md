@@ -37,7 +37,7 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA
   (général ou ciblé), axiomes RDFS/OWL des concepts et propriétés (sous-propriété, inverse, équivalences,
   disjonction, caractéristiques, genre, annotations) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
-  le bouton de contrôle de cohérence ontologie/instance dans l'éditeur ; formes SHACL dérivées de l'ontologie (cardinalités, propriété fonctionnelle,
+  contrôle de cohérence ontologie/instance dans l'éditeur ; formes SHACL dérivées de l'ontologie (cardinalités, propriété fonctionnelle,
   concepts disjoints) faites ; à traduire encore : `owl:InverseFunctionalProperty`, symétrie, irréflexivité, `sh:in` (valeurs permises).
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
