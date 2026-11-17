@@ -42,3 +42,64 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.
+
+## Retours utilisateurs (TODO-list)
+
+Tâches relevées lors d'une session de test, par priorité décroissante. Les identifiants (T1…T14)
+servent de référence.
+
+### P1 — bloquant ou confusant
+
+- **T4 — `cine:titre` non conservé à l'enregistrement (langue perdue)** : `rdfs:range rdfs:Literal`
+  (`donnees/cinema/ontologie.ttl:24`) ; le type observé `rdf:langString` remplace `rdfs:Literal`
+  (`vocabulaire.php:105`), mais la langue n'est pas transmise au brouillon (`js/editeur.js:57,876` ;
+  le champ `l` doit être propagé via `peuplement.php:254` et `ontologie.php` `enregistre_ontologie`).
+  Piste : garder `@lang` dans le brouillon et à l'enregistrement.
+- **T6 — instances en cours d'ajout invisibles** : un nouveau film avec un nouveau réalisateur
+  n'apparaît pas dans la liste (`js/editeur.js` `rendInstances()`, brouillon `instances`).
+  Piste : afficher les instances « nouveau » du brouillon (badge, rouvrables).
+- **T2 — incohérences différentes entre page principale et éditeur** : le panneau « Cohérence »
+  (`coherence.php` `controle_coherence`, action `explorer` de `controler.php`) et la vue
+  « Formes SHACL » de l'éditeur (action `formes`) ne montrent pas les mêmes anomalies.
+  Piste : un seul rapport (RDFS + SHACL, formes du jeu + formes dérivées du brouillon) dans les
+  deux pages ; le bouton de contrôle de cohérence dans l'éditeur est déjà listé plus haut.
+- **T8 — l'IA insère des triplets incohérents (incomplets)** : `peuplement.php` `peupl_valide()`
+  ne vérifie que la structure. Piste : valider les propositions contre les formes (pyshacl sur un
+  store temporaire, comme `controles_shacl`) ou les marquer via `difference_coherence`.
+- **T13 — erreur de vérification peu lisible en TP** : `exercices.php` `verifie_reponse` (l. 209-223)
+  dit *que* le résultat diffère, pas *quoi*. Contrainte : ne jamais montrer la solution.
+  Piste : écart mis en forme (colonnes, lignes, ordre, premières valeurs différentes en évidence),
+  tableau comparatif pour les questions `…T…`.
+
+### P2 — gênant
+
+- **T1 — zoom/slider sur les grands graphes** : `js/vocabulaire.js:171`, `js/editeur.js:315`
+  (viewBox), `js/disposition.js`. Piste : zoom sur le viewBox (molette, boutons ±, slider), pan.
+  Le zoom du diagramme est déjà listé plus haut.
+- **T14 — re-cliquer un objet le désélectionne** : `js/vocabulaire.js:175-181` (`ouvre` sans
+  bascule), `js/editeur.js:772,799` (`selectionneConcept`). Piste : second clic → `E.sel = null`,
+  fermer la fiche et la description.
+- **T3 — accès aux nœuds anonymes** : action `instance` avec `anon` (`controler.php`,
+  `ontologie.php` `modele_instance`), liste des instances de `js/editeur.js`.
+  Piste : filtre « anonymes », lien depuis la classe.
+- **T7 — propriété externe (`foaf:name`) difficile à utiliser** : seules les propriétés déclarées
+  du jeu sont proposées. Piste : proposer aussi les propriétés observées (`vocabulaire.php`) et
+  les standards (`PREFIXES_STANDARD`).
+- **T5 — marquer la provenance d'une instance (IA / saisie manuelle)** : brouillon
+  `ia: {jeton, indices}` (`peuplement.php:420`), `rendInstances` de `js/editeur.js`.
+  Piste : badge « IA » / « manuel », persisté en session comme les propositions.
+- **T12 — masquer « Éditer l'ontologie » et « Exporter » pendant un exercice** : boutons rendus
+  dans `index.php`, mode exercice dans `js/sandbox.js`. Piste : masquer quand `exercice` est actif ;
+  décider si l'URL directe `editeur.php` est aussi bloquée ou seulement masquée.
+
+### P3 — améliorations
+
+- **T9 — saisie assistée selon le type attendu** : champ littéral (`js/editeur.js:876`),
+  `sh:datatype` / `sh:languageIn` / `sh:in` (`donnees/*/formes.ttl`, `formes_depuis_modele`).
+  Piste : champ `date` / `number` / sélecteur de langue, liste déroulante pour `sh:in`.
+- **T10 — proposer les valeurs existantes de la base, plus une valeur libre** : à créer côté
+  serveur (action `controler.php` ou extension de `vocabulaire.php` : `SELECT DISTINCT ?o` sur la
+  copie), consommée par `js/editeur.js` via un `<datalist>` + « nouvelle valeur ».
+- **T11 — vocabulaires standards en ressource JSON** : `PREFIXES_CATALOGUE` est une constante PHP
+  (`fonctions.php:175-192`). Piste : fichier JSON (préfixes + classes et propriétés usuelles :
+  FOAF, Dublin Core, Creative Commons…), proposé à l'ajout d'un concept ou d'une propriété.
