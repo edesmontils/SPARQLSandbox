@@ -26,8 +26,8 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   `peuplement.php`) : graphe et liste éditables (sous-classes multiples, flèches ré-accrochables par
   leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA
   (général ou ciblé) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
-  contrôle de cohérence ontologie/instance dans l'éditeur, les nœuds anonymes (rôles) non modifiables
-  à la main, le changement de concept d'une instance, et des formes SHACL générées avec l'ontologie.
+  contrôle de cohérence ontologie/instance dans l'éditeur, la création d'un nœud anonyme à la main,
+  et des formes SHACL générées avec l'ontologie.
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.

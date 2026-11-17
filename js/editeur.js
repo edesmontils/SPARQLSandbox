@@ -518,8 +518,13 @@
 		});
 		if (nbInst()) b.instances = {
 			nouvelles: D.nouvelles.map(function (n) { return { iri: n.iri, classe: n.classe, valeurs: n.valeurs }; }),
-			modifiees: Object.keys(D.modifiees).map(function (i) { return { iri: i, valeurs: D.modifiees[i].valeurs }; }),
-			supprimees: Object.keys(D.supprimees),
+			modifiees: Object.keys(D.modifiees).map(function (k) {
+				var m = D.modifiees[k], o = { types: m.types.map(function (t) { return t.iri; }), valeurs: m.valeurs };
+				if (m.anon) o.anon = m.anon; else o.iri = m.iri;
+				return o;
+			}),
+			supprimees: Object.keys(D.supprimees).filter(function (k) { return k.indexOf('_:') !== 0; }),
+			supprimees_anon: Object.keys(D.supprimees).filter(function (k) { return k.indexOf('_:') === 0; }).map(function (k) { return k.slice(2); }),
 			ia: D.ia.length ? { jeton: D.iaJeton, indices: D.ia.map(function (p) { return p.i; }) } : null
 		};
 		return b;
@@ -736,9 +741,17 @@
 		if (r && !litteral(r)) return { p: piri, k: 'iri', v: '', dt: '', l: '' };
 		return { p: piri, k: 'lit', v: '', dt: r && r !== RDFS + 'Literal' && r !== RDF + 'langString' ? r : '', l: '' };
 	}
-	function signature(valeurs) {
-		return JSON.stringify(valeurs.filter(function (v) { return v.k !== 'bn' && String(v.v).trim() !== ''; })
-			.map(function (v) { return [v.p, v.k, String(v.v).trim(), v.dt || '', v.l || '']; }).sort());
+	function signature(valeurs, types) {
+		return JSON.stringify([valeurs.filter(function (v) { return v.k !== 'bn' && String(v.v).trim() !== ''; })
+			.map(function (v) { return [v.p, v.k, String(v.v).trim(), v.dt || '', v.l || '']; }).sort(), (types || []).map(function (t) { return t.iri || t; }).sort()]);
+	}
+	// Clé d'une instance dans le brouillon : son IRI, ou « _:identifiant » pour un nœud anonyme
+	function cleItem(it) { return it.iri || it.nom; }
+	// Propriétés proposées pour l'instance en cours d'édition : celles de tous ses concepts
+	function proprietesFormulaire() {
+		var classes = F.mode === 'nouvelle' ? [F.classe] : (F.types || []).map(function (t) { return t.iri; }), vus = {}, r = [];
+		classes.forEach(function (c) { if (c) proprietesPour(c).forEach(function (p) { if (!vus[p.iri]) { vus[p.iri] = 1; r.push(p); } }); });
+		return r;
 	}
 	function titreInstance(valeurs, classe) {
 		var t = valeurs.filter(function (v) { return v.k === 'lit' && String(v.v).trim() && /(label|name|nom|titre|title)$/i.test(v.p); })[0] ||
@@ -772,13 +785,13 @@
 			if (ouvert) {
 				c.items.forEach(function (it) {
 					var vals = it.props.map(function (p) { return echappe(p.p) + ' = ' + echappe(p.v) + (p.l ? '@' + echappe(p.l) : ''); }).join(' · ');
-					var supprime = it.iri && D.supprimees[it.iri] !== undefined, modifie_ = it.iri && D.modifiees[it.iri];
+					var cle = cleItem(it), supprime = D.supprimees[cle] !== undefined, modifie_ = D.modifiees[cle];
 					h += '<div class="inst' + (it.iri && iaIris[it.iri] ? ' nouveau-ia' : '') + (supprime ? ' supprimee' : '') + '"><div class="tete"><strong title="' + echappe(it.iri || it.nom) + '">' + echappe(it.titre || it.nom) + '</strong>' +
 						(it.iri && iaIris[it.iri] ? '<span class="badge ia">IA</span>' : '') + (supprime ? '<span class="badge del">supprimée</span>' : modifie_ ? '<span class="badge mod">modifiée</span>' : '') +
-						(it.iri && !supprime ? '<button type="button" class="lien-mini" data-ab="edite" data-id="' + echappe(it.iri) + '" title="Modifier ou supprimer cette instance">✎</button>'
-							: it.iri ? '<button type="button" class="lien-mini" data-ab="annule-sup" data-id="' + echappe(it.iri) + '">annuler</button>' : '') + '</div>' +
+						(!supprime ? '<button type="button" class="lien-mini" data-ab="edite" data-id="' + echappe(cle) + '" title="Modifier ou supprimer cette instance">✎</button>'
+							: '<button type="button" class="lien-mini" data-ab="annule-sup" data-id="' + echappe(cle) + '">annuler</button>') + '</div>' +
 						(it.titre ? '<div class="vals">' + echappe(it.nom) + '</div>' : '') + (vals ? '<div class="vals">' + vals + '</div>' : '') +
-						(it.iri ? '' : '<div class="vals">nœud anonyme : à modifier avec une requête</div>') + '</div>';
+						(it.iri ? '' : '<div class="vals">nœud anonyme</div>') + '</div>';
 				});
 				if (c.plus > 0) h += '<div class="inst-plus">… et ' + c.plus + ' autre' + (c.plus > 1 ? 's' : '') + ' non affichée' + (c.plus > 1 ? 's' : '') + '</div>';
 			}
@@ -828,10 +841,18 @@
 				return '<option value="' + echappe(c.iri) + '"' + (c.iri === F.classe ? ' selected' : '') + '>' + echappe(affiche(c)) + '</option>';
 			}).join('') + '</select><span></span></div>' +
 				'<div class="if-ligne"><span class="if-p">Identifiant</span><input type="text" id="if-local" class="champ" value="' + echappe(F.local) + '" title="' + echappe(espaceInstances()) + '…"><span></span></div>';
-		} else h += '<p class="astuce" style="margin:0 0 6px">' + (F.types.length ? 'Concept : ' + F.types.map(function (t) { return echappe(t.nom); }).join(', ') : 'Sans concept') +
-			(F.entrants ? ' · ' + F.entrants + ' référence(s) vers elle' : '') + '</p>';
+		} else {
+			h += '<div class="if-ligne"><span class="if-p">Concept</span><div class="parents">' + F.types.map(function (t) {
+				return '<span class="puce-parent" title="' + echappe(t.iri) + '">' + echappe(cl(t.iri) ? affiche(cl(t.iri)) : t.nom) +
+					(F.types.length > 1 ? ' <button type="button" class="lien-mini" data-rm-type="' + echappe(t.iri) + '" aria-label="Retirer ce concept">✕</button>' : '') + '</span>';
+			}).join('') + '<select id="if-type-ajout" aria-label="Ajouter un concept"><option value="">＋ concept…</option>' +
+				E.classes.filter(function (c) { return !c.supprime && !F.types.some(function (t) { return t.iri === c.iri; }); }).map(function (c) {
+					return '<option value="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</option>';
+				}).join('') + '</select></div><span></span></div>';
+			h += '<p class="astuce" style="margin:0 0 6px">' + (F.anon ? 'Nœud anonyme (pas d\'IRI) · ' : '') + (F.entrants ? F.entrants + ' référence(s) vers elle' : 'aucune référence vers elle') + '</p>';
+		}
 		h += '<div id="if-valeurs">' + F.valeurs.map(ligneValeur).join('') + '</div>';
-		var ap = F.classe ? proprietesPour(F.classe) : [], autres = E.props.filter(function (p) { return !p.supprime && ap.indexOf(p) < 0; });
+		var ap = proprietesFormulaire(), autres = E.props.filter(function (p) { return !p.supprime && ap.indexOf(p) < 0; });
 		var opt = function (p) { return '<option value="' + echappe(p.iri) + '">' + echappe(affiche(p)) + '</option>'; };
 		h += '<select id="if-ajout" class="champ" aria-label="Ajouter une valeur"><option value="">＋ ajouter une valeur…</option>' + ap.map(opt).join('') +
 			(autres.length ? '<optgroup label="Autres propriétés">' + autres.map(opt).join('') + '</optgroup>' : '') + '</select>';
@@ -850,20 +871,21 @@
 		F.local = proposeLocal(F);
 		rendInstances();
 	}
-	function ouvreEdition(iri) {
-		if (D.modifiees[iri]) {
-			var m = D.modifiees[iri];
-			F = { mode: 'edition', iri: iri, nom: m.nom, classe: m.classe, types: m.types, valeurs: JSON.parse(JSON.stringify(m.valeurs)), orig: m.orig, entrants: m.entrants };
+	// cle : IRI de l'instance, ou « _:identifiant » pour un nœud anonyme
+	function ouvreEdition(cle) {
+		var anon = cle.indexOf('_:') === 0 ? cle.slice(2) : '';
+		if (D.modifiees[cle]) {
+			var m = D.modifiees[cle];
+			F = { mode: 'edition', cle: cle, iri: m.iri, anon: m.anon, nom: m.nom, classe: m.classe, types: JSON.parse(JSON.stringify(m.types)), valeurs: JSON.parse(JSON.stringify(m.valeurs)), orig: m.orig, entrants: m.entrants };
 			rendInstances(); return;
 		}
-		F = { mode: 'edition', iri: iri, nom: iri, chargement: true, valeurs: [], types: [] };
+		F = { mode: 'edition', cle: cle, iri: anon ? '' : cle, anon: anon, nom: cle, chargement: true, valeurs: [], types: [] };
 		rendInstances();
-		appel('instance', { iri: iri }).then(function (r) {
-			if (!F || F.iri !== iri) return;
+		appel('instance', anon ? { anon: anon } : { iri: cle }).then(function (r) {
+			if (!F || F.cle !== cle) return;
 			if (!r.ok) { F = null; message(r.html); rendInstances(); return; }
 			var m = r.modele;
-			F = { mode: 'edition', iri: iri, nom: m.nom, classe: m.types[0] ? m.types[0].iri : '', types: m.types, valeurs: m.valeurs, orig: signature(m.valeurs), entrants: m.entrants,
-				bn: false };
+			F = { mode: 'edition', cle: cle, iri: m.iri, anon: m.anon, nom: m.nom, classe: m.types[0] ? m.types[0].iri : '', types: m.types, valeurs: m.valeurs, orig: signature(m.valeurs, m.types), entrants: m.entrants };
 			rendInstances();
 		});
 	}
@@ -878,8 +900,8 @@
 			if (!autre && iriInstanceExiste(iri)) { toast('Cet identifiant existe déjà'); return; }
 			var entree = { iri: iri, local: F.local, classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
 			if (F.idx >= 0) D.nouvelles[F.idx] = entree; else D.nouvelles.push(entree);
-		} else if (signature(valeurs) === F.orig) delete D.modifiees[F.iri];
-		else D.modifiees[F.iri] = { iri: F.iri, nom: F.nom, classe: F.classe, types: F.types, valeurs: valeurs, orig: F.orig, entrants: F.entrants };
+		} else if (signature(valeurs, F.types) === F.orig) delete D.modifiees[F.cle];
+		else D.modifiees[F.cle] = { iri: F.iri, anon: F.anon, nom: F.nom, classe: F.classe, types: F.types, valeurs: valeurs, orig: F.orig, entrants: F.entrants };
 		F = null;
 		rend();
 	}
@@ -964,6 +986,8 @@
 			else if (act === 'ia-retire') { D.ia = D.ia.filter(function (p) { return String(p.i) !== ident; }); rend(); }
 			return;
 		}
+		var rt = e.target.closest('[data-rm-type]');
+		if (rt && F) { F.types = F.types.filter(function (t) { return t.iri !== rt.dataset.rmType; }); F.classe = F.types[0] ? F.types[0].iri : ''; rendInstances(); return; }
 		var rv = e.target.closest('[data-rm-val]');
 		if (rv && F) { F.valeurs.splice(+rv.dataset.rmVal, 1); rendInstances(); return; }
 		var id = e.target.id;
@@ -971,7 +995,7 @@
 		else if (id === 'if-annule') { F = null; rendInstances(); }
 		else if (id === 'if-suppr') {
 			if (F.entrants && !window.confirm(F.entrants + ' autre(s) ressource(s) font référence à cette instance : ces liens seront supprimés avec elle. Continuer ?')) return;
-			D.supprimees[F.iri] = F.nom; delete D.modifiees[F.iri]; F = null; rend();
+			D.supprimees[F.cle] = F.nom; delete D.modifiees[F.cle]; F = null; rend();
 		}
 		else if (id === 'generer') genere();
 		else if (id === 'accepte') accepte();
@@ -1007,6 +1031,11 @@
 			F.classe = e.target.value;
 			F.valeurs = proprietesPour(F.classe).slice(0, 10).map(function (p) { return valeurVide(p.iri); }).filter(function (v) { return !garde.some(function (g) { return g.p === v.p; }); }).concat(garde);
 			if (F.iriAuto) F.local = proposeLocal(F);
+			rendInstances();
+		} else if (e.target.id === 'if-type-ajout' && e.target.value) {
+			var cn = cl(e.target.value);
+			F.types.push({ iri: e.target.value, nom: cn ? cn.nom : e.target.value });
+			if (!F.classe) F.classe = e.target.value;
 			rendInstances();
 		} else if (e.target.id === 'if-ajout' && e.target.value) {
 			F.valeurs.push(valeurVide(e.target.value));

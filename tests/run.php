@@ -448,6 +448,49 @@ verifie($mauvais(array('nouvelles' => array(array('iri' => $nouvelle, 'classe' =
 verifie($mauvais(array('nouvelles' => array(array('iri' => $esp.'x1', 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(array('p' => $esp.'annee', 'k' => 'lit', 'v' => 'deux mille', 'dt' => $xsdi, 'l' => ''))))), 'invalide'), 'instances : nombre invalide refusé');
 verifie($mauvais(array('nouvelles' => array(array('iri' => $esp.'x1', 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(array('p' => $esp.'realisePar', 'k' => 'iri', 'v' => 'zz:truc', 'dt' => '', 'l' => ''))))), 'inconnue'), 'instances : référence à un préfixe inconnu refusée');
 verifie($mauvais(array('modifiees' => array(array('iri' => $esp.'fantome', 'valeurs' => array()))), 'introuvable'), 'instances : modification d\'une instance absente refusée');
+
+// Changement de concept d'une instance nommée
+list($mi, ) = modele_instances('cinema');
+$ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;
+$acteur = $ic['cine:Acteur']['items'][0];
+list($ai, ) = modele_instance('cinema', $acteur['iri']);
+$types_ok = function (array $iris) use ($ci, $acteur, $ai) {
+	$r = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => array('modifiees' => array(
+		array('iri' => $acteur['iri'], 'types' => $iris, 'valeurs' => $ai['valeurs'])))));
+	return $r[0];
+};
+verifie(!$types_ok(array()) , 'instances : une instance doit garder un concept');
+verifie($types_ok(array($ci['cine:Acteur']['iri'], $ci['cine:Realisateur']['iri'])) && $q('ASK { <'.$acteur['iri'].'> a <'.$ci['cine:Acteur']['iri'].'>, <'.$ci['cine:Realisateur']['iri'].'> }'), 'instances : un concept de plus');
+verifie($types_ok(array($ci['cine:Realisateur']['iri'])) && !$q('ASK { <'.$acteur['iri'].'> a <'.$ci['cine:Acteur']['iri'].'> }') && $q('ASK { <'.$acteur['iri'].'> a <'.$ci['cine:Realisateur']['iri'].'> ; <http://xmlns.com/foaf/0.1/name> ?n }'), 'instances : changement de concept, valeurs conservées');
+reinitialise_jeu('cinema');
+
+// Nœuds anonymes (les rôles) : lus, modifiés, supprimés en les retrouvant par leur contenu
+list($mi, ) = modele_instances('cinema');
+$ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;
+$roles = $ic['cine:Role']['items'];
+$id1 = substr($roles[0]['nom'], 2); $id2 = substr($roles[1]['nom'], 2);
+list($r1, $err) = modele_instance('cinema', '', $id1);
+verifie(!is_null($r1) && $r1['types'][0]['nom'] === 'cine:Role' && $r1['iri'] === '' && count($r1['valeurs']) >= 3, 'anonyme : valeurs lues ('.$err.')');
+$vals = $r1['valeurs']; $ancien = null;
+foreach ($vals as &$v) if ($v['nom'] === 'cine:personnage') { $ancien = $v['v']; $v['v'] = 'Personnage retouché'; }
+unset($v);
+$nbRoles = $ic['cine:Role']['n'];
+list($ok, $h, , ) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => array(
+	'modifiees' => array(array('anon' => $id1, 'types' => array($ci['cine:Role']['iri'], $ci['cine:Projection']['iri']), 'valeurs' => $vals)),
+	'supprimees_anon' => array($id2))));
+verifie($ok, 'anonyme : enregistré ('.strip_tags($h).')');
+verifie($q('ASK { ?b a <'.$ci['cine:Role']['iri'].'>, <'.$ci['cine:Projection']['iri'].'> ; <'.$esp.'personnage> "Personnage retouché" }'), 'anonyme : valeur et concept modifiés sur place');
+verifie(!$q('ASK { ?b <'.$esp.'personnage> ?p . FILTER(?p = "'.$ancien.'") ?b a <'.$ci['cine:Projection']['iri'].'> }'), 'anonyme : ancienne valeur retirée');
+list($mi2, ) = modele_instances('cinema');
+$ic2 = array(); foreach ($mi2['classes'] as $c) $ic2[$c['nom']] = $c;
+verifie($ic2['cine:Role']['n'] == $nbRoles - 1, 'anonyme : un rôle de moins');
+verifie($mauvais(array('modifiees' => array(array('anon' => 'inexistant123', 'valeurs' => array()))), 'disparu'), 'anonyme : identifiant inconnu refusé');
+// deux nœuds identiques : impossible de désigner l'un d'eux
+execute_sparql('cinema', 'INSERT DATA { _:a a <'.$ci['cine:Cinema']['iri'].'> ; <'.$esp.'ville> "Doublonville" . _:b a <'.$ci['cine:Cinema']['iri'].'> ; <'.$esp.'ville> "Doublonville" }');
+list($mi3, ) = modele_instances('cinema');
+$dup = null; foreach ($mi3['classes'] as $c) if ($c['nom'] === 'cine:Cinema') foreach ($c['items'] as $it) if ($it['iri'] === '') $dup = substr($it['nom'], 2);
+verifie(!is_null($dup) && $mauvais(array('supprimees_anon' => array($dup)), 'même contenu'), 'anonyme : nœuds identiques, suppression refusée');
+reinitialise_jeu('cinema');
 reinitialise_jeu('cinema');
 $a = array('anomalies' => array(anomalie('RDFS', 'a'), anomalie('RDFS', 'b')));
 $b = array('anomalies' => array(anomalie('RDFS', 'b'), anomalie('SHACL', 'a')));

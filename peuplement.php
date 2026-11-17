@@ -405,29 +405,53 @@ function peupl_triples($jeu, $jeton, array $indices) {
 // Instances dans le brouillon de l'éditeur : ajout, modification, suppression à la main
 //   brouillon['instances'] = {
 //     nouvelles:  [{iri, classe, valeurs: [{p, k, v, dt, l}]}],
-//     modifiees:  [{iri, valeurs: [...]}]    jeu complet des valeurs voulues (hors rdf:type)
-//     supprimees: [iri…],
+//     modifiees:  [{iri | anon, types?: [iri…], valeurs: [...]}]   jeu complet des valeurs voulues (hors rdf:type) ;
+//                 types : jeu complet des concepts voulus (absent : inchangés)
+//     supprimees: [iri…], supprimees_anon: [identifiant…],
 //     ia:         {jeton, indices: [n…]}     propositions de l'IA acceptées (ia_peupler)
 //   }
-//   valeur : p = propriété ; k = 'lit' (littéral, avec type dt et langue l) | 'iri' (référence : IRI ou nom abrégé) | 'bn' (nœud anonyme, jamais touché)
+//   valeur : p = propriété ; k = 'lit' (littéral, avec type dt et langue l) | 'iri' (référence : IRI ou nom abrégé) | 'bn' (nœud anonyme lié, jamais touché)
+//
+// Un nœud anonyme (anon) n'a pas d'IRI : Oxigraph garde son identifiant d'une requête à l'autre, mais une
+// mise à jour ne peut pas le désigner. Il est donc retrouvé par ce qu'il dit (ses triplets tels qu'on les a lus,
+// « motif ») et modifié sur place ; s'il n'est pas le seul à avoir exactement ce contenu, on refuse de le toucher.
 //------------------------------------------------------------------------------
 
 const INST_MAX = 100;
 const INST_VALEURS_BROUILLON = 80;
+const INST_ANON_LIGNES = 20000;
 
 // Contrôle de forme du brouillon d'instances ; renvoie array(brouillon nettoyé, message d'erreur|null)
 function inst_nettoie($b, array $prefixes) {
-	$sortie = array('nouvelles' => array(), 'modifiees' => array(), 'supprimees' => array(), 'ia' => null);
+	$sortie = array('nouvelles' => array(), 'modifiees' => array(), 'supprimees' => array(), 'supprimees_anon' => array(), 'ia' => null);
 	if (!is_array($b) || !$b) return array($sortie, null);
 	foreach (array('nouvelles', 'modifiees') as $k) {
 		$liste = $b[$k] ?? array();
 		if (!is_array($liste) || count($liste) > INST_MAX) return array(null, "Trop d'instances modifiées à la fois (".INST_MAX." au plus).");
 		foreach ($liste as $e) {
-			if (!is_array($e) || !onto_iri_valide($e['iri'] ?? null)) return array(null, "IRI d'instance invalide.");
-			$o = array('iri' => $e['iri'], 'valeurs' => array());
+			if (!is_array($e)) return array(null, "Instance invalide.");
+			$anon = $k === 'modifiees' && isset($e['anon']);
+			if ($anon) {
+				if (!is_string($e['anon']) || !preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $e['anon'])) return array(null, 'Identifiant de nœud anonyme invalide.');
+				$o = array('iri' => '', 'anon' => $e['anon'], 'types' => null, 'valeurs' => array());
+				$cle = '_:'.$e['anon'];
+			} else {
+				if (!onto_iri_valide($e['iri'] ?? null)) return array(null, "IRI d'instance invalide.");
+				$o = array('iri' => $e['iri'], 'anon' => '', 'types' => null, 'valeurs' => array());
+				$cle = $e['iri'];
+			}
 			if ($k === 'nouvelles') {
 				if (!onto_iri_valide($e['classe'] ?? null)) return array(null, "Concept d'une nouvelle instance invalide.");
 				$o['classe'] = $e['classe'];
+			} elseif (isset($e['types'])) {
+				if (!is_array($e['types']) || count($e['types']) > 30) return array(null, 'Trop de concepts pour une instance.');
+				$o['types'] = array();
+				foreach ($e['types'] as $t) {
+					if (!onto_iri_valide($t)) return array(null, 'Concept invalide.');
+					$o['types'][$t] = $t;
+				}
+				$o['types'] = array_values($o['types']);
+				if (!$o['types']) return array(null, 'Une instance doit garder au moins un concept.');
 			}
 			$vals = $e['valeurs'] ?? array();
 			if (!is_array($vals) || count($vals) > INST_VALEURS_BROUILLON) return array(null, "Trop de valeurs pour une instance.");
@@ -451,7 +475,7 @@ function inst_nettoie($b, array $prefixes) {
 					$o['valeurs'][] = array('p' => $v['p'], 'k' => 'lit', 'v' => $t, 'dt' => $dt, 'l' => $l);
 				} else return array(null, 'Genre de valeur inconnu.');
 			}
-			$sortie[$k][$o['iri']] = $o;
+			$sortie[$k][$cle] = $o;
 		}
 	}
 	$sup = $b['supprimees'] ?? array();
@@ -459,6 +483,12 @@ function inst_nettoie($b, array $prefixes) {
 	foreach ($sup as $iri) {
 		if (!onto_iri_valide($iri)) return array(null, "IRI d'instance invalide.");
 		$sortie['supprimees'][$iri] = $iri;
+	}
+	$supa = $b['supprimees_anon'] ?? array();
+	if (!is_array($supa) || count($supa) > INST_MAX) return array(null, 'Trop de suppressions.');
+	foreach ($supa as $id) {
+		if (!is_string($id) || !preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $id)) return array(null, 'Identifiant de nœud anonyme invalide.');
+		$sortie['supprimees_anon'][$id] = $id;
 	}
 	if (is_array($b['ia'] ?? null) && is_string($b['ia']['jeton'] ?? null) && is_array($b['ia']['indices'] ?? null))
 		$sortie['ia'] = array('jeton' => $b['ia']['jeton'], 'indices' => array_slice(array_map('intval', $b['ia']['indices']), 0, 200));
@@ -485,7 +515,7 @@ function inst_paire_json($ligne) {
 }
 
 // Mise à jour SPARQL des instances du brouillon nettoyé $i (inst_nettoie()) ; lit la copie pour
-// comparer. Renvoie array(texte ('' s'il n'y a rien), nombres par genre, message d'erreur|null, sujets nouveaux ou modifiés)
+// comparer. Renvoie array(texte ('' s'il n'y a rien'), nombres par genre, message d'erreur|null, sujets nouveaux ou modifiés)
 function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 	$nb = array('nouvelles' => 0, 'modifiees' => 0, 'supprimees' => 0, 'ia' => 0);
 	$vide = array('', $nb, null, array());
@@ -495,22 +525,30 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 		if (is_null($r[0])) return array('', $nb, $r[1], array());
 		$ia = $r;
 	}
-	if (!$i['nouvelles'] && !$i['modifiees'] && !$i['supprimees'] && !$ia) return $vide;
+	if (!$i['nouvelles'] && !$i['modifiees'] && !$i['supprimees'] && !$i['supprimees_anon'] && !$ia) return $vide;
 	$nom = function ($iri) use ($prefixes) { return abrege_iri($iri, $prefixes); };
-	$presents = array(); $courants = array();
-	$verifier = array_merge(array_keys($i['nouvelles']), array_keys($i['modifiees']));
-	if ($verifier) {
-		$liste = implode(' ', array_map('onto_iri', $verifier));
-		list($l, $err) = lit_copie($jeu, array(
-			'triples' => 'SELECT ?s ?p ?o WHERE { VALUES ?s { '.$liste.' } ?s ?p ?o . FILTER(?p != rdf:type) } LIMIT 5000',
-			'presents' => 'SELECT DISTINCT ?s WHERE { VALUES ?s { '.$liste.' } ?s ?p ?o }',
-		), 'des instances');
+	$rdftype = '<'.PREFIXES_STANDARD['rdf'].'type>';
+	$presents = array(); $courants = array(); $types_courants = array(); $anons = array();
+	$nommees = array_merge(array_keys($i['nouvelles']), array_keys(array_filter($i['modifiees'], function ($e) { return $e['iri'] !== ''; })));
+	$requetes = array();
+	if ($nommees) {
+		$liste = implode(' ', array_map('onto_iri', $nommees));
+		$requetes['triples'] = 'SELECT ?s ?p ?o WHERE { VALUES ?s { '.$liste.' } ?s ?p ?o . FILTER(?p != rdf:type) } LIMIT 5000';
+		$requetes['presents'] = 'SELECT DISTINCT ?s WHERE { VALUES ?s { '.$liste.' } ?s ?p ?o }';
+		$requetes['types'] = 'SELECT ?s ?c WHERE { VALUES ?s { '.$liste.' } ?s a ?c . FILTER(isIRI(?c)) }';
+	}
+	$veut_anon = $i['supprimees_anon'] || array_filter($i['modifiees'], function ($e) { return $e['anon'] !== ''; });
+	if ($veut_anon) $requetes['anon'] = 'SELECT ?s ?p ?o WHERE { ?s ?p ?o . FILTER(isBlank(?s)) } LIMIT '.INST_ANON_LIGNES;
+	if ($requetes) {
+		list($l, $err) = lit_copie($jeu, $requetes, 'des instances');
 		if (is_null($l)) return array('', $nb, $err, array());
-		foreach ($l['presents'] as $r) $presents[$r['s']['value']] = true;
-		foreach ($l['triples'] as $r) {
+		foreach ($l['presents'] ?? array() as $r) $presents[$r['s']['value']] = true;
+		foreach ($l['triples'] ?? array() as $r) {
 			$paire = inst_paire_json($r);
 			if (!is_null($paire)) $courants[$r['s']['value']][$paire] = true;
 		}
+		foreach ($l['types'] ?? array() as $r) $types_courants[$r['s']['value']][$r['c']['value']] = true;
+		foreach ($l['anon'] ?? array() as $r) $anons[$r['s']['value']][] = $r;
 	}
 	// paire « prédicat objet » d'une valeur du brouillon, ou message d'erreur ; $deja : paires présentes (pas de contrôle de type pour elles)
 	$paire = function (array $v, array $deja) use ($nom) {
@@ -530,7 +568,7 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 	foreach ($i['nouvelles'] as $iri => $e) {
 		if (isset($presents[$iri])) return array('', $nb, 'L\'IRI '.$nom($iri).' est déjà utilisée dans votre copie : choisissez un autre identifiant.', array());
 		$s = onto_iri($iri);
-		$plus[] = $s.' <'.PREFIXES_STANDARD['rdf'].'type> '.onto_iri($e['classe']).' .';
+		$plus[] = $s.' '.$rdftype.' '.onto_iri($e['classe']).' .';
 		foreach ($e['valeurs'] as $v) {
 			list($pa, $err) = $paire($v, array());
 			if (!is_null($err)) return array('', $nb, 'Instance '.$nom($iri).' : '.$err, array());
@@ -538,7 +576,9 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 		}
 		$nb['nouvelles']++; $sujets[] = $iri;
 	}
-	foreach ($i['modifiees'] as $iri => $e) {
+	foreach ($i['modifiees'] as $cle => $e) {
+		if ($e['anon'] !== '') continue;       // nœuds anonymes : plus bas
+		$iri = $e['iri'];
 		if (!isset($presents[$iri])) return array('', $nb, 'Instance '.$nom($iri).' introuvable dans votre copie.', array());
 		$s = onto_iri($iri); $cur = $courants[$iri] ?? array(); $voulues = array();
 		foreach ($e['valeurs'] as $v) {
@@ -549,7 +589,64 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 		$avant = count($moins) + count($plus);
 		foreach (array_diff_key($cur, $voulues) as $pa => $_) $moins[] = $s.' '.$pa.' .';
 		foreach (array_diff_key($voulues, $cur) as $pa => $_) $plus[] = $s.' '.$pa.' .';
+		if (!is_null($e['types'])) {       // changement de concept : on retire et on ajoute seulement ce qui diffère
+			$tc = $types_courants[$iri] ?? array();
+			foreach (array_diff(array_keys($tc), $e['types']) as $t) $moins[] = $s.' '.$rdftype.' '.onto_iri($t).' .';
+			foreach (array_diff($e['types'], array_keys($tc)) as $t) $plus[] = $s.' '.$rdftype.' '.onto_iri($t).' .';
+		}
 		if (count($moins) + count($plus) > $avant) { $nb['modifiees']++; $sujets[] = $iri; }
+	}
+	// nœuds anonymes : motif = ce que le nœud dit aujourd'hui ; on le retrouve par ce motif, il doit être unique
+	$motif_de = function ($id) use ($anons) {
+		$lignes = $anons[$id] ?? array();
+		if (!$lignes) return null;
+		$pa = array();
+		foreach ($lignes as $r) $pa[] = ($r['o']['type'] === 'bnode') ? onto_iri($r['p']['value']).' []' : inst_paire_json($r);
+		return array('?b '.implode(' ; ', $pa).' .', $lignes);
+	};
+	$unique = function ($motif) use ($jeu) {
+		list($l, $err) = lit_copie($jeu, array('n' => 'SELECT (COUNT(DISTINCT ?b) AS ?n) WHERE { '.$motif.' FILTER(isBlank(?b)) }'), 'des instances');
+		if (is_null($l)) return $err;
+		return (int)($l['n'][0]['n']['value'] ?? 0) === 1 ? null : 'Plusieurs nœuds anonymes ont exactement le même contenu : impossible de désigner celui-ci, modifiez-le avec une requête.';
+	};
+	$ops_anon = array();
+	foreach ($i['modifiees'] as $cle => $e) {
+		if ($e['anon'] === '') continue;
+		$m = $motif_de($e['anon']);
+		if (is_null($m)) return array('', $nb, 'Un nœud anonyme a disparu de votre copie : rechargez la page.', array());
+		list($motif, $lignes) = $m;
+		$err = $unique($motif);
+		if (!is_null($err)) return array('', $nb, $err, array());
+		$cur = array(); $tc = array();
+		foreach ($lignes as $r) {
+			$pa = inst_paire_json($r);
+			if (is_null($pa)) continue;
+			if ($r['p']['value'] === PREFIXES_STANDARD['rdf'].'type' && $r['o']['type'] === 'uri') $tc[$r['o']['value']] = true; else $cur[$pa] = true;
+		}
+		$voulues = array();
+		foreach ($e['valeurs'] as $v) {
+			list($pa, $err) = $paire($v, $cur);
+			if (!is_null($err)) return array('', $nb, 'Nœud anonyme : '.$err, array());
+			$voulues[$pa] = true;
+		}
+		$mo = array(); $pl = array();
+		foreach (array_diff_key($cur, $voulues) as $pa => $_) $mo[] = '?b '.$pa.' .';
+		foreach (array_diff_key($voulues, $cur) as $pa => $_) $pl[] = '?b '.$pa.' .';
+		if (!is_null($e['types'])) {
+			foreach (array_diff(array_keys($tc), $e['types']) as $t) $mo[] = '?b '.$rdftype.' '.onto_iri($t).' .';
+			foreach (array_diff($e['types'], array_keys($tc)) as $t) $pl[] = '?b '.$rdftype.' '.onto_iri($t).' .';
+		}
+		if (!$mo && !$pl) continue;
+		$ops_anon[] = ($mo ? 'DELETE { '.implode(' ', $mo).' } ' : '').($pl ? 'INSERT { '.implode(' ', $pl).' } ' : '').'WHERE { '.$motif.' }';
+		$nb['modifiees']++;
+	}
+	foreach ($i['supprimees_anon'] as $id) {
+		$m = $motif_de($id);
+		if (is_null($m)) return array('', $nb, 'Un nœud anonyme à supprimer a disparu de votre copie : rechargez la page.', array());
+		$err = $unique($m[0]);
+		if (!is_null($err)) return array('', $nb, $err, array());
+		$ops_anon[] = 'DELETE { ?b ?p ?o . ?x ?q ?b } WHERE { '.$m[0].' ?b ?p ?o . OPTIONAL { ?x ?q ?b } }';
+		$nb['supprimees']++;
 	}
 	foreach ($i['supprimees'] as $iri) {
 		$s = onto_iri($iri);
@@ -565,11 +662,45 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 	$ops = array();
 	if ($moins) $ops[] = "DELETE DATA {\n  ".implode("\n  ", $moins)."\n}";
 	if ($plus) $ops[] = "INSERT DATA {\n  ".implode("\n  ", $plus)."\n}";
-	return array(implode(" ;\n", array_merge($ops, $suppr)), $nb, null, $sujets);
+	return array(implode(" ;\n", array_merge($ops, $suppr, $ops_anon)), $nb, null, $sujets);
 }
 
-// Toutes les valeurs d'une instance de la copie (pour l'éditer) ; renvoie array(modèle|null, message d'erreur)
-function modele_instance($jeu, $iri) {
+// Valeur affichable et modifiable d'un triplet (propriété $p, terme JSON $o)
+function inst_valeur_json($p, array $o, array $prefixes) {
+	$v = array('p' => $p, 'nom' => abrege_iri($p, $prefixes), 'k' => 'lit', 'v' => (string)$o['value'], 'dt' => '', 'dtnom' => '', 'l' => '');
+	if ($o['type'] === 'uri') { $v['k'] = 'iri'; $v['v'] = abrege_iri($o['value'], $prefixes); }
+	elseif ($o['type'] === 'bnode') { $v['k'] = 'bn'; $v['v'] = '_:'.$o['value']; }
+	else {
+		$v['l'] = (string)($o['xml:lang'] ?? '');
+		$dt = (string)($o['datatype'] ?? '');
+		if ($v['l'] === '' && $dt !== '' && $dt !== PREFIXES_STANDARD['xsd'].'string') { $v['dt'] = $dt; $v['dtnom'] = abrege_iri($dt, $prefixes); }
+	}
+	return $v;
+}
+
+// Toutes les valeurs d'une instance de la copie (pour l'éditer) ; $anon : identifiant d'un nœud anonyme à la place de
+// l'IRI. Renvoie array(modèle|null, message d'erreur)
+function modele_instance($jeu, $iri, $anon = '') {
+	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
+	if ($anon !== '') {
+		if (!preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $anon)) return array(null, 'Identifiant de nœud anonyme invalide.');
+		list($l, $erreur) = lit_copie($jeu, array(
+			'lignes' => 'SELECT ?s ?p ?o WHERE { ?s ?p ?o . FILTER(isBlank(?s)) } LIMIT '.INST_ANON_LIGNES,
+			'entrants' => 'SELECT ?o WHERE { ?x ?p ?o . FILTER(isBlank(?o)) } LIMIT '.INST_ANON_LIGNES,
+		), "de l'instance");
+		if (is_null($l)) return array(null, $erreur);
+		$valeurs = array(); $types = array(); $trouve = false;
+		foreach ($l['lignes'] as $r) {
+			if ($r['s']['value'] !== $anon) continue;
+			$trouve = true;
+			if ($r['p']['value'] === PREFIXES_STANDARD['rdf'].'type' && $r['o']['type'] === 'uri') $types[] = array('iri' => $r['o']['value'], 'nom' => abrege_iri($r['o']['value'], $prefixes));
+			else $valeurs[] = inst_valeur_json($r['p']['value'], $r['o'], $prefixes);
+		}
+		if (!$trouve) return array(null, 'Ce nœud anonyme a disparu de votre copie.');
+		usort($valeurs, function ($a, $b) { return strcmp($a['p'], $b['p']) ?: strcmp($a['v'], $b['v']); });
+		$entrants = count(array_filter($l['entrants'], function ($r) use ($anon) { return $r['o']['value'] === $anon; }));
+		return array(array('iri' => '', 'anon' => $anon, 'nom' => '_:'.$anon, 'types' => $types, 'valeurs' => array_slice($valeurs, 0, 400), 'entrants' => $entrants), '');
+	}
 	if (!onto_iri_valide($iri)) return array(null, 'IRI invalide.');
 	$s = onto_iri($iri);
 	list($l, $erreur) = lit_copie($jeu, array(
@@ -578,21 +709,9 @@ function modele_instance($jeu, $iri) {
 		'entrants' => 'SELECT (COUNT(*) AS ?n) WHERE { ?x ?p '.$s.' }',
 	), "de l'instance");
 	if (is_null($l)) return array(null, $erreur);
-	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
 	$valeurs = array();
-	foreach ($l['valeurs'] as $r) {
-		$o = $r['o']; $p = $r['p']['value'];
-		$v = array('p' => $p, 'nom' => abrege_iri($p, $prefixes), 'k' => 'lit', 'v' => (string)$o['value'], 'dt' => '', 'dtnom' => '', 'l' => '');
-		if ($o['type'] === 'uri') { $v['k'] = 'iri'; $v['v'] = abrege_iri($o['value'], $prefixes); }
-		elseif ($o['type'] === 'bnode') { $v['k'] = 'bn'; $v['v'] = '_:'.$o['value']; }
-		else {
-			$v['l'] = (string)($o['xml:lang'] ?? '');
-			$dt = (string)($o['datatype'] ?? '');
-			if ($v['l'] === '' && $dt !== '' && $dt !== PREFIXES_STANDARD['xsd'].'string') { $v['dt'] = $dt; $v['dtnom'] = abrege_iri($dt, $prefixes); }
-		}
-		$valeurs[] = $v;
-	}
+	foreach ($l['valeurs'] as $r) $valeurs[] = inst_valeur_json($r['p']['value'], $r['o'], $prefixes);
 	$types = array_map(function ($r) use ($prefixes) { return array('iri' => $r['c']['value'], 'nom' => abrege_iri($r['c']['value'], $prefixes)); }, $l['types']);
-	return array(array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'types' => $types, 'valeurs' => $valeurs,
+	return array(array('iri' => $iri, 'anon' => '', 'nom' => abrege_iri($iri, $prefixes), 'types' => $types, 'valeurs' => $valeurs,
 		'entrants' => (int)($l['entrants'][0]['n']['value'] ?? 0)), '');
 }

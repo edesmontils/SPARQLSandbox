@@ -2,7 +2,7 @@
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
 // ontologie (jeu), ontologie_enregistrer (jeu, brouillon64 : ontologie, instances, propositions de l'IA), instances (jeu),
-// instance (jeu, iri), ia_peupler (jeu, mode, quantite, consigne, brouillon64) :
+// instance (jeu, iri ou anon), ia_peupler (jeu, mode, quantite, consigne, brouillon64) :
 // éditeur d'ontologie (editeur.php), affichage et peuplement par IA des instances (peuplement.php),
 // exercice (jeu, exercice), verifier (jeu, exercice, question, requete64),
 // intention (jeu, exercice, question, intention) : correction par IA si elle est activée
@@ -105,7 +105,7 @@ case 'ia_peupler':
 	else echo json_encode($r, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'instance':
-	list($modele, $erreur) = modele_instance($jeu, (string)param('iri'));
+	list($modele, $erreur) = modele_instance($jeu, (string)param('iri'), (string)param('anon'));
 	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
 	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
