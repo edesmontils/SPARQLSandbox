@@ -2,7 +2,7 @@
 // entre classes. SVG dessiné ici, sans bibliothèque, à partir du modèle de vocabulaire.php.
 //   dessineVocabulaire(modele, conteneur, surClic)
 // surClic(sorte, nom, classe) est appelé au clic sur une classe ('classes', avec son objet du modèle)
-// ou une propriété ('proprietes').
+// ou une propriété ('proprietes') ; surClic(null, null, null) quand on clique de nouveau sur ce qui était choisi.
 // Trait plein : observé dans les données ; pointillé : déclaré mais jamais observé.
 // Disposition en couches : une super-classe est au-dessus de ses sous-classes, le domaine d'une
 // propriété au-dessus de sa portée ; les liens qui traversent une couche peuvent passer sur un nœud.
@@ -174,7 +174,9 @@
 		noeuds.forEach(function (c) { parNom[c.nom] = c; });
 		conteneur.querySelectorAll('[data-sorte]').forEach(function (g) {
 			function ouvre() {
+				var etaitChoisi = g.classList.contains('voc-choisi');
 				conteneur.querySelectorAll('.voc-choisi').forEach(function (e) { e.classList.remove('voc-choisi'); });
+				if (etaitChoisi) { if (surClic) surClic(null, null, null); return; }   // second clic : on désélectionne
 				g.classList.add('voc-choisi');
 				if (surClic) surClic(g.dataset.sorte, g.dataset.nom, parNom[g.dataset.nom]);
 			}

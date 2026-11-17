@@ -625,6 +625,27 @@ verifie(!$dernier[0] && count(prefixes_ajoutes('cinema')) == PREFIXES_AJOUTES_MA
 reinitialise_jeu('cinema');
 verifie(!prefixes_ajoutes('cinema'), 'préfixes : retour au jeu d\'origine les efface');
 
+// Provenance des instances (T5) : saisie manuelle, conservée dans un graphe à part
+reinitialise_jeu('cinema');
+list($mi, ) = modele_instances('cinema');
+$ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;
+verifie(array_unique(array_column($ic['cine:Film']['items'], 'src')) === array(''), 'provenance : aucune pour les données d\'origine');
+$film_prov = $esp.'film_prov';
+list($ok, , , ) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => array('nouvelles' => array(
+	array('iri' => $film_prov, 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(array('p' => $esp.'titre', 'k' => 'lit', 'v' => 'Film prov', 'dt' => '', 'l' => 'fr'))),
+	array('anon' => true, 'classe' => $ci['cine:Role']['iri'], 'valeurs' => array(array('p' => $esp.'personnage', 'k' => 'lit', 'v' => 'Prov anonyme', 'dt' => '', 'l' => ''))),
+))));
+list($mi2, ) = modele_instances('cinema');
+$src = array(); foreach ($mi2['classes'] as $c) foreach ($c['items'] as $it) if ($it['src'] !== '') $src[$it['iri'] !== '' ? $it['iri'] : $it['nom']] = $it['src'];
+verifie($ok && ($src[$film_prov] ?? '') === 'manuel' && count(array_filter($src, function ($v, $k) { return $v === 'manuel' && strpos($k, '_:') === 0; }, ARRAY_FILTER_USE_BOTH)) == 1, 'provenance : « manuel » pour une instance nommée et pour un nœud anonyme');
+verifie(!$q('ASK { <'.$film_prov.'> <'.PROVENANCE_PRED.'> ?v }') && $q('ASK { GRAPH <'.PROVENANCE_GRAPHE.'> { <'.$film_prov.'> <'.PROVENANCE_PRED.'> "manuel" } }'), 'provenance : dans le graphe nommé, pas dans les données');
+list($ok, , , ) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => array('supprimees' => array($film_prov))));
+verifie($ok && !$q('ASK { GRAPH <'.PROVENANCE_GRAPHE.'> { <'.$film_prov.'> ?p ?o } }'), 'provenance : retirée avec l\'instance');
+$id_prov = null; foreach ($src as $k => $v) if (strpos($k, '_:') === 0) $id_prov = substr($k, 2);
+list($ok, , , ) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => array('supprimees_anon' => array($id_prov))));
+verifie($ok && !$q('ASK { GRAPH <'.PROVENANCE_GRAPHE.'> { ?b ?p ?o } }'), 'provenance : retirée avec le nœud anonyme');
+reinitialise_jeu('cinema');
+
 // Création de nœuds anonymes : un nœud distinct par instance, même dans un seul enregistrement
 reinitialise_jeu('cinema');
 list($mi, ) = modele_instances('cinema');
@@ -828,6 +849,9 @@ if (function_exists('curl_init')) {
 	verifie($ok && count($sujets) == 2, 'peuplement IA : propositions ajoutées avec le brouillon ('.strip_tags($h).')');
 	$salles = array_filter($modele['classes'], function ($c) { return $c['nom'] === 'cine:Salle'; });
 	verifie(count($salles) == 1 && array_values($salles)[0]['n'] == 1 && array_values($salles)[0]['decl'], 'peuplement IA : concept enregistré avec son instance');
+	list($mip, ) = modele_instances('cinema');
+	$srcs = array(); foreach ($mip['classes'] as $c) foreach ($c['items'] as $it) if ($it['src'] !== '') $srcs[$it['iri']] = $it['src'];
+	verifie(count(array_filter($srcs, function ($v) { return $v === 'ia'; })) == 1 && ($srcs[$f1['iri']] ?? '') === '' && in_array($sujets[0], array_keys($srcs)), 'provenance : « ia » pour l\'instance créée par l\'IA, rien pour celle qu\'elle complète');
 	$q = execute_sparql('cinema', 'ASK { <'.$f1['iri'].'> <'.$esp.'duree> 117 }');
 	verifie($q['ok'] && $q['resultat'] === true, 'peuplement IA : valeur ajoutée à une instance existante, typée');
 	verifie(count($_SESSION['peuplement']['cinema']['propositions']) == 1, 'peuplement IA : propositions ajoutées retirées de la liste');

@@ -4,6 +4,7 @@
 require __DIR__.'/session.php';
 require_once __DIR__.'/fonctions.php';
 require_once __DIR__.'/ontologie.php';
+require_once __DIR__.'/peuplement.php';
 
 function export_erreur($code, $message) {
 	http_response_code($code);
@@ -16,7 +17,7 @@ function export_erreur($code, $message) {
 // sujets déclarés comme classe, propriété ou ontologie, ou portant une déclaration de schéma
 function export_requete($partie) {
 	$pre = 'PREFIX rdf: <'.PREFIXES_STANDARD['rdf'].'> PREFIX rdfs: <'.PREFIXES_STANDARD['rdfs'].'> PREFIX owl: <'.PREFIXES_STANDARD['owl'].'> ';
-	$tout = '{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } }';
+	$tout = '{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } FILTER(?g != <'.PROVENANCE_GRAPHE.'>) }';   // la provenance (éditeur) n\'est pas une donnée
 	if ($partie === 'tout') return $pre.'CONSTRUCT { ?s ?p ?o } WHERE { '.$tout.' }';
 	$sch = '{ ?s a ?t . VALUES ?t { rdfs:Class owl:Class rdf:Property owl:ObjectProperty owl:DatatypeProperty '
 		.'owl:AnnotationProperty owl:Ontology owl:Restriction } } '

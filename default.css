@@ -592,3 +592,11 @@ pre.turtle { margin: 0 0 8px; padding: 10px 12px; max-height: 300px; overflow: a
 .propositions label.douteuse { border-color: #e7c766; background: #fffaf0; }
 .propositions .detail.anomalie { color: #7a5a00; font-family: inherit; }
 
+/* Pendant un exercice : ni édition de l'ontologie ni export (js/sandbox.js) */
+body.exercice-actif .hors-exercice { display: none !important; }
+
+/* Onglet Instance : filtre des nœuds anonymes, relations du concept */
+.filtre-anon { font-size: .86em; color: var(--sb-ink-soft); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.inst-rel { margin: 2px 0 8px; padding: 6px 10px; border-left: 3px solid var(--sb-accent-2); background: var(--sb-surface-2); border-radius: 0 var(--sb-radius-sm) var(--sb-radius-sm) 0; font-size: .86em; color: var(--sb-ink-soft); }
+.inst-rel > strong { display: block; margin-bottom: 2px; }
+

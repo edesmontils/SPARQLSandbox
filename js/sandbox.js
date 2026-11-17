@@ -209,6 +209,7 @@
 	var requeteVoc = null, numeroVoc = 0;
 	// Un clic sur le diagramme exécute la requête et montre le résultat à côté, sans la requête
 	function interrogeVocabulaire(sorte, nom, classe) {
+		if (sorte === null) { fermeVocabulaire(); return; }   // second clic sur la même classe ou propriété
 		if (sorte === 'classes') requeteVoc = requeteClasse(nom, classe);
 		else requeteVoc = prefixesUtiles(nom) + 'SELECT ?s ?o\nWHERE {\n  ?s ' + terme(nom) + ' ?o .\n}\nLIMIT 50';
 		var mon = ++numeroVoc;
@@ -225,11 +226,12 @@
 		resultat.innerHTML = '';
 		editeur.focus();
 	});
-	document.getElementById('fermer-panneau-vocabulaire').addEventListener('click', function () {
+	function fermeVocabulaire() {
 		numeroVoc++;
 		panneauVoc.hidden = true;
 		zoneVoc.querySelectorAll('.voc-choisi').forEach(function (e) { e.classList.remove('voc-choisi'); });
-	});
+	}
+	document.getElementById('fermer-panneau-vocabulaire').addEventListener('click', fermeVocabulaire);
 	function metsAJourVocabulaire() {
 		zoneVoc.innerHTML = '<p class="astuce">Chargement…</p>';
 		panneauVoc.hidden = true;
@@ -488,6 +490,7 @@
 			if (!r.ok) { resultat.innerHTML = r.html; return; }
 			if (!exercice) texteLibre = editeur.getValue();
 			exercice = { code: code, questions: r.exercice.questions, index: 0 };
+			document.body.classList.add('exercice-actif');   // pas d'édition d'ontologie ni d'export pendant un exercice
 			// reprise à la première question pas encore faite
 			var s = suivi(code), i = 0;
 			while (i < exercice.questions.length - 1 && faite(s[exercice.questions[i].code])) i++;
@@ -500,6 +503,7 @@
 	function quitteExercice() {
 		modeCopie(false);
 		exercice = null;
+		document.body.classList.remove('exercice-actif');
 		panneau.hidden = true;
 		panneau.innerHTML = '';
 		boutonVerifier.hidden = true;

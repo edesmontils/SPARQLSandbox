@@ -2,6 +2,17 @@
 
 Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
 
+- **Créer et supprimer un jeu de données** : créer un jeu vierge (nom, titre, description ; fichiers `ontologie.ttl` et
+  d'instances vides, `config.xml`, formes facultatives) et en supprimer un (avec confirmation). À décider :
+  - **où** : dans l'application web (réservé à l'enseignant : il faudrait une authentification, et les droits d'écriture
+    sur `donnees/`, aujourd'hui en lecture seule côté serveur) ou dans l'application d'administration de bureau
+    (`admin/sparqlsandbox_admin/jeux.py`, `page_jeux.py`) qui gère déjà les jeux ;
+  - **sécurité** : nom de dossier validé (`^[a-z0-9][a-z0-9_-]*$`, comme `liste_jeux()`), jamais de chemin saisi ;
+  - **effets d'une suppression** : copies de session en cours, exercices du jeu (`donnees/exercices/`), suivi gardé dans
+    le navigateur des étudiants, cache de `liste_jeux()`, jeu choisi dans l'URL ;
+  - **jeu vierge** : un jeu sans instance ni ontologie doit s'ouvrir sans erreur (diagramme vide, éditeur utilisable
+    pour tout construire), avec un exemple de requête minimal ;
+  - **déploiement** : le dossier créé vit-il dans le dépôt git (jeu partagé) ou à côté (jeu local d'une installation) ?
 - **Exercices** : synchroniser le catalogue d'une instance QueryCraft (`exos_source`), comme
   SQLSandbox, quand QueryCraft gérera des jeux RDF ; comparer les graphes de `CONSTRUCT` à
   l'isomorphisme près (aujourd'hui, tous les nœuds anonymes sont tenus pour égaux) ; vérifier
@@ -75,22 +86,20 @@ servent de référence.
 - **T1 — zoom/slider sur les grands graphes** : `js/vocabulaire.js:171`, `js/editeur.js:315`
   (viewBox), `js/disposition.js`. Piste : zoom sur le viewBox (molette, boutons ±, slider), pan.
   Le zoom du diagramme est déjà listé plus haut.
-- **T14 — re-cliquer un objet le désélectionne** : `js/vocabulaire.js:175-181` (`ouvre` sans
-  bascule), `js/editeur.js:772,799` (`selectionneConcept`). Piste : second clic → `E.sel = null`,
-  fermer la fiche et la description.
-- **T3 — accès aux nœuds anonymes** : action `instance` avec `anon` (`controler.php`,
-  `ontologie.php` `modele_instance`), liste des instances de `js/editeur.js`.
-  Piste : filtre « anonymes », lien depuis la classe.
+- **T14 — second clic = désélection** (fait) : dans le diagramme principal (`vocabulaire.js` `ouvre` : `surClic(null…)` ferme le panneau)
+  et dans l'éditeur (graphe : un clic sans déplacement sur le concept déjà choisi ; liste, flèches, attributs, touche Entrée).
+- **T3 — nœuds anonymes** (fait) : filtre « nœuds anonymes seulement » dans l'onglet Instance, badge `∅ n` sur chaque concept,
+  et « les voir » depuis la fiche d'un concept qui en possède.
 - **T7 — propriété externe (`foaf:name`) difficile à utiliser** : seules les propriétés déclarées
   du jeu sont proposées. Piste : proposer aussi les propriétés observées (`vocabulaire.php`) et
   les standards (`PREFIXES_STANDARD`).
-- **T5 — marquer la provenance d'une instance (IA / saisie manuelle)** : brouillon
-  `ia: {jeton, indices}` (`peuplement.php:420`), `rendInstances` de `js/editeur.js`.
-  Piste : badge « IA » / « manuel », persisté en session comme les propositions.
-- **T12 — masquer « Éditer l'ontologie » et « Exporter » pendant un exercice** : boutons rendus
-  dans `index.php`, mode exercice dans `js/sandbox.js`. Piste : masquer quand `exercice` est actif ;
-  décider si l'URL directe `editeur.php` est aussi bloquée ou seulement masquée.
-
+- **T5 — provenance d'une instance** (fait) : « IA » ou « manuel », gardée par le serveur dans un graphe nommé à part
+  (`urn:sparqlsandbox:provenance`, `peuplement.php`), retirée avec l'instance, absente des exports ; badge dans l'onglet Instance,
+  nœuds anonymes compris.
+- **T12 — ni édition ni export pendant un exercice** (fait, côté affichage) : « Éditer l'ontologie » et « Exporter » sont masqués
+  (`body.exercice-actif`, `js/sandbox.js`). L'URL directe `editeur.php` n'est pas bloquée : le serveur ne sait pas qu'un exercice
+  est ouvert (état gardé dans le navigateur) ; un blocage demanderait un état d'exercice côté serveur, avec le risque de
+  bloquer un étudiant qui ferme son navigateur en plein exercice.
 ### P3 — améliorations
 
 - **T9 — saisie assistée selon le type attendu** : champ littéral (`js/editeur.js:876`),

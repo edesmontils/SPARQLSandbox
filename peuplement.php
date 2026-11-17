@@ -19,7 +19,10 @@ const PEUPL_CONSIGNE_MAX = 300;     // longueur de la consigne de l'étudiant
 const PEUPL_EXISTANTS_CIBLES = 25;  // instances existantes données à l'IA, par concept visé
 const PEUPL_EXISTANTS_AUTRES = 6;   // … par autre concept
 const PEUPL_EXISTANTS_MAX = 120;    // … au total
-const PEUPL_MAX_TOKENS = 3000;      // réponse de l'IA : plus longue que celle d'une correction
+const PEUPL_MAX_TOKENS = 3000;
+// Provenance des instances créées dans l'éditeur (IA ou saisie manuelle) : un graphe nommé à part, pour ne pas toucher aux données
+const PROVENANCE_GRAPHE = 'urn:sparqlsandbox:provenance';
+const PROVENANCE_PRED = 'urn:sparqlsandbox:source';      // réponse de l'IA : plus longue que celle d'une correction
 
 // Lit des requêtes SELECT sur la copie de session du jeu ; renvoie array(lignes par clé | null, message d'erreur)
 function lit_copie($jeu, array $requetes, $objet) {
@@ -59,7 +62,7 @@ function inst_terme($t, array $prefixes) {
 
 // Modèle des instances. $lignes : [{s, c, p?, o?}] (résultat SPARQL JSON), $nombres : [{c, n}].
 // Renvoie array('classes' => [{iri, nom, n, plus, items: [{iri, nom, titre, props: [{p, v, k, l}]}]}], 'espace', 'tronque')
-function construit_modele_instances(array $lignes, array $nombres, array $prefixes) {
+function construit_modele_instances(array $lignes, array $nombres, array $provenance, array $prefixes) {
 	$n = array();
 	foreach ($nombres as $l) $n[voc_valeur($l, 'c')] = (int)voc_valeur($l, 'n');
 	$cl = array();   // iri de classe => array(clé de sujet => item)
@@ -71,7 +74,7 @@ function construit_modele_instances(array $lignes, array $nombres, array $prefix
 			if (count($cl[$c] ?? array()) >= INST_PAR_CLASSE) continue;
 			$cl[$c][$k] = array('iri' => $sujet['type'] === 'uri' ? $sujet['value'] : '',
 				'nom' => $sujet['type'] === 'uri' ? abrege_iri($sujet['value'], $prefixes) : '_:'.$sujet['value'],
-				'titre' => '', 'props' => array());
+				'titre' => '', 'props' => array(), 'src' => $provenance[$k] ?? '');
 		}
 		if (isset($l['p']) && isset($l['o']) && count($cl[$c][$k]['props']) < INST_VALEURS_MAX) {
 			list($v, $genre, $langue) = inst_terme($l['o'], $prefixes);
@@ -100,9 +103,12 @@ function modele_instances($jeu) {
 	list($l, $erreur) = lit_copie($jeu, array(
 		'lignes' => 'SELECT ?s ?c ?p ?o WHERE { ?s a ?c . '.$hors.' OPTIONAL { ?s ?p ?o . FILTER(?p != rdf:type) } } ORDER BY ?c ?s ?p LIMIT '.INST_LIGNES_MAX,
 		'nombres' => 'SELECT ?c (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?c . '.$hors.' } GROUP BY ?c',
+		'provenance' => 'SELECT ?s ?v WHERE { GRAPH <'.PROVENANCE_GRAPHE.'> { ?s <'.PROVENANCE_PRED.'> ?v } }',
 	), 'des instances');
 	if (is_null($l)) return array(null, $erreur);
-	return array(construit_modele_instances($l['lignes'], $l['nombres'], array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu))), '');
+	$prov = array();
+	foreach ($l['provenance'] as $r) $prov[$r['s']['type'].':'.$r['s']['value']] = (string)$r['v']['value'];
+	return array(construit_modele_instances($l['lignes'], $l['nombres'], $prov, array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu))), '');
 }
 
 //------------------------------------------------------------------------------
@@ -438,15 +444,16 @@ function peupl_triples($jeu, $jeton, array $indices) {
 	$s = $_SESSION['peuplement'][$jeu] ?? null;
 	if (!is_array($s) || !is_string($jeton) || !hash_equals($s['jeton'], $jeton))
 		return array(null, "Les propositions de l'IA ne sont plus valables : demandez-en de nouvelles.");
-	$triples = array(); $sujets = array(); $pris = array();
+	$triples = array(); $sujets = array(); $pris = array(); $nouveaux = array();
 	foreach ($indices as $i) {
 		$i = (int)$i;
 		if (isset($pris[$i]) || !isset($s['propositions'][$i])) continue;
 		$pris[$i] = true;
 		foreach ($s['propositions'][$i]['triples'] as $t) $triples[] = $t;
 		$sujets[] = $s['propositions'][$i]['sujet'];
+		if ($s['propositions'][$i]['genre'] === 'nouveau') $nouveaux[] = $s['propositions'][$i]['sujet'];   // les instances créées par l'IA, pas celles qu'elle complète
 	}
-	return array($triples, $sujets, array_keys($pris));
+	return array($triples, $sujets, array_keys($pris), $nouveaux);
 }
 
 //------------------------------------------------------------------------------
@@ -615,12 +622,14 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 		if (is_null($strict)) return array(null, 'Valeur « '.mb_substr($v['v'], 0, 40).' » invalide pour '.$nom($v['p']).($dt !== '' ? ' (type '.$nom($dt).' attendu)' : '').'.');
 		return array($p.' '.$strict, null);
 	};
-	$moins = array(); $plus = array(); $suppr = array(); $sujets = array();
+	$moins = array(); $plus = array(); $suppr = array(); $sujets = array(); $prov = array();
+	$src = '<'.PROVENANCE_PRED.'>';
 	$rang_anon = 0;
 	foreach ($i['nouvelles'] as $iri => $e) {
 		$anon_neuf = $e['iri'] === '';
 		if (!$anon_neuf && isset($presents[$iri])) return array('', $nb, 'L\'IRI '.$nom($iri).' est déjà utilisée dans votre copie : choisissez un autre identifiant.', array());
 		$s = $anon_neuf ? '_:n'.(++$rang_anon) : onto_iri($iri);     // nœud anonyme : une étiquette de nœud vierge par instance
+		$prov[] = $s.' '.$src.' "manuel" .';
 		$plus[] = $s.' '.$rdftype.' '.onto_iri($e['classe']).' .';
 		foreach ($e['valeurs'] as $v) {
 			list($pa, $err) = $paire($v, array());
@@ -699,23 +708,26 @@ function inst_mise_a_jour($jeu, array $i, array $prefixes) {
 		if (is_null($m)) return array('', $nb, 'Un nœud anonyme à supprimer a disparu de votre copie : rechargez la page.', array());
 		$err = $unique($m[0]);
 		if (!is_null($err)) return array('', $nb, $err, array());
-		$ops_anon[] = 'DELETE { ?b ?p ?o . ?x ?q ?b } WHERE { '.$m[0].' ?b ?p ?o . OPTIONAL { ?x ?q ?b } }';
+		$ops_anon[] = 'DELETE { ?b ?p ?o . ?x ?q ?b . GRAPH <'.PROVENANCE_GRAPHE.'> { ?b ?ps ?pv } } WHERE { '.$m[0].' ?b ?p ?o . OPTIONAL { ?x ?q ?b } OPTIONAL { GRAPH <'.PROVENANCE_GRAPHE.'> { ?b ?ps ?pv } } }';
 		$nb['supprimees']++;
 	}
 	foreach ($i['supprimees'] as $iri) {
 		$s = onto_iri($iri);
 		$suppr[] = "DELETE WHERE { $s ?p ?o }";
 		$suppr[] = "DELETE WHERE { ?x ?p $s }";     // les références vers l'instance partent avec elle
+		$suppr[] = "DELETE WHERE { GRAPH <".PROVENANCE_GRAPHE."> { $s ?p ?o } }";
 		$nb['supprimees']++;
 	}
 	if ($ia) {
 		foreach ($ia[0] as $t) $plus[] = $t;
 		$nb['ia'] = count($ia[2]);
 		$sujets = array_merge($sujets, $ia[1]);
+		foreach ($ia[3] as $iri) $prov[] = onto_iri($iri).' '.$src.' "ia" .';
 	}
 	$ops = array();
 	if ($moins) $ops[] = "DELETE DATA {\n  ".implode("\n  ", $moins)."\n}";
-	if ($plus) $ops[] = "INSERT DATA {\n  ".implode("\n  ", $plus)."\n}";
+	// données et provenance dans la même opération : les étiquettes de nœuds anonymes y désignent les mêmes nœuds
+	if ($plus || $prov) $ops[] = "INSERT DATA {\n  ".implode("\n  ", $plus)."\n  GRAPH <".PROVENANCE_GRAPHE."> {\n    ".implode("\n    ", $prov)."\n  }\n}";
 	return array(implode(" ;\n", array_merge($ops, $suppr, $ops_anon)), $nb, null, $sujets);
 }
 

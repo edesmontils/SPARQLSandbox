@@ -49,7 +49,7 @@
 	// État : le brouillon
 	//--------------------------------------------------------------------------
 	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', prefixes: {}, meta: { relations: {}, carac: [] }, sel: null, pos: {}, routes: {} }, axOuvert = null;
-	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null, selSous = null, rat = null, poignees = '';
+	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, seulAnon = false, propositions = null, selSous = null, rat = null, poignees = '';
 	var vue = 'graphe', lien = null, drag = null, dernier = { t: 0, k: '' }, quitte = false, enCours = false;
 
 	function cl(iri) { return E.classes.filter(function (c) { return c.iri === iri; })[0]; }
@@ -490,7 +490,9 @@
 		if (t === 'classe') {
 			var fils = E.classes.filter(function (c) { return c.parents.indexOf(x.iri) >= 0 && !c.supprime; });
 			var ps = E.props.filter(function (p) { return !p.supprime && (p.domain === x.iri || p.range === x.iri); });
-			if (x.n) imp.push(x.n + ' instance(s) de ce concept (elles ne sont pas supprimées avec lui)');
+			var groupe = I && I.classes.filter(function (g) { return g.iri === x.iri; })[0], nAnon = groupe ? groupe.items.filter(function (it) { return !it.iri; }).length : 0;
+			if (x.n) imp.push(x.n + ' instance(s) de ce concept (elles ne sont pas supprimées avec lui)' +
+				(nAnon ? ' dont ' + nAnon + ' nœud(s) anonyme(s) <button type="button" class="lien-mini" data-ab="voir-anon" data-id="' + echappe(x.iri) + '">les voir</button>' : ''));
 			if (fils.length) imp.push(fils.length + ' sous-classe(s) : ' + fils.map(function (c) { return '<button type="button" class="lien-mini" data-t="classe" data-iri="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</button>'; }).join(', '));
 			if (ps.length) imp.push(ps.length + ' propriété(s) l\'utilisent : ' + ps.map(function (p) { return '<button type="button" class="lien-mini" data-t="prop" data-iri="' + echappe(p.iri) + '">' + echappe(affiche(p)) + '</button>'; }).join(', '));
 		} else imp.push('Les valeurs déjà présentes dans votre copie ne sont pas modifiées.');
@@ -689,7 +691,10 @@
 	function pt(e) { var s = $('#svg-graphe'), p = new DOMPoint(e.clientX, e.clientY).matrixTransform(s.getScreenCTM().inverse()); return { x: p.x, y: p.y }; }
 	function mv(e) {
 		var p = pt(e);
-		if (drag) { E.pos[drag.iri] = { x: Math.max(0, p.x - drag.dx), y: Math.max(0, p.y - drag.dy) }; rendGraphe(); }
+		if (drag) {
+			if (!drag.moved && Math.abs(p.x - drag.x0) + Math.abs(p.y - drag.y0) > 3) drag.moved = true;   // un simple clic ne déplace rien
+			if (drag.moved) { E.pos[drag.iri] = { x: Math.max(0, p.x - drag.dx), y: Math.max(0, p.y - drag.dy) }; rendGraphe(); }
+		}
 		else if (lien || rat) {
 			var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'), o = lien || rat;
 			o.x = p.x; o.y = p.y; o.cible = n ? n.dataset.cls : null; rendGraphe();
@@ -697,7 +702,11 @@
 	}
 	function up(e) {
 		document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
-		if (drag) { drag = null; return; }
+		if (drag) {
+			var d = drag; drag = null;
+			if (!d.moved && d.etaitSel) deselectionne();   // second clic sur le concept déjà choisi
+			return;
+		}
 		if (rat) { var r = rat; rat = null; rattache(r, e); return; }
 		if (!lien) return;
 		var l = lien; lien = null;
@@ -769,7 +778,13 @@
 		var g = [].slice.call(document.querySelectorAll('#svg-graphe .gn')).filter(function (x) { return x.dataset.cls === iri; })[0];
 		if (g) g.focus();
 	}
-	function selectionneConcept(iri) { E.sel = { t: 'classe', iri: iri }; selSous = null; rend(); annonce(descNoeud(cl(iri))); }
+	// Ce qui est choisi (concept ou propriété) : on le choisit, ou on le désélectionne s'il l'était déjà
+	function estChoisi(t, iri) { return !!(E.sel && E.sel.t === t && E.sel.iri === iri); }
+	function deselectionne() { E.sel = null; selSous = null; rend(); annonce('Sélection retirée.'); }
+	function selectionneConcept(iri) {
+		if (estChoisi('classe', iri) && !selSous) { deselectionne(); return; }
+		E.sel = { t: 'classe', iri: iri }; selSous = null; rend(); annonce(descNoeud(cl(iri)));
+	}
 	function demarreLien(iri, kind) {
 		var o = centreConcept(iri);
 		lien = { de: iri, kind: kind, x: o.x, y: o.y, cible: null, clavier: true };
@@ -818,15 +833,17 @@
 		}
 		var hd = e.target.closest('.hd'), at = e.target.closest('[data-attr]'), gn = e.target.closest('.gn'), ge = e.target.closest('.ge'), p = pt(e), now = Date.now();
 		if (hd) { e.preventDefault(); lien = { de: hd.dataset.cls, kind: hd.dataset.kind, x: p.x, y: p.y, cible: null }; suit(); return; }
-		if (at) { E.sel = { t: 'prop', iri: at.dataset.attr }; rend(); return; }
+		if (at) { if (estChoisi('prop', at.dataset.attr)) deselectionne(); else { E.sel = { t: 'prop', iri: at.dataset.attr }; rend(); } return; }
 		if (gn) {
 			var iri = gn.dataset.cls, dbl = dernier.k === iri && now - dernier.t < 400;
 			dernier = { t: now, k: iri };
+			var etaitSel = estChoisi('classe', iri) && !selSous;
 			E.sel = { t: 'classe', iri: iri }; selSous = null; rend();
 			if (dbl) { focusLabel(); return; }
-			drag = { iri: iri, dx: p.x - E.pos[iri].x, dy: p.y - E.pos[iri].y }; suit(); return;
+			drag = { iri: iri, dx: p.x - E.pos[iri].x, dy: p.y - E.pos[iri].y, x0: p.x, y0: p.y, moved: false, etaitSel: etaitSel }; suit(); return;
 		}
 		if (ge) {
+			if (ge.dataset.edge === 'prop' && estChoisi('prop', ge.dataset.iri)) { deselectionne(); return; }
 			if (ge.dataset.edge === 'sub') { E.sel = { t: 'classe', iri: ge.dataset.iri }; selSous = { iri: ge.dataset.iri, parent: ge.dataset.parent }; }
 			else { E.sel = { t: 'prop', iri: ge.dataset.iri }; selSous = null; }
 			rend(); return;
@@ -909,16 +926,20 @@
 		$('#c-inst').textContent = total;
 		var selIri = E.sel && E.sel.t === 'classe' ? E.sel.iri : null;
 		if (selIri && selIri !== dernierSel) { ouverts[selIri] = true; dernierSel = selIri; }   // choisir un concept ouvre sa liste
-		var h = '<div class="ligne" style="margin-top:0"><button type="button" class="btn secondaire petit" data-ab="nouvelle">＋ Nouvelle instance</button></div>';
+		var h = '<div class="ligne" style="margin-top:0"><button type="button" class="btn secondaire petit" data-ab="nouvelle">＋ Nouvelle instance</button>' +
+			'<label class="filtre-anon" title="Ne montrer que les instances sans IRI (comme les rôles)"><input type="checkbox" id="filtre-anon"' + (seulAnon ? ' checked' : '') + '> nœuds anonymes seulement</label></div>';
 		h += rendBrouillonInstances();
 		h += '<p class="astuce">Les individus de votre copie, par concept. Sélectionnez un concept dans le graphe pour voir les siens.' + (I.tronque ? ' <strong>Liste tronquée.</strong>' : '') + '</p>';
 		if (!I.classes.length) h += '<p class="astuce">Aucune instance : ajoutez-en une, ou peuplez l\'instance avec l\'IA (onglet voisin).</p>';
 		classesAffichees().forEach(function (c) {
-			var ouvert = !!ouverts[c.iri], attente = c.attente || [], nAttente = attente.length;
-			var nIA = c.items.filter(function (it) { return it.iri && iaIris[it.iri]; }).length;
+			var items = seulAnon ? c.items.filter(function (it) { return !it.iri; }) : c.items;
+			if (seulAnon && !items.length) return;   // filtre : seuls les concepts qui ont des nœuds anonymes
+			var ouvert = !!ouverts[c.iri] || (seulAnon && c.iri === selIri), attente = seulAnon ? [] : (c.attente || []), nAttente = attente.length;
+			var nIA = c.items.filter(function (it) { return provenance(it) === 'ia'; }).length, nAnon = c.items.filter(function (it) { return !it.iri; }).length;
 			h += '<div class="inst-classe' + (c.iri === selIri ? ' sel' : '') + '"><button type="button" class="lien-mini inst-tete" data-ic="' + echappe(c.iri) + '" aria-expanded="' + ouvert + '" style="display:flex;width:100%;justify-content:space-between;font-weight:600;padding:5px 2px">' +
-				'<span>' + (ouvert ? '▾ ' : '▸ ') + echappe(c.nom) + (nIA ? ' <span class="badge ia">' + nIA + ' IA</span>' : '') + '</span><span>' + c.n + (nAttente ? ' <span class="badge new" title="à enregistrer">+' + nAttente + '</span>' : '') + '</span></button>';
+				'<span>' + (ouvert ? '▾ ' : '▸ ') + echappe(c.nom) + (nIA ? ' <span class="badge ia">' + nIA + ' IA</span>' : '') + (nAnon ? ' <span class="badge" title="nœuds anonymes (sans IRI)">∅ ' + nAnon + '</span>' : '') + '</span><span>' + c.n + (nAttente ? ' <span class="badge new" title="à enregistrer">+' + nAttente + '</span>' : '') + '</span></button>';
 			if (ouvert) {
+				h += rendRelations(c.iri);
 				attente.forEach(function (a) {   // instances du brouillon : en tête de leur concept
 					if (a.n) h += '<div class="inst nouveau-brouillon"><div class="tete"><strong>' + echappe(a.n.titre || a.n.local || 'sans titre') + '</strong><span class="badge new">à enregistrer</span>' + (a.n.anon ? '<span class="badge">anonyme</span>' : '') +
 						'<button type="button" class="lien-mini" data-ab="nouvelle-edite" data-id="' + a.i + '" title="Modifier">✎</button><button type="button" class="lien-mini" data-ab="nouvelle-annule" data-id="' + a.i + '" title="Retirer du brouillon">✕</button></div>' +
@@ -926,11 +947,12 @@
 					else h += '<div class="inst nouveau-ia"><div class="tete"><strong>' + echappe(a.p.titre) + '</strong><span class="badge ia">IA</span><span class="badge new">à enregistrer</span>' +
 						'<button type="button" class="lien-mini" data-ab="ia-retire" data-id="' + a.p.i + '" title="Retirer du brouillon">✕</button></div>' + (a.p.detail.length ? '<div class="vals">' + a.p.detail.map(echappe).join(' · ') + '</div>' : '') + '</div>';
 				});
-				c.items.forEach(function (it) {
+				items.forEach(function (it) {
 					var vals = it.props.map(function (p) { return echappe(p.p) + ' = ' + echappe(p.v) + (p.l ? '@' + echappe(p.l) : ''); }).join(' · ');
 					var cle = cleItem(it), supprime = D.supprimees[cle] !== undefined, modifie_ = D.modifiees[cle];
-					h += '<div class="inst' + (it.iri && iaIris[it.iri] ? ' nouveau-ia' : '') + (supprime ? ' supprimee' : '') + '"><div class="tete"><strong title="' + echappe(it.iri || it.nom) + '">' + echappe(it.titre || it.nom) + '</strong>' +
-						(it.iri && iaIris[it.iri] ? '<span class="badge ia">IA</span>' : '') + (supprime ? '<span class="badge del">supprimée</span>' : modifie_ ? '<span class="badge mod">modifiée</span>' : '') +
+					var prov = provenance(it);
+					h += '<div class="inst' + (prov === 'ia' ? ' nouveau-ia' : '') + (supprime ? ' supprimee' : '') + '"><div class="tete"><strong title="' + echappe(it.iri || it.nom) + '">' + echappe(it.titre || it.nom) + '</strong>' +
+						(prov === 'ia' ? '<span class="badge ia" title="Créée par l\'IA">IA</span>' : prov === 'manuel' ? '<span class="badge" title="Saisie à la main dans l\'éditeur">manuel</span>' : '') + (supprime ? '<span class="badge del">supprimée</span>' : modifie_ ? '<span class="badge mod">modifiée</span>' : '') +
 						(!supprime ? '<button type="button" class="lien-mini" data-ab="edite" data-id="' + echappe(cle) + '" title="Modifier ou supprimer cette instance">✎</button>'
 							: '<button type="button" class="lien-mini" data-ab="annule-sup" data-id="' + echappe(cle) + '">annuler</button>') + '</div>' +
 						(it.titre ? '<div class="vals">' + echappe(it.nom) + '</div>' : '') + (vals ? '<div class="vals">' + vals + '</div>' : '') +
@@ -941,6 +963,18 @@
 			h += '</div>';
 		});
 		zone.innerHTML = h;
+	}
+	// D'où vient une instance : « ia », « manuel » (créée dans l'éditeur, gardée par le serveur) ou '' (données d'origine)
+	function provenance(it) { return it.src || (it.iri && iaIris[it.iri] ? 'ia' : ''); }
+	// Relations (propriétés de concept à concept) du concept : celles qui en partent et celles qui y arrivent
+	function rendRelations(iri) {
+		var sortantes = E.props.filter(function (p) { return !p.supprime && p.domain === iri && p.range && !litteral(p.range) && cl(p.range); });
+		var entrantes = E.props.filter(function (p) { return !p.supprime && p.range === iri && p.domain && cl(p.domain); });
+		if (!sortantes.length && !entrantes.length) return '';
+		var bouton = function (p) { return '<button type="button" class="lien-mini" data-t="prop" data-iri="' + echappe(p.iri) + '" title="' + echappe(p.nom) + '">' + echappe(affiche(p)) + '</button>'; };
+		return '<div class="inst-rel"><strong>Relations</strong>' +
+			sortantes.map(function (p) { return '<div>→ ' + bouton(p) + ' → ' + echappe(affiche(cl(p.range))) + '</div>'; }).join('') +
+			entrantes.map(function (p) { return '<div>← ' + echappe(affiche(cl(p.domain))) + ' · ' + bouton(p) + '</div>'; }).join('') + '</div>';
 	}
 	// Nom d'une propriété d'après son IRI (déclarée ou standard)
 	function nomValeur(v) { var p = pr(v.p); return p ? affiche(p) : (v.nom || nomDe(v.p)); }
@@ -1234,7 +1268,7 @@
 	//--------------------------------------------------------------------------
 	document.addEventListener('click', function (e) {
 		var n = e.target.closest('[data-t]');
-		if (n) { E.sel = { t: n.dataset.t, iri: n.dataset.iri }; rend(); return; }
+		if (n) { if (estChoisi(n.dataset.t, n.dataset.iri) && n.closest('#p-instances, .noeud')) deselectionne(); else { E.sel = { t: n.dataset.t, iri: n.dataset.iri }; rend(); } return; }
 		var o = e.target.closest('[data-onglet]');
 		if (o) { ouvreOnglet(o.dataset.onglet); return; }
 		var ic = e.target.closest('[data-ic]');
@@ -1246,6 +1280,7 @@
 			var act = ab.dataset.ab, ident = ab.dataset.id;
 			if (act === 'nouvelle') ouvreNouvelle();
 			else if (act === 'edite') ouvreEdition(ident);
+			else if (act === 'voir-anon') { seulAnon = true; ouverts[ident] = true; ouvreOnglet('instances'); rendInstances(); }
 			else if (act === 'nouvelle-edite') { var n = D.nouvelles[+ident]; F = { mode: 'nouvelle', idx: +ident, classe: n.classe, anon: !!n.anon, valeurs: JSON.parse(JSON.stringify(n.valeurs)), iriAuto: false, local: n.local }; rendInstances(); }
 			else if (act === 'nouvelle-annule') { D.nouvelles.splice(+ident, 1); rend(); }
 			else if (act === 'modif-annule') { delete D.modifiees[ident]; rend(); }
@@ -1302,6 +1337,7 @@
 		} else if (e.target.id === 'if-local') { F.local = e.target.value.trim(); F.iriAuto = false; }
 	});
 	document.addEventListener('change', function (e) {
+		if (e.target.id === 'filtre-anon') { seulAnon = e.target.checked; rendInstances(); return; }
 		if (!F) return;
 		if (e.target.id === 'if-classe') {
 			var garde = F.valeurs.filter(function (v) { return String(v.v).trim() !== ''; });
