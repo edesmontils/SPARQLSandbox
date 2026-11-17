@@ -550,3 +550,10 @@ a.btn { display: inline-block; text-decoration: none; }
 .if-ligne .if-p { font-size: .86em; color: var(--sb-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .if-ligne .champ { padding: 4px 8px; }
 
+/* Éditeur : clavier et lecteurs d'écran */
+.gn:focus { outline: none; }
+.gn:focus-visible .corps { stroke: var(--sb-accent-2); stroke-width: 4.5; filter: drop-shadow(0 0 5px var(--sb-accent-ring)); }
+.gn:focus-visible .nom { text-decoration: underline; }
+.relier { display: flex; gap: 6px; align-items: center; }
+.relier select { flex: 1; min-width: 0; }
+

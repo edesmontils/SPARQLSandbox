@@ -32,6 +32,13 @@
 			})
 			.catch(function () { return { ok: false, html: "<p class='statut ko'>❌ Le serveur ne répond pas.</p>" }; });
 	}
+	// Annonce pour les lecteurs d'écran (région vive), en plus du petit message à l'écran
+	function annonce(t) {
+		var a = document.getElementById('annonce');
+		if (!a) return;
+		a.textContent = '';
+		setTimeout(function () { a.textContent = t; }, 30);
+	}
 	function toast(t) {
 		var e = $('#toast'); e.textContent = t; e.classList.add('vu');
 		clearTimeout(toast.minuterie);
@@ -223,7 +230,7 @@
 			if (t === 'prop') poignees += poignee('domain', P0, P2, 'Glisser vers un autre concept : change le domaine') + poignee('range', P2, P0, 'Glisser vers un autre concept (ou le fond : attribut) : change la portée');
 			else poignees += poignee('parent', P2, P0, 'Glisser vers un autre concept : change la super-classe');
 		}
-		return '<g class="' + cls + '" data-edge="' + (t === 'sub' ? 'sub' : 'prop') + '" data-iri="' + echappe(x.iri) + '" data-parent="' + echappe(e.b) + '"><path class="hit" d="' + d + '"/>' +
+		return '<g class="' + cls + '" aria-hidden="true" data-edge="' + (t === 'sub' ? 'sub' : 'prop') + '" data-iri="' + echappe(x.iri) + '" data-parent="' + echappe(e.b) + '"><path class="hit" d="' + d + '"/>' +
 			'<path class="trait" d="' + d + '" marker-end="' + (t === 'sub' ? 'url(#tri)' : 'url(#fl)') + '"/>' +
 			(t === 'prop' ? '<text class="lbl" x="' + lx + '" y="' + (ly - 5) + '">' + echappe(court(affiche(x), 24)) + '</text>' : '') + '</g>';
 	}
@@ -244,20 +251,25 @@
 			L.forEach(function (e, i) { h += traceArete(e, N, (i - (L.length - 1) / 2) * 64 * (e.a < e.b ? 1 : -1)); });
 		});
 		var largeur = 700, hauteurVue = 380;
+		// un seul concept est une étape de tabulation (celui qui est choisi) ; les flèches du clavier font le reste
+		var rove = E.sel && E.sel.t === 'classe' && cl(E.sel.iri) ? E.sel.iri : (E.classes[0] ? E.classes[0].iri : null);
+		var actif = document.activeElement, focusIri = null;
+		if (actif && svg.contains(actif) && actif.closest && actif.closest('.gn')) focusIri = actif.closest('.gn').dataset.cls;
 		E.classes.forEach(function (c) {
 			var g = N[c.iri], st = statut(c, 'classe'), selC = E.sel && E.sel.t === 'classe' && E.sel.iri === c.iri;
 			largeur = Math.max(largeur, g.x + g.w + 90); hauteurVue = Math.max(hauteurVue, g.y + g.h + 40);
-			h += '<g class="gn' + (st ? ' st-' + st : '') + (selC ? ' sel' : '') + ((lien && lien.cible === c.iri) || (rat && rat.cible === c.iri) ? ' cible' : '') + '" data-cls="' + echappe(c.iri) + '" transform="translate(' + g.x + ',' + g.y + ')">' +
+			h += '<g class="gn' + (st ? ' st-' + st : '') + (selC ? ' sel' : '') + ((lien && lien.cible === c.iri) || (rat && rat.cible === c.iri) ? ' cible' : '') + '" data-cls="' + echappe(c.iri) + '" role="button" tabindex="' + (c.iri === rove ? 0 : -1) + '"' + (selC ? ' aria-current="true"' : '') +
+				' aria-label="' + echappe(descNoeud(c)) + '" transform="translate(' + g.x + ',' + g.y + ')">' +
 				'<rect class="corps" width="' + g.w + '" height="' + g.h + '" rx="10"><title>' + echappe(c.iri) + '</title></rect>' +
 				'<text class="nom" x="10" y="21">' + echappe(court(affiche(c), 20)) + '</text>' +
 				'<text class="cpt" x="' + (g.w - 10) + '" y="21" text-anchor="end">' + (c.n || '') + '</text>';
 			g.at.forEach(function (p, i) {
 				var s = E.sel && E.sel.t === 'prop' && E.sel.iri === p.iri;
-				h += '<text class="at' + (s ? ' sel' : '') + (statut(p, 'prop') === 'new' ? ' new' : '') + '" data-attr="' + echappe(p.iri) + '" x="10" y="' + (40 + i * 15) + '">• ' +
+				h += '<text class="at' + (s ? ' sel' : '') + (statut(p, 'prop') === 'new' ? ' new' : '') + '" data-attr="' + echappe(p.iri) + '" aria-hidden="true" x="10" y="' + (40 + i * 15) + '">• ' +
 					echappe(court(affiche(p), 12)) + ' : ' + echappe(court(nomCourt(p.range).replace('xsd:', ''), 10)) + '</text>';
 			});
-			h += '<g class="hd" data-cls="' + echappe(c.iri) + '" data-kind="prop" transform="translate(' + g.w + ',16)"><circle r="8"/><title>Glisser vers un concept : propriété ; vers le fond : attribut</title></g>' +
-				'<g class="hd" data-cls="' + echappe(c.iri) + '" data-kind="sub" transform="translate(' + (g.w / 2) + ',0)"><polygon points="-8,5 8,5 0,-8"/><title>Glisser vers un concept : « sous-classe de »</title></g></g>';
+			h += '<g class="hd" aria-hidden="true" data-cls="' + echappe(c.iri) + '" data-kind="prop" transform="translate(' + g.w + ',16)"><circle r="8"/><title>Glisser vers un concept : propriété ; vers le fond : attribut</title></g>' +
+				'<g class="hd" aria-hidden="true" data-cls="' + echappe(c.iri) + '" data-kind="sub" transform="translate(' + (g.w / 2) + ',0)"><polygon points="-8,5 8,5 0,-8"/><title>Glisser vers un concept : « sous-classe de »</title></g></g>';
 		});
 		h += poignees;
 		if (rat) h += '<line class="tmp" x1="' + rat.fx + '" y1="' + rat.fy + '" x2="' + rat.x + '" y2="' + rat.y + '"/>';
@@ -271,6 +283,19 @@
 		svg.setAttribute('viewBox', '0 0 ' + largeur + ' ' + hauteurVue);
 		svg.style.width = largeur + 'px';
 		svg.innerHTML = h;
+		if (focusIri) { // le dessin est refait à chaque changement : le focus du clavier revient sur son concept
+			var cible = [].slice.call(svg.querySelectorAll('.gn')).filter(function (g) { return g.dataset.cls === focusIri; })[0];
+			if (cible) cible.focus({ preventScroll: true });
+		}
+	}
+
+	// Phrase lue par un lecteur d'écran pour un concept du graphe
+	function descNoeud(c) {
+		var st = statut(c, 'classe'), at = attributs(c.iri).length;
+		var par = c.parents.map(function (p) { return cl(p) ? affiche(cl(p)) : nomCourt(p); });
+		var rel = E.props.filter(function (p) { return !p.supprime && p.range && !litteral(p.range) && (p.domain === c.iri || p.range === c.iri); }).length;
+		return 'Concept ' + affiche(c) + (st ? ', ' + { 'new': 'nouveau', mod: 'modifié', del: 'supprimé' }[st] : '') + ', ' + (c.n || 0) + ' instance' + (c.n > 1 ? 's' : '') +
+			(at ? ', ' + at + ' attribut' + (at > 1 ? 's' : '') : '') + (par.length ? ', sous-classe de ' + par.join(', ') : '') + (rel ? ', ' + rel + ' relation' + (rel > 1 ? 's' : '') : '');
 	}
 
 	//--------------------------------------------------------------------------
@@ -335,6 +360,9 @@
 					E.classes.filter(function (c) { return !c.supprime && c.iri !== x.iri && x.parents.indexOf(c.iri) < 0 && ancetres(c.iri).indexOf(x.iri) < 0; }).map(function (c) {
 						return '<option value="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</option>';
 					}).join('') + '</select>') + '</div>';
+			h += '<label for="f-relier-cible">Relier à</label><div class="relier"><select id="f-relier-cible"' + off + ' aria-label="Concept visé par la nouvelle propriété"><option value="">— une valeur (attribut) —</option>' +
+				E.classes.filter(function (c) { return !c.supprime; }).map(function (c) { return '<option value="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</option>'; }).join('') +
+				'</select><button type="button" class="btn secondaire petit" id="f-relier"' + off + '>＋ Propriété</button></div>';
 			h += '<label for="f-comment">Commentaire</label><textarea id="f-comment" rows="3" maxlength="1000"' + off + '>' + echappe(x.comment) + '</textarea>';
 		} else {
 			h += '<label for="f-domain">Domaine (sujet)</label><select id="f-domain"' + off + '>' + options(x.domain, true, true, false) + '</select>';
@@ -347,8 +375,8 @@
 			var fils = E.classes.filter(function (c) { return c.parents.indexOf(x.iri) >= 0 && !c.supprime; });
 			var ps = E.props.filter(function (p) { return !p.supprime && (p.domain === x.iri || p.range === x.iri); });
 			if (x.n) imp.push(x.n + ' instance(s) de ce concept (elles ne sont pas supprimées avec lui)');
-			if (fils.length) imp.push(fils.length + ' sous-classe(s) : ' + fils.map(function (c) { return echappe(affiche(c)); }).join(', '));
-			if (ps.length) imp.push(ps.length + ' propriété(s) l\'utilisent : ' + ps.map(function (p) { return echappe(affiche(p)); }).join(', '));
+			if (fils.length) imp.push(fils.length + ' sous-classe(s) : ' + fils.map(function (c) { return '<button type="button" class="lien-mini" data-t="classe" data-iri="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</button>'; }).join(', '));
+			if (ps.length) imp.push(ps.length + ' propriété(s) l\'utilisent : ' + ps.map(function (p) { return '<button type="button" class="lien-mini" data-t="prop" data-iri="' + echappe(p.iri) + '">' + echappe(affiche(p)) + '</button>'; }).join(', '));
 		} else imp.push('Les valeurs déjà présentes dans votre copie ne sont pas modifiées.');
 		h += '<div class="impact"><strong>Impact</strong>' + (imp.length ? '<ul><li>' + imp.join('</li><li>') + '</li></ul>' : ' : aucun usage.') + '</div>';
 		h += '<div class="actions-fiche">' + (x.supprime
@@ -379,6 +407,10 @@
 		champ('#f-comment', function (v) { x.comment = v; if (x.comment && !x.clang && !x.orig.comment) x.clang = 'fr'; });
 		champ('#f-domain', function (v) { x.domain = v; });
 		champ('#f-range', function (v) { x.range = v; });
+		var rl = $('#f-relier'); if (rl) rl.addEventListener('click', function () {
+			var cible = $('#f-relier-cible').value;
+			if (cible) liaison('prop', x.iri, cible); else liaison('attr', x.iri);
+		});
 		var b = $('#supprime'); if (b) b.addEventListener('click', function () { supprime(x, t); });
 		b = $('#restaure'); if (b) b.addEventListener('click', function () { restaure(x, t); });
 	}
@@ -396,6 +428,8 @@
 		$('#zone-liste').hidden = vue !== 'liste';
 		$('#v-graphe').classList.toggle('actif', vue === 'graphe');
 		$('#v-liste').classList.toggle('actif', vue === 'liste');
+		$('#v-graphe').setAttribute('aria-pressed', vue === 'graphe' ? 'true' : 'false');
+		$('#v-liste').setAttribute('aria-pressed', vue === 'liste' ? 'true' : 'false');
 	}
 	function rendLeger() { rendListes(); rendGraphe(); rendEtat(); }
 	function rend() { rendListes(); rendFiche(); rendGraphe(); rendEtat(); rendVue(); rendInstances(); rendCible(); }
@@ -535,17 +569,26 @@
 		var l = lien; lien = null;
 		var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'), dansSvg = el && el.closest && el.closest('#svg-graphe');
 		if (l.kind === 'prop') {
-			if (n) creeProp(l.de, n.dataset.cls, 'nouvelle relation');
-			else if (dansSvg) creeProp(l.de, XSD + 'string', 'nouvel attribut');
+			if (n) liaison('prop', l.de, n.dataset.cls);
+			else if (dansSvg) liaison('attr', l.de);
 			else rendGraphe();
 			return;
 		}
-		if (!n || n.dataset.cls === l.de) { rendGraphe(); if (dansSvg) toast('Lâchez sur un autre concept pour créer « sous-classe de »'); return; }
-		if (ancetres(n.dataset.cls).indexOf(l.de) >= 0) { rendGraphe(); toast('⛔ Cycle : un concept ne peut pas descendre de son propre descendant'); return; }
-		var c = cl(l.de), cible = n.dataset.cls;
+		if (!n && dansSvg) toast('Lâchez sur un autre concept pour créer « sous-classe de »');
+		liaison('sub', l.de, n ? n.dataset.cls : null);
+	}
+	// Crée le lien voulu : relation entre deux concepts ('prop'), attribut ('attr') ou super-classe ('sub').
+	// Commun au glisser de la souris et au mode « relier » du clavier.
+	function liaison(kind, de, cible) {
+		if (kind === 'prop') { creeProp(de, cible, 'nouvelle relation'); annonce('Propriété créée de ' + affiche(cl(de)) + ' vers ' + affiche(cl(cible)) + ' : saisissez son libellé.'); return; }
+		if (kind === 'attr') { creeProp(de, XSD + 'string', 'nouvel attribut'); annonce('Attribut créé sur ' + affiche(cl(de)) + ' : saisissez son libellé.'); return; }
+		if (!cible || cible === de) { rendGraphe(); return; }
+		if (ancetres(cible).indexOf(de) >= 0) { rendGraphe(); toast('⛔ Cycle : un concept ne peut pas descendre de son propre descendant'); return; }
+		var c = cl(de);
 		if (c.parents.indexOf(cible) >= 0) { rendGraphe(); toast(affiche(c) + ' est déjà sous-classe de ' + affiche(cl(cible))); return; }
 		c.parents.push(cible); selSous = { iri: c.iri, parent: cible }; E.sel = { t: 'classe', iri: c.iri }; rend();
 		toast(affiche(c) + ' est maintenant sous-classe de ' + affiche(cl(cible)));
+		annonce(affiche(c) + ' est maintenant sous-classe de ' + affiche(cl(cible)));
 	}
 	// Fin d'un glissement de poignée : la flèche est accrochée au concept visé
 	function rattache(r, e) {
@@ -572,6 +615,65 @@
 	}
 	function suit() { document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); }
 
+	// Clavier dans le graphe : un concept à la fois (Tab y entre, les flèches changent de concept)
+	function centreConcept(iri) { var c = cl(iri), g = c && geo(c); return g ? { x: g.x + g.w / 2, y: g.y + g.h / 2 } : { x: 0, y: 0 }; }
+	// Concept le plus proche dans la direction de la flèche pressée
+	function voisinDans(iri, touche) {
+		var o = centreConcept(iri), meilleur = null, score = Infinity;
+		E.classes.forEach(function (c) {
+			if (c.iri === iri) return;
+			var q = centreConcept(c.iri), dx = q.x - o.x, dy = q.y - o.y, a, b;
+			if (touche === 'ArrowRight') { a = dx; b = dy; } else if (touche === 'ArrowLeft') { a = -dx; b = dy; }
+			else if (touche === 'ArrowDown') { a = dy; b = dx; } else { a = -dy; b = dx; }
+			if (a <= 1) return;
+			var sc = a + 2 * Math.abs(b);
+			if (sc < score) { score = sc; meilleur = c.iri; }
+		});
+		return meilleur;
+	}
+	function metFocus(iri) {
+		var g = [].slice.call(document.querySelectorAll('#svg-graphe .gn')).filter(function (x) { return x.dataset.cls === iri; })[0];
+		if (g) g.focus();
+	}
+	function selectionneConcept(iri) { E.sel = { t: 'classe', iri: iri }; selSous = null; rend(); annonce(descNoeud(cl(iri))); }
+	function demarreLien(iri, kind) {
+		var o = centreConcept(iri);
+		lien = { de: iri, kind: kind, x: o.x, y: o.y, cible: null, clavier: true };
+		rendGraphe();
+		annonce((kind === 'sub' ? 'Sous-classe de : ' : 'Relation depuis ' + affiche(cl(iri)) + ' : ') + 'choisissez le concept visé avec les flèches, Entrée pour valider, Échap pour annuler.');
+	}
+	var FLECHES = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1 };
+	$('#svg-graphe').addEventListener('keydown', function (e) {
+		var g = e.target.closest && e.target.closest('.gn');
+		if (!g || e.target !== g || e.ctrlKey || e.metaKey || e.altKey) return;
+		var iri = g.dataset.cls, c = cl(iri), k = e.key, fait = true;
+		if (!c) return;
+		if (lien && lien.clavier) {   // mode « relier » : les flèches choisissent la cible
+			if (k === 'Escape') { lien = null; rendGraphe(); annonce('Liaison annulée.'); }
+			else if (k === 'Enter' || k === ' ') { var l = lien; lien = null; if (l.kind === 'prop') liaison('prop', l.de, iri); else liaison('sub', l.de, iri); }
+			else if (FLECHES[k]) {
+				var v = voisinDans(iri, k);
+				if (v) { var o = centreConcept(v); lien.cible = v; lien.x = o.x; lien.y = o.y; metFocus(v); rendGraphe(); }
+			} else fait = false;
+		} else if (FLECHES[k]) {
+			if (e.shiftKey) {   // Maj + flèche : déplace le concept
+				var d = { ArrowUp: [0, -20], ArrowDown: [0, 20], ArrowLeft: [-20, 0], ArrowRight: [20, 0] }[k];
+				E.pos[iri] = { x: Math.max(0, E.pos[iri].x + d[0]), y: Math.max(0, E.pos[iri].y + d[1]) };
+				rendGraphe();
+			} else { var w = voisinDans(iri, k); if (w) metFocus(w); }
+		}
+		else if (k === 'Enter' || k === ' ') selectionneConcept(iri);
+		else if (k === 'F2') { selectionneConcept(iri); focusLabel(); }
+		else if (k === 'Delete' || k === 'Backspace') { selectionneConcept(iri); var b = $('#supprime'); if (b) b.click(); }
+		else if (k === 'r' || k === 'R') demarreLien(iri, 'prop');
+		else if (k === 's' || k === 'S') demarreLien(iri, 'sub');
+		else if (k === 'a' || k === 'A') liaison('attr', iri);
+		else fait = false;
+		if (fait) { e.preventDefault(); e.stopPropagation(); }
+	});
+	$('#svg-graphe').addEventListener('focusout', function (e) {   // quitter le graphe annule une liaison commencée au clavier
+		if (lien && lien.clavier && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#svg-graphe'))) { lien = null; rendGraphe(); }
+	});
 	$('#svg-graphe').addEventListener('pointerdown', function (e) {
 		if (e.button) return;
 		var he = e.target.closest('.he');
@@ -782,7 +884,7 @@
 		rend();
 	}
 	function ouvreOnglet(o) {
-		document.querySelectorAll('.onglets button').forEach(function (b) { b.classList.toggle('actif', b.dataset.onglet === o); });
+		document.querySelectorAll('.onglets button').forEach(function (b) { b.classList.toggle('actif', b.dataset.onglet === o); b.setAttribute('aria-selected', b.dataset.onglet === o ? 'true' : 'false'); });
 		['instances', 'ia'].forEach(function (k) { $('#p-' + k).hidden = k !== o; });
 		if (o === 'ia') rendCible();
 	}

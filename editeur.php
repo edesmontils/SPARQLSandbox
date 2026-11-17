@@ -76,8 +76,9 @@ header('Cache-Control: no-store');
 
       <section class="vol" id="zone-graphe">
         <h2>🕸️ Graphe de l'ontologie <button type="button" class="btn secondaire petit" id="reorg" title="Recalcule la disposition des concepts">↺ Réorganiser</button></h2>
-        <div class="zone-svg"><svg id="svg-graphe" class="graphe-svg" viewBox="0 0 700 380" role="img" aria-label="Graphe éditable de l'ontologie"></svg></div>
-        <div class="aide-graphe">
+        <div class="zone-svg"><svg id="svg-graphe" class="graphe-svg" viewBox="0 0 700 380" role="group" aria-label="Graphe éditable de l'ontologie : un bouton par concept" aria-describedby="aide-clavier"></svg></div>
+        <div class="aide-graphe" id="aide-clavier">
+          <span><strong>Clavier</strong> : <kbd>Tab</kbd> entre dans le graphe, <kbd>←↑↓→</kbd> changent de concept, <kbd>Entrée</kbd> le choisit, <kbd>F2</kbd> le renomme, <kbd>R</kbd> relation, <kbd>S</kbd> sous-classe, <kbd>A</kbd> attribut (puis flèches et <kbd>Entrée</kbd> pour viser, <kbd>Échap</kbd> pour annuler), <kbd>Maj</kbd>+flèches le déplacent, <kbd>Suppr</kbd> le supprime. La vue liste et la fiche font tout cela sans graphe.</span>
           <span><kbd>double-clic</kbd> sur le fond : nouveau concept</span>
           <span><kbd>●</kbd> glisser vers un concept : propriété entre concepts ; vers le fond : attribut</span>
           <span><kbd>▲</kbd> glisser vers un concept : « sous-classe de »</span>
@@ -97,8 +98,8 @@ header('Cache-Control: no-store');
 
     <aside class="vol ed-droite">
       <div class="onglets" role="tablist">
-        <button type="button" role="tab" data-onglet="instances" class="actif">🗃️ Instance <span class="compte" id="c-inst">…</span></button>
-        <button type="button" role="tab" data-onglet="ia">✨ Peupler avec l'IA</button>
+        <button type="button" role="tab" aria-selected="true" data-onglet="instances" class="actif">🗃️ Instance <span class="compte" id="c-inst">…</span></button>
+        <button type="button" role="tab" aria-selected="false" data-onglet="ia">✨ Peupler avec l'IA</button>
       </div>
 
       <div class="panneau" id="p-instances" role="tabpanel"><p class="astuce">Chargement…</p></div>
@@ -138,5 +139,6 @@ header('Cache-Control: no-store');
   </div>
 </dialog>
 <div class="toast" id="toast" role="status"></div>
+<div id="annonce" class="visuellement-cache" role="status" aria-live="polite"></div>
 </body>
 </html>
