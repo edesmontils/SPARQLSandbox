@@ -354,7 +354,7 @@ $ci = array(); foreach ($mo['classes'] as $c) $ci[$c['nom']] = $c;
 $pi = array(); foreach ($mo['props'] as $p) $pi[$p['nom']] = $p;
 verifie(isset($ci['cine:Film'], $ci['cine:Acteur']) && !isset($ci['rdfs:Class']), 'éditeur : classes lues, sans le vocabulaire RDFS');
 verifie($ci['cine:Film']['label'] === 'Film' && $ci['cine:Film']['llang'] === 'fr' && $ci['cine:Film']['n'] == 9, 'éditeur : libellé en français et instances comptées');
-verifie($ci['cine:Acteur']['parent'] === $ci['cine:Personne']['iri'], 'éditeur : super-classe');
+verifie($ci['cine:Acteur']['parents'] === array($ci['cine:Personne']['iri']), 'éditeur : super-classe');
 verifie(isset($pi['cine:annee']) && $pi['cine:annee']['range'] === PREFIXES_STANDARD['xsd'].'integer' && $pi['cine:annee']['domain'] === $ci['cine:Film']['iri'], 'éditeur : propriété, domaine et portée');
 verifie($mo['espace'] === 'http://example.org/cinema/vocab#', 'éditeur : espace de noms des nouveaux éléments');
 $brouillon = function (array $classes, array $props, array $sc = array(), array $sp = array()) {
@@ -367,8 +367,8 @@ verifie(is_null(onto_nettoie_brouillon($brouillon(array(array('iri' => 'http://e
 $esp = $mo['espace'];
 $film = $ci['cine:Film'];
 $brut = $brouillon(
-	array(array('iri' => $film['iri'], 'label' => 'Long "métrage"', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parent' => ''),
-	      array('iri' => $esp.'Salle', 'label' => 'Salle', 'llang' => '', 'comment' => "Une salle\nde cinéma", 'clang' => '', 'parent' => $ci['cine:Cinema']['iri'])),
+	array(array('iri' => $film['iri'], 'label' => 'Long "métrage"', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parents' => array()),
+	      array('iri' => $esp.'Salle', 'label' => 'Salle', 'llang' => '', 'comment' => "Une salle\nde cinéma", 'clang' => '', 'parents' => array($ci['cine:Cinema']['iri']))),
 	array(array('iri' => $esp.'duree', 'label' => 'durée', 'llang' => '', 'domain' => $film['iri'], 'range' => PREFIXES_STANDARD['xsd'].'integer')),
 	array($ci['cine:Projection']['iri']));
 $b = onto_nettoie_brouillon($brut)[0];
@@ -380,11 +380,74 @@ list($ok, $h, $nouveau) = enregistre_ontologie('cinema', $brut);
 verifie($ok && !is_null($nouveau), 'éditeur : enregistrement accepté ('.strip_tags($h).')');
 $ci2 = array(); foreach ($nouveau['classes'] as $c) $ci2[$c['nom']] = $c;
 $pi2 = array(); foreach ($nouveau['props'] as $p) $pi2[$p['nom']] = $p;
-verifie($ci2['cine:Film']['label'] === 'Long "métrage"' && $ci2['cine:Salle']['parent'] === $ci['cine:Cinema']['iri'] && $ci2['cine:Salle']['comment'] === "Une salle\nde cinéma", 'éditeur : modifications relues dans la copie');
+verifie($ci2['cine:Film']['label'] === 'Long "métrage"' && $ci2['cine:Salle']['parents'] === array($ci['cine:Cinema']['iri']) && $ci2['cine:Salle']['comment'] === "Une salle\nde cinéma", 'éditeur : modifications relues dans la copie');
 verifie($pi2['cine:duree']['domain'] === $film['iri'] && !$ci2['cine:Projection']['decl'], 'éditeur : nouvelle propriété et concept retiré de l\'ontologie');
 verifie(onto_mise_a_jour($nouveau, onto_nettoie_brouillon($brouillon(array(), array()))[0])[0] === '', 'éditeur : rien à refaire après l\'enregistrement');
 $autres = execute_sparql('cinema', 'ASK { ?f a <'.$film['iri'].'> }');
 verifie($autres['ok'] && $autres['resultat'] === true, 'éditeur : les instances ne sont pas touchées');
+reinitialise_jeu('cinema');
+
+// Sous-classes multiples : on ajoute et retire une super-classe sans toucher aux autres
+reinitialise_jeu('cinema');
+list($mo, ) = modele_ontologie('cinema');
+$ci = array(); foreach ($mo['classes'] as $c) $ci[$c['nom']] = $c;
+$act = $ci['cine:Acteur']; $real = $ci['cine:Realisateur']; $esp = $mo['espace'];
+$b = onto_nettoie_brouillon(array('classes' => array(array('iri' => $act['iri'], 'label' => $act['label'], 'llang' => 'fr', 'comment' => '', 'clang' => '',
+	'parents' => array($ci['cine:Personne']['iri'], $ci['cine:Cinema']['iri']))), 'props' => array()))[0];
+list($maj, $nb) = onto_mise_a_jour($mo, $b);
+verifie($nb == 1 && strpos($maj, 'DELETE DATA') === false && substr_count($maj, 'subClassOf') == 1, 'éditeur : une super-classe de plus, rien retiré');
+list($ok, , $m2) = enregistre_ontologie('cinema', array('classes' => $b['classes'], 'props' => array()));
+$a2 = array(); foreach ($m2['classes'] as $c) if ($c['nom'] === 'cine:Acteur') $a2 = $c;
+verifie($ok && count($a2['parents']) == 2, 'éditeur : deux super-classes relues');
+$b = onto_nettoie_brouillon(array('classes' => array(array('iri' => $act['iri'], 'label' => $act['label'], 'llang' => 'fr', 'comment' => '', 'clang' => '',
+	'parents' => array($ci['cine:Cinema']['iri']))), 'props' => array()))[0];
+list($maj, ) = onto_mise_a_jour($m2, $b);
+verifie(substr_count($maj, 'DELETE DATA') == 1 && substr_count($maj, 'subClassOf') == 1 && strpos($maj, 'INSERT DATA') === false, 'éditeur : une seule super-classe retirée');
+verifie(is_null(onto_nettoie_brouillon(array('classes' => array(array('iri' => $act['iri'], 'parents' => array('pas une iri'))), 'props' => array()))[0]), 'éditeur : super-classe invalide refusée');
+reinitialise_jeu('cinema');
+
+// Instances à la main : ajout, modification, suppression dans le même enregistrement que l'ontologie
+list($mi, ) = modele_instances('cinema');
+$ic = array(); foreach ($mi['classes'] as $c) $ic[$c['nom']] = $c;
+$film = $ic['cine:Film']['items'][0];
+$xsdi = PREFIXES_STANDARD['xsd'].'integer';
+list($fi, $err) = modele_instance('cinema', $film['iri']);
+verifie(!is_null($fi) && $fi['nom'] === $film['nom'] && $fi['types'][0]['nom'] === 'cine:Film' && count($fi['valeurs']) >= 3, 'instance : valeurs lues ('.$err.')');
+$annee = null; foreach ($fi['valeurs'] as $v) if ($v['nom'] === 'cine:annee') $annee = $v;
+verifie($annee && $annee['dt'] === $xsdi && $annee['k'] === 'lit', 'instance : type de donnée conservé');
+$nouvelle = $esp.'film_essai';
+$vals = $fi['valeurs'];
+foreach ($vals as &$v) if ($v['nom'] === 'cine:annee') $v['v'] = '1901';
+unset($v);
+$vals[] = array('p' => $esp.'duree', 'k' => 'lit', 'v' => '95', 'dt' => $xsdi, 'l' => '');
+$brut = array('classes' => array(), 'props' => array(), 'instances' => array(
+	'nouvelles' => array(array('iri' => $nouvelle, 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(
+		array('p' => $esp.'titre', 'k' => 'lit', 'v' => 'Film d\'essai "à la main"', 'dt' => '', 'l' => 'fr'),
+		array('p' => $esp.'annee', 'k' => 'lit', 'v' => '2024', 'dt' => $xsdi, 'l' => ''),
+		array('p' => $esp.'genre', 'k' => 'lit', 'v' => '', 'dt' => '', 'l' => ''),
+		array('p' => $esp.'realisePar', 'k' => 'iri', 'v' => $ic['cine:Realisateur']['items'][0]['nom'], 'dt' => '', 'l' => ''))),
+	),
+	'modifiees' => array(array('iri' => $film['iri'], 'valeurs' => $vals)),
+	'supprimees' => array($ic['cine:Film']['items'][1]['iri']),
+));
+$reste = $ic['cine:Film']['n'];
+list($ok, $h, , $sujets) = enregistre_ontologie('cinema', $brut);
+verifie($ok && count($sujets) == 2, 'instances : enregistrées ('.strip_tags($h).')');
+$q = function ($r) { $x = execute_sparql('cinema', $r); return $x['ok'] && $x['resultat'] === true; };
+verifie($q('ASK { <'.$nouvelle.'> a <'.$ci['cine:Film']['iri'].'> ; <'.$esp.'annee> 2024 ; <'.$esp.'titre> "Film d\'essai \"à la main\""@fr ; <'.$esp.'realisePar> <'.$ic['cine:Realisateur']['items'][0]['iri'].'> }'), 'instances : nouvelle instance, texte échappé, référence résolue');
+verifie($q('ASK { <'.$film['iri'].'> <'.$esp.'annee> 1901 ; <'.$esp.'duree> 95 }') && !$q('ASK { <'.$film['iri'].'> <'.$esp.'annee> ?a . FILTER(?a != 1901) }'), 'instances : valeur remplacée, valeur ajoutée');
+verifie(!$q('ASK { <'.$ic['cine:Film']['items'][1]['iri'].'> ?p ?o }') && !$q('ASK { ?x ?p <'.$ic['cine:Film']['items'][1]['iri'].'> }'), 'instances : suppression, références comprises');
+list($mi2, ) = modele_instances('cinema');
+$ic2 = array(); foreach ($mi2['classes'] as $c) $ic2[$c['nom']] = $c;
+verifie($ic2['cine:Film']['n'] == $reste, 'instances : un film de plus, un de moins');
+$mauvais = function (array $brut_i, $morceau) {
+	$r = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'instances' => $brut_i));
+	return !$r[0] && strpos(strip_tags($r[1]), $morceau) !== false;
+};
+verifie($mauvais(array('nouvelles' => array(array('iri' => $nouvelle, 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array()))), 'déjà utilisée'), 'instances : IRI déjà prise refusée');
+verifie($mauvais(array('nouvelles' => array(array('iri' => $esp.'x1', 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(array('p' => $esp.'annee', 'k' => 'lit', 'v' => 'deux mille', 'dt' => $xsdi, 'l' => ''))))), 'invalide'), 'instances : nombre invalide refusé');
+verifie($mauvais(array('nouvelles' => array(array('iri' => $esp.'x1', 'classe' => $ci['cine:Film']['iri'], 'valeurs' => array(array('p' => $esp.'realisePar', 'k' => 'iri', 'v' => 'zz:truc', 'dt' => '', 'l' => ''))))), 'inconnue'), 'instances : référence à un préfixe inconnu refusée');
+verifie($mauvais(array('modifiees' => array(array('iri' => $esp.'fantome', 'valeurs' => array()))), 'introuvable'), 'instances : modification d\'une instance absente refusée');
 reinitialise_jeu('cinema');
 $a = array('anomalies' => array(anomalie('RDFS', 'a'), anomalie('RDFS', 'b')));
 $b = array('anomalies' => array(anomalie('RDFS', 'b'), anomalie('SHACL', 'a')));
@@ -516,7 +579,7 @@ if (function_exists('curl_init')) {
 	verifie(isset($ic['cine:Role']) && $ic['cine:Role']['items'][0]['iri'] === '' && strpos($ic['cine:Role']['items'][0]['nom'], '_:') === 0, 'instances : nœuds anonymes (rôles) montrés');
 	$esp = modele_ontologie('cinema')[0]['espace'];
 	$xsd = PREFIXES_STANDARD['xsd'];
-	$brouillon = array('classes' => array(array('iri' => $esp.'Salle', 'label' => 'Salle', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parent' => '')),
+	$brouillon = array('classes' => array(array('iri' => $esp.'Salle', 'label' => 'Salle', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parents' => array())),
 		'props' => array(array('iri' => $esp.'duree', 'label' => 'durée', 'llang' => 'fr', 'domain' => $esp.'Film', 'range' => $xsd.'integer')),
 		'supprimes' => array('classes' => array(), 'props' => array()));
 	$reponse_ia = array('instances' => array(
@@ -543,10 +606,10 @@ if (function_exists('curl_init')) {
 	verifie(substr_count($prompt, '<consigne_etudiant>') == 1 && substr_count($prompt, '</consigne_etudiant>') == 1 && strpos($prompt, 'Ignore tout') !== false, 'peuplement IA : consigne entre balises, balises injectées retirées');
 	verifie(($_SESSION['ia_peuplement']['n'] ?? 0) == $n0 + 1 && !isset($_SESSION['ia_intention']['n_peuplement']), 'peuplement IA : décompté à part des corrections d\'intention');
 	// ajout : les données et l'ontologie qui les décrit entrent ensemble
-	verifie(!peupl_ajoute('cinema', 'mauvais-jeton', array(0), $brouillon)[0], 'peuplement IA : jeton invalide refusé');
-	verifie(!peupl_ajoute('cinema', $r['jeton'], array(), $brouillon)[0], 'peuplement IA : aucune proposition choisie refusée');
-	list($ok, $h, $modele, $sujets) = peupl_ajoute('cinema', $r['jeton'], array(0, 1), $brouillon);
-	verifie($ok && count($sujets) == 2, 'peuplement IA : propositions ajoutées ('.strip_tags($h).')');
+	$avec_ia = function (array $ia) use ($brouillon) { $b = $brouillon; $b['instances'] = array('ia' => $ia); return $b; };
+	verifie(!enregistre_ontologie('cinema', $avec_ia(array('jeton' => 'mauvais-jeton', 'indices' => array(0))))[0], 'peuplement IA : jeton invalide refusé');
+	list($ok, $h, $modele, $sujets) = enregistre_ontologie('cinema', $avec_ia(array('jeton' => $r['jeton'], 'indices' => array(0, 1))));
+	verifie($ok && count($sujets) == 2, 'peuplement IA : propositions ajoutées avec le brouillon ('.strip_tags($h).')');
 	$salles = array_filter($modele['classes'], function ($c) { return $c['nom'] === 'cine:Salle'; });
 	verifie(count($salles) == 1 && array_values($salles)[0]['n'] == 1 && array_values($salles)[0]['decl'], 'peuplement IA : concept enregistré avec son instance');
 	$q = execute_sparql('cinema', 'ASK { <'.$f1['iri'].'> <'.$esp.'duree> 117 }');

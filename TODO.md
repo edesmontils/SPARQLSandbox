@@ -22,12 +22,12 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
 - **Export** d'un résultat (CSV, Turtle) et de la copie de session (Turtle).
-- **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `ontologie.php`, `peuplement.php`) :
-  graphe et liste éditables, brouillon enregistré dans la copie par une mise à jour SPARQL, instances
-  affichées par concept, peuplement par IA (général ou ciblé sur les modifications, propositions
-  relues avant ajout). Reste : le bouton de contrôle de cohérence ontologie/instance dans l'éditeur,
-  ré-accrocher l'extrémité d'une flèche, les sous-classes multiples, modifier ou supprimer une
-  instance à la main, et des formes SHACL générées avec l'ontologie.
+- **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `js/disposition.js`, `ontologie.php`,
+  `peuplement.php`) : graphe et liste éditables (sous-classes multiples, flèches ré-accrochables par
+  leurs extrémités), instances affichées, créées, modifiées et supprimées à la main, peuplement par IA
+  (général ou ciblé) ; tout est un brouillon enregistré d'un coup dans la copie. Reste : le bouton de
+  contrôle de cohérence ontologie/instance dans l'éditeur, les nœuds anonymes (rôles) non modifiables
+  à la main, le changement de concept d'une instance, et des formes SHACL générées avec l'ontologie.
 - **Diagramme du vocabulaire** (fait) : pistes d'amélioration : éviter tout croisement de liens
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.

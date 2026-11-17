@@ -42,7 +42,7 @@
 	// État : le brouillon
 	//--------------------------------------------------------------------------
 	var E = { classes: [], props: [], types: [], espace: '', prefixe: '', sel: null, pos: {}, routes: {} };
-	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null;
+	var I = null, ouverts = {}, dernierSel = null, iaIris = {}, propositions = null, selSous = null, rat = null, poignees = '';
 	var vue = 'graphe', lien = null, drag = null, dernier = { t: 0, k: '' }, quitte = false, enCours = false;
 
 	function cl(iri) { return E.classes.filter(function (c) { return c.iri === iri; })[0]; }
@@ -60,26 +60,37 @@
 		return iri.replace(/^.*[#\/]/, '');
 	}
 	function affiche(x) { return x.label || x.nom; }
+	function memeListe(a, b) { return a.slice().sort().join(' ') === b.slice().sort().join(' '); }
 	function modifie(x, t) {
 		var o = x.orig;
 		if (x.label !== o.label) return true;
-		return t === 'classe' ? (x.comment !== o.comment || x.parent !== o.parent) : (x.domain !== o.domain || x.range !== o.range);
+		return t === 'classe' ? (x.comment !== o.comment || memeListe(x.parents, o.parents) === false) : (x.domain !== o.domain || x.range !== o.range);
 	}
+	// Super-classe sélectionnée (flèche « sous-classe de » choisie) pour le concept x
+	function parentSel(x) { return selSous && E.sel && E.sel.t === 'classe' && E.sel.iri === x.iri && selSous.iri === x.iri ? selSous.parent : null; }
 	function statut(x, t) { return x.supprime ? 'del' : x.nouveau ? 'new' : modifie(x, t) ? 'mod' : ''; }
 	function nbModifs() {
-		return E.classes.filter(function (c) { return statut(c, 'classe'); }).length + E.props.filter(function (p) { return statut(p, 'prop'); }).length;
+		return E.classes.filter(function (c) { return statut(c, 'classe'); }).length + E.props.filter(function (p) { return statut(p, 'prop'); }).length + nbInst();
 	}
 	function badge(st) {
 		return st === 'new' ? '<span class="badge new">nouveau</span>' : st === 'mod' ? '<span class="badge mod">modifié</span>' : st === 'del' ? '<span class="badge del">supprimé</span>' : '';
 	}
-	function ancetres(iri) { var r = [], c = cl(iri), v = {}; while (c && c.parent && !v[c.parent]) { v[c.parent] = 1; r.push(c.parent); c = cl(c.parent); } return r; }
+	// Tous les ancêtres d'un concept (toutes ses super-classes, de proche en proche)
+	function ancetres(iri) {
+		var r = [], vus = {}, file = [iri];
+		while (file.length) {
+			var c = cl(file.shift());
+			if (c) c.parents.forEach(function (p) { if (!vus[p]) { vus[p] = 1; r.push(p); file.push(p); } });
+		}
+		return r;
+	}
 
 	function charge(m) {
 		E.types = m.types; E.espace = m.espace;
 		var avec = m.classes.filter(function (c) { return c.iri.indexOf(m.espace) === 0 && c.nom.indexOf(':') > 0 && c.nom.indexOf('<') !== 0; })[0];
 		E.prefixe = avec ? avec.nom.slice(0, avec.nom.indexOf(':') + 1) : '';
 		E.classes = m.classes.map(function (c) {
-			var x = Object.assign({}, c); x.orig = { label: c.label, comment: c.comment, parent: c.parent }; x.nouveau = false; x.supprime = false; return x;
+			var x = Object.assign({}, c); x.parents = c.parents.slice(); x.orig = { label: c.label, comment: c.comment, parents: c.parents.slice() }; x.nouveau = false; x.supprime = false; return x;
 		});
 		E.props = m.props.map(function (p) {
 			var x = Object.assign({}, p); x.orig = { label: p.label, domain: p.domain, range: p.range }; x.nouveau = false; x.supprime = false; return x;
@@ -102,7 +113,7 @@
 		var cs = E.classes, idx = {};
 		cs.forEach(function (c, k) { idx[c.iri] = k; });
 		var aretes = [];
-		cs.forEach(function (c, k) { if (c.parent && idx[c.parent] !== undefined && idx[c.parent] !== k) aretes.push({ u: idx[c.parent], v: k, cle: 'classe:' + c.iri }); });
+		cs.forEach(function (c, k) { c.parents.forEach(function (p) { if (idx[p] !== undefined && idx[p] !== k) aretes.push({ u: idx[p], v: k, cle: 'sub:' + c.iri + '>' + p }); }); });
 		E.props.forEach(function (p) {
 			if (p.domain && p.range && !litteral(p.range) && idx[p.domain] !== undefined && idx[p.range] !== undefined && p.domain !== p.range)
 				aretes.push({ u: idx[p.domain], v: idx[p.range], cle: 'prop:' + p.iri });
@@ -180,27 +191,39 @@
 	}
 
 	function traceArete(e, N, decalage) {
-		var A = N[e.a], B = N[e.b], x = e.x, t = e.k, st = statut(x, t === 'sub' ? 'classe' : 'prop');
-		var sel = e.k === 'prop' && E.sel && E.sel.t === 'prop' && E.sel.iri === x.iri;
+		var A = N[e.a], B = N[e.b], x = e.x, t = e.k;
+		var st = t === 'sub' ? (x.supprime ? 'del' : (x.nouveau || x.orig.parents.indexOf(e.b) < 0) ? 'new' : '') : statut(x, 'prop');
+		var sel = t === 'prop' ? !!(E.sel && E.sel.t === 'prop' && E.sel.iri === x.iri) : parentSel(x) === e.b;
+		var P0 = null, P2 = null;
 		var cls = 'ge ar' + (t === 'sub' ? ' sub' : '') + (st ? ' st-' + st : '') + (sel ? ' sel' : '');
 		var d, lx, ly, via;
 		if (e.a === e.b) {
 			var x0 = A.x + A.w, y0 = A.y + 10;
 			d = 'M' + x0 + ' ' + y0 + ' C' + (x0 + 60) + ' ' + (y0 - 28) + ' ' + (x0 + 60) + ' ' + (y0 + 48) + ' ' + x0 + ' ' + (y0 + 20); lx = x0 + 48; ly = y0 + 10;
-		} else if ((via = passage(t === 'sub' ? 'classe:' + x.iri : 'prop:' + x.iri, e.a))) {
+		} else if ((via = passage(t === 'sub' ? 'sub:' + x.iri + '>' + e.b : 'prop:' + x.iri, e.a))) {
 			// flèche qui traverse des couches : elle passe par les points réservés par la disposition
 			var Q0 = rectPt(A, via[0].x, via[0].y), Q2 = rectPt(B, via[via.length - 1].x, via[via.length - 1].y), P = [Q0].concat(via, [Q2]);
+			P0 = Q0; P2 = Q2;
 			d = courbe(P);
 			var m = P.length;
 			if (m % 2) { lx = P[(m - 1) / 2].x; ly = P[(m - 1) / 2].y; } else { lx = (P[m / 2 - 1].x + P[m / 2].x) / 2; ly = (P[m / 2 - 1].y + P[m / 2].y) / 2; }
 		} else {
 			var ax = A.x + A.w / 2, ay = A.y + A.h / 2, bx = B.x + B.w / 2, by = B.y + B.h / 2, dx = bx - ax, dy = by - ay, len = Math.sqrt(dx * dx + dy * dy) || 1;
 			var cx = (ax + bx) / 2 + (-dy / len) * decalage, cy = (ay + by) / 2 + (dx / len) * decalage;
-			var P0 = rectPt(A, cx, cy), P2 = rectPt(B, cx, cy);
+			P0 = rectPt(A, cx, cy); P2 = rectPt(B, cx, cy);
 			d = 'M' + P0.x + ' ' + P0.y + ' Q' + cx + ' ' + cy + ' ' + P2.x + ' ' + P2.y;
 			lx = .25 * P0.x + .5 * cx + .25 * P2.x; ly = .25 * P0.y + .5 * cy + .25 * P2.y;
 		}
-		return '<g class="' + cls + '" data-edge="' + (t === 'sub' ? 'classe' : 'prop') + '" data-iri="' + echappe(x.iri) + '"><path class="hit" d="' + d + '"/>' +
+		// poignées d'extrémité de la flèche choisie : on les glisse vers un autre concept pour la ré-accrocher
+		if (sel && P0 && P2 && !x.supprime) {
+			var poignee = function (fin, P, F, titre) {
+				return '<circle class="he" data-t="' + (t === 'sub' ? 'classe' : 'prop') + '" data-iri="' + echappe(x.iri) + '" data-fin="' + fin + '" data-parent="' + echappe(e.b) + '" data-fx="' + F.x + '" data-fy="' + F.y +
+					'" cx="' + P.x + '" cy="' + P.y + '" r="8"><title>' + titre + '</title></circle>';
+			};
+			if (t === 'prop') poignees += poignee('domain', P0, P2, 'Glisser vers un autre concept : change le domaine') + poignee('range', P2, P0, 'Glisser vers un autre concept (ou le fond : attribut) : change la portée');
+			else poignees += poignee('parent', P2, P0, 'Glisser vers un autre concept : change la super-classe');
+		}
+		return '<g class="' + cls + '" data-edge="' + (t === 'sub' ? 'sub' : 'prop') + '" data-iri="' + echappe(x.iri) + '" data-parent="' + echappe(e.b) + '"><path class="hit" d="' + d + '"/>' +
 			'<path class="trait" d="' + d + '" marker-end="' + (t === 'sub' ? 'url(#tri)' : 'url(#fl)') + '"/>' +
 			(t === 'prop' ? '<text class="lbl" x="' + lx + '" y="' + (ly - 5) + '">' + echappe(court(affiche(x), 24)) + '</text>' : '') + '</g>';
 	}
@@ -208,8 +231,9 @@
 	function rendGraphe() {
 		var svg = $('#svg-graphe'); if (!svg) return;
 		var N = {}; E.classes.forEach(function (c) { N[c.iri] = geo(c); });
+		poignees = '';
 		var ar = [];
-		E.classes.forEach(function (c) { if (c.parent && N[c.parent]) ar.push({ k: 'sub', a: c.iri, b: c.parent, x: c }); });
+		E.classes.forEach(function (c) { c.parents.forEach(function (p) { if (N[p]) ar.push({ k: 'sub', a: c.iri, b: p, x: c }); }); });
 		E.props.forEach(function (p) { if (p.domain && N[p.domain] && p.range && N[p.range] && !litteral(p.range)) ar.push({ k: 'prop', a: p.domain, b: p.range, x: p }); });
 		var grp = {};
 		ar.forEach(function (e) { var k = [e.a, e.b].sort().join(' '); (grp[k] = grp[k] || []).push(e); });
@@ -223,7 +247,7 @@
 		E.classes.forEach(function (c) {
 			var g = N[c.iri], st = statut(c, 'classe'), selC = E.sel && E.sel.t === 'classe' && E.sel.iri === c.iri;
 			largeur = Math.max(largeur, g.x + g.w + 90); hauteurVue = Math.max(hauteurVue, g.y + g.h + 40);
-			h += '<g class="gn' + (st ? ' st-' + st : '') + (selC ? ' sel' : '') + (lien && lien.cible === c.iri ? ' cible' : '') + '" data-cls="' + echappe(c.iri) + '" transform="translate(' + g.x + ',' + g.y + ')">' +
+			h += '<g class="gn' + (st ? ' st-' + st : '') + (selC ? ' sel' : '') + ((lien && lien.cible === c.iri) || (rat && rat.cible === c.iri) ? ' cible' : '') + '" data-cls="' + echappe(c.iri) + '" transform="translate(' + g.x + ',' + g.y + ')">' +
 				'<rect class="corps" width="' + g.w + '" height="' + g.h + '" rx="10"><title>' + echappe(c.iri) + '</title></rect>' +
 				'<text class="nom" x="10" y="21">' + echappe(court(affiche(c), 20)) + '</text>' +
 				'<text class="cpt" x="' + (g.w - 10) + '" y="21" text-anchor="end">' + (c.n || '') + '</text>';
@@ -235,6 +259,8 @@
 			h += '<g class="hd" data-cls="' + echappe(c.iri) + '" data-kind="prop" transform="translate(' + g.w + ',16)"><circle r="8"/><title>Glisser vers un concept : propriété ; vers le fond : attribut</title></g>' +
 				'<g class="hd" data-cls="' + echappe(c.iri) + '" data-kind="sub" transform="translate(' + (g.w / 2) + ',0)"><polygon points="-8,5 8,5 0,-8"/><title>Glisser vers un concept : « sous-classe de »</title></g></g>';
 		});
+		h += poignees;
+		if (rat) h += '<line class="tmp" x1="' + rat.fx + '" y1="' + rat.fy + '" x2="' + rat.x + '" y2="' + rat.y + '"/>';
 		if (lien) {
 			var c0 = cl(lien.de), s = N[lien.de];
 			if (c0 && s) {
@@ -250,12 +276,13 @@
 	//--------------------------------------------------------------------------
 	// Liste, propriétés non reliées, fiche, état
 	//--------------------------------------------------------------------------
-	function noeudClasse(c, vus) {
+	function noeudClasse(c, vus, chemin) {
 		vus[c.iri] = true;
-		var enfants = E.classes.filter(function (x) { return x.parent === c.iri && !vus[x.iri]; });
+		chemin = Object.assign({}, chemin); chemin[c.iri] = true;
+		var enfants = E.classes.filter(function (x) { return x.parents.indexOf(c.iri) >= 0 && !chemin[x.iri]; });
 		var st = statut(c, 'classe'), sel = E.sel && E.sel.t === 'classe' && E.sel.iri === c.iri ? ' sel' : '';
 		return '<li><div class="noeud' + sel + (st === 'del' ? ' del' : '') + '" data-t="classe" data-iri="' + echappe(c.iri) + '" tabindex="0"><span class="puce"></span><span class="nom">' + echappe(affiche(c)) + '</span>' +
-			badge(st) + '<span class="nb">' + (c.n || '') + '</span></div>' + (enfants.length ? '<ul>' + enfants.map(function (e) { return noeudClasse(e, vus); }).join('') + '</ul>' : '') + '</li>';
+			badge(st) + '<span class="nb">' + (c.n || '') + '</span></div>' + (enfants.length ? '<ul>' + enfants.map(function (e) { return noeudClasse(e, vus, chemin); }).join('') + '</ul>' : '') + '</li>';
 	}
 	function noeudProp(p, note) {
 		var st = statut(p, 'prop'), sel = E.sel && E.sel.t === 'prop' && E.sel.iri === p.iri ? ' sel' : '';
@@ -265,9 +292,9 @@
 	function relie(p) { return p.domain && cl(p.domain) && p.range && (litteral(p.range) || cl(p.range)); }
 	function rendListes() {
 		var vus = {};
-		var racines = E.classes.filter(function (c) { return !c.parent || !cl(c.parent); });
-		var h = racines.map(function (c) { return noeudClasse(c, vus); }).join('');
-		E.classes.forEach(function (c) { if (!vus[c.iri]) h += noeudClasse(c, vus); }); // cycles de sous-classes
+		var racines = E.classes.filter(function (c) { return !c.parents.some(function (p) { return cl(p); }); });
+		var h = racines.map(function (c) { return noeudClasse(c, vus, {}); }).join('');   // un concept à plusieurs super-classes apparaît sous chacune
+		E.classes.forEach(function (c) { if (!vus[c.iri]) h += noeudClasse(c, vus, {}); }); // cycles de sous-classes
 		$('#arbre-classes').innerHTML = h;
 		$('#arbre-props').innerHTML = E.props.map(function (p) { return noeudProp(p, ''); }).join('');
 		$('#n-classes').textContent = E.classes.filter(function (c) { return !c.supprime; }).length;
@@ -300,8 +327,14 @@
 		if (x.nouveau) h += '<label for="f-local">Identifiant</label><input type="text" class="mono" id="f-local" value="' + echappe(iriLocale(x)) + '" title="' + echappe(E.espace) + '…"' + off + '>';
 		else h += '<label>Identifiant</label><input type="text" class="mono" value="' + echappe(x.nom) + '" title="' + echappe(x.iri) + '" disabled>';
 		if (t === 'classe') {
-			h += '<label for="f-parent">Sous-classe de</label><select id="f-parent"' + off + '>' +
-				options(x.parent, true, true, false).replace('value="' + echappe(x.iri) + '"', 'value="' + echappe(x.iri) + '" disabled') + '</select>';
+			h += '<label>Sous-classe de</label><div class="parents">' + x.parents.map(function (p) {
+				return '<span class="puce-parent' + (parentSel(x) === p ? ' sel' : '') + '" title="' + echappe(p) + '">' + echappe(cl(p) ? affiche(cl(p)) : nomCourt(p)) +
+					(x.supprime ? '' : ' <button type="button" class="lien-mini" data-rm-parent="' + echappe(p) + '" aria-label="Retirer cette super-classe">✕</button>') + '</span>';
+			}).join('') + (x.parents.length ? '' : '<span class="astuce" style="margin:0">aucune</span>') +
+				(x.supprime ? '' : '<select id="f-parent-add" aria-label="Ajouter une super-classe"><option value="">＋ ajouter une super-classe…</option>' +
+					E.classes.filter(function (c) { return !c.supprime && c.iri !== x.iri && x.parents.indexOf(c.iri) < 0 && ancetres(c.iri).indexOf(x.iri) < 0; }).map(function (c) {
+						return '<option value="' + echappe(c.iri) + '">' + echappe(affiche(c)) + '</option>';
+					}).join('') + '</select>') + '</div>';
 			h += '<label for="f-comment">Commentaire</label><textarea id="f-comment" rows="3" maxlength="1000"' + off + '>' + echappe(x.comment) + '</textarea>';
 		} else {
 			h += '<label for="f-domain">Domaine (sujet)</label><select id="f-domain"' + off + '>' + options(x.domain, true, true, false) + '</select>';
@@ -311,7 +344,7 @@
 		h += '</div>';
 		var imp = [];
 		if (t === 'classe') {
-			var fils = E.classes.filter(function (c) { return c.parent === x.iri && !c.supprime; });
+			var fils = E.classes.filter(function (c) { return c.parents.indexOf(x.iri) >= 0 && !c.supprime; });
 			var ps = E.props.filter(function (p) { return !p.supprime && (p.domain === x.iri || p.range === x.iri); });
 			if (x.n) imp.push(x.n + ' instance(s) de ce concept (elles ne sont pas supprimées avec lui)');
 			if (fils.length) imp.push(fils.length + ' sous-classe(s) : ' + fils.map(function (c) { return echappe(affiche(c)); }).join(', '));
@@ -339,7 +372,10 @@
 			if (iri !== x.iri && (cl(iri) || pr(iri))) { toast('Cet identifiant existe déjà'); return; }
 			x.iriAuto = false; renomme(x, t, iri);
 		});
-		champ('#f-parent', function (v) { x.parent = v; });
+		champ('#f-parent-add', function (v) { if (v && x.parents.indexOf(v) < 0) x.parents.push(v); });
+		document.querySelectorAll('[data-rm-parent]').forEach(function (b) {
+			b.addEventListener('click', function () { x.parents = x.parents.filter(function (p) { return p !== b.dataset.rmParent; }); selSous = null; rend(); });
+		});
 		champ('#f-comment', function (v) { x.comment = v; if (x.comment && !x.clang && !x.orig.comment) x.clang = 'fr'; });
 		champ('#f-domain', function (v) { x.domain = v; });
 		champ('#f-range', function (v) { x.range = v; });
@@ -384,7 +420,7 @@
 		var ancien = x.iri;
 		if (iri === ancien) return;
 		E.pos[iri] = E.pos[ancien]; delete E.pos[ancien];
-		E.classes.forEach(function (c) { if (c.parent === ancien) c.parent = iri; });
+		E.classes.forEach(function (c) { c.parents = c.parents.map(function (p) { return p === ancien ? iri : p; }); });
 		E.props.forEach(function (p) { if (p.domain === ancien) p.domain = iri; if (p.range === ancien) p.range = iri; });
 		if (E.sel && E.sel.iri === ancien) E.sel.iri = iri;
 		x.iri = iri; x.nom = nomDe(iri);
@@ -392,7 +428,7 @@
 	function nouvelElement(t, label, base) {
 		var iri = E.espace + unique(slug(base, t === 'classe'), null);
 		var o = { iri: iri, nom: nomDe(iri), label: label, llang: 'fr', nouveau: true, supprime: false, iriAuto: true };
-		if (t === 'classe') { o.comment = ''; o.clang = ''; o.parent = ''; o.n = 0; o.decl = true; o.orig = { label: '', comment: '', parent: '' }; E.classes.push(o); }
+		if (t === 'classe') { o.comment = ''; o.clang = ''; o.parents = []; o.n = 0; o.decl = true; o.orig = { label: '', comment: '', parents: [] }; E.classes.push(o); }
 		else { o.domain = ''; o.range = ''; o.orig = { label: '', domain: '', range: '' }; E.props.push(o); }
 		E.sel = { t: t, iri: iri };
 		return o;
@@ -413,7 +449,7 @@
 	function supprime(x, t) {
 		var casc = [];
 		if (t === 'classe') {
-			E.classes.forEach(function (c) { if (c.parent === x.iri) { casc.push([c, 'parent', c.parent]); c.parent = ''; } });
+			E.classes.forEach(function (c) { if (c.parents.indexOf(x.iri) >= 0) { casc.push([c, 'parents', x.iri]); c.parents = c.parents.filter(function (p) { return p !== x.iri; }); } });
 			E.props.forEach(function (p) {
 				if (p.domain === x.iri) { casc.push([p, 'domain', p.domain]); p.domain = ''; }
 				if (p.range === x.iri) { casc.push([p, 'range', p.range]); p.range = ''; }
@@ -428,7 +464,10 @@
 	}
 	function restaure(x, t) {
 		x.supprime = false;
-		(x.cascade || []).forEach(function (c) { if (c[0][c[1]] === '') c[0][c[1]] = c[2]; });
+		(x.cascade || []).forEach(function (c) {
+			if (c[1] === 'parents') { if (c[0].parents.indexOf(c[2]) < 0) c[0].parents.push(c[2]); }
+			else if (c[0][c[1]] === '') c[0][c[1]] = c[2];
+		});
 		x.cascade = [];
 		rend();
 	}
@@ -437,12 +476,18 @@
 		var b = { classes: [], props: [], supprimes: { classes: [], props: [] } };
 		E.classes.forEach(function (c) {
 			if (c.supprime) { if (!c.nouveau) b.supprimes.classes.push(c.iri); return; }
-			if (c.nouveau || modifie(c, 'classe')) b.classes.push({ iri: c.iri, label: c.label, llang: c.llang, comment: c.comment, clang: c.clang, parent: c.parent });
+			if (c.nouveau || modifie(c, 'classe')) b.classes.push({ iri: c.iri, label: c.label, llang: c.llang, comment: c.comment, clang: c.clang, parents: c.parents.slice() });
 		});
 		E.props.forEach(function (p) {
 			if (p.supprime) { if (!p.nouveau) b.supprimes.props.push(p.iri); return; }
 			if (p.nouveau || modifie(p, 'prop')) b.props.push({ iri: p.iri, label: p.label, llang: p.llang, domain: p.domain, range: p.range });
 		});
+		if (nbInst()) b.instances = {
+			nouvelles: D.nouvelles.map(function (n) { return { iri: n.iri, classe: n.classe, valeurs: n.valeurs }; }),
+			modifiees: Object.keys(D.modifiees).map(function (i) { return { iri: i, valeurs: D.modifiees[i].valeurs }; }),
+			supprimees: Object.keys(D.supprimees),
+			ia: D.ia.length ? { jeton: D.iaJeton, indices: D.ia.map(function (p) { return p.i; }) } : null
+		};
 		return b;
 	}
 
@@ -457,7 +502,13 @@
 		return appel('ontologie_enregistrer', { brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
 			enCours = false;
 			message(r.html);
-			if (r.ok && r.modele) { charge(r.modele); rend(); toast('💾 Ontologie enregistrée'); return true; }
+			if (r.ok && r.modele) {
+				(r.sujets || []).forEach(function (u) { iaIris[u] = true; });
+				viderBrouillonInstances();
+				charge(r.modele); rend();
+				chargeInstances().then(function () { toast('💾 Enregistré dans votre copie'); });
+				return true;
+			}
 			rendEtat();
 			return false;
 		});
@@ -471,14 +522,15 @@
 	function mv(e) {
 		var p = pt(e);
 		if (drag) { E.pos[drag.iri] = { x: Math.max(0, p.x - drag.dx), y: Math.max(0, p.y - drag.dy) }; rendGraphe(); }
-		else if (lien) {
-			var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]');
-			lien.x = p.x; lien.y = p.y; lien.cible = n ? n.dataset.cls : null; rendGraphe();
+		else if (lien || rat) {
+			var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'), o = lien || rat;
+			o.x = p.x; o.y = p.y; o.cible = n ? n.dataset.cls : null; rendGraphe();
 		}
 	}
 	function up(e) {
 		document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
 		if (drag) { drag = null; return; }
+		if (rat) { var r = rat; rat = null; rattache(r, e); return; }
 		if (!lien) return;
 		var l = lien; lien = null;
 		var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'), dansSvg = el && el.closest && el.closest('#svg-graphe');
@@ -490,24 +542,59 @@
 		}
 		if (!n || n.dataset.cls === l.de) { rendGraphe(); if (dansSvg) toast('Lâchez sur un autre concept pour créer « sous-classe de »'); return; }
 		if (ancetres(n.dataset.cls).indexOf(l.de) >= 0) { rendGraphe(); toast('⛔ Cycle : un concept ne peut pas descendre de son propre descendant'); return; }
-		var c = cl(l.de); c.parent = n.dataset.cls; E.sel = { t: 'classe', iri: c.iri }; rend();
-		toast(affiche(c) + ' est maintenant sous-classe de ' + affiche(cl(c.parent)));
+		var c = cl(l.de), cible = n.dataset.cls;
+		if (c.parents.indexOf(cible) >= 0) { rendGraphe(); toast(affiche(c) + ' est déjà sous-classe de ' + affiche(cl(cible))); return; }
+		c.parents.push(cible); selSous = { iri: c.iri, parent: cible }; E.sel = { t: 'classe', iri: c.iri }; rend();
+		toast(affiche(c) + ' est maintenant sous-classe de ' + affiche(cl(cible)));
+	}
+	// Fin d'un glissement de poignée : la flèche est accrochée au concept visé
+	function rattache(r, e) {
+		var el = document.elementFromPoint(e.clientX, e.clientY), n = el && el.closest && el.closest('[data-cls]'), dansSvg = el && el.closest && el.closest('#svg-graphe');
+		var cible = n ? n.dataset.cls : null;
+		if (r.t === 'prop') {
+			var p = pr(r.iri);
+			if (r.fin === 'domain') {
+				if (!cible) { rendGraphe(); if (dansSvg) toast('Lâchez sur un concept pour changer le domaine'); return; }
+				p.domain = cible;
+			} else if (cible) p.range = cible;
+			else if (dansSvg) { p.range = XSD + 'string'; toast(affiche(p) + ' devient un attribut (xsd:string)'); }
+			else { rendGraphe(); return; }
+			rend(); return;
+		}
+		var c = cl(r.iri);
+		if (!cible || cible === r.parent) { rendGraphe(); if (dansSvg && !cible) toast('Lâchez sur un concept pour changer la super-classe'); return; }
+		if (cible === c.iri) { rendGraphe(); toast('Un concept ne peut pas être sa propre super-classe'); return; }
+		if (ancetres(cible).indexOf(c.iri) >= 0) { rendGraphe(); toast('⛔ Cycle : un concept ne peut pas descendre de son propre descendant'); return; }
+		if (c.parents.indexOf(cible) >= 0) { rendGraphe(); toast(affiche(c) + ' est déjà sous-classe de ' + affiche(cl(cible))); return; }
+		c.parents = c.parents.map(function (p) { return p === r.parent ? cible : p; });
+		selSous = { iri: c.iri, parent: cible };
+		rend();
 	}
 	function suit() { document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); }
 
 	$('#svg-graphe').addEventListener('pointerdown', function (e) {
 		if (e.button) return;
+		var he = e.target.closest('.he');
+		if (he) {
+			e.preventDefault();
+			rat = { t: he.dataset.t, iri: he.dataset.iri, fin: he.dataset.fin, parent: he.dataset.parent, fx: +he.dataset.fx, fy: +he.dataset.fy, x: pt(e).x, y: pt(e).y, cible: null };
+			suit(); return;
+		}
 		var hd = e.target.closest('.hd'), at = e.target.closest('[data-attr]'), gn = e.target.closest('.gn'), ge = e.target.closest('.ge'), p = pt(e), now = Date.now();
 		if (hd) { e.preventDefault(); lien = { de: hd.dataset.cls, kind: hd.dataset.kind, x: p.x, y: p.y, cible: null }; suit(); return; }
 		if (at) { E.sel = { t: 'prop', iri: at.dataset.attr }; rend(); return; }
 		if (gn) {
 			var iri = gn.dataset.cls, dbl = dernier.k === iri && now - dernier.t < 400;
 			dernier = { t: now, k: iri };
-			E.sel = { t: 'classe', iri: iri }; rend();
+			E.sel = { t: 'classe', iri: iri }; selSous = null; rend();
 			if (dbl) { focusLabel(); return; }
 			drag = { iri: iri, dx: p.x - E.pos[iri].x, dy: p.y - E.pos[iri].y }; suit(); return;
 		}
-		if (ge) { E.sel = { t: ge.dataset.edge, iri: ge.dataset.iri }; rend(); return; }
+		if (ge) {
+			if (ge.dataset.edge === 'sub') { E.sel = { t: 'classe', iri: ge.dataset.iri }; selSous = { iri: ge.dataset.iri, parent: ge.dataset.parent }; }
+			else { E.sel = { t: 'prop', iri: ge.dataset.iri }; selSous = null; }
+			rend(); return;
+		}
 		var dbl2 = dernier.k === 'fond' && now - dernier.t < 400;
 		dernier = { t: now, k: 'fond' };
 		if (dbl2) creeConcept(p.x - LARGEUR / 2, p.y - 16);
@@ -522,16 +609,59 @@
 			I = r.modele; rendInstances();
 		});
 	}
+	// Brouillon des instances : ce que l'étudiant a ajouté, modifié ou supprimé à la main, et les
+	// propositions de l'IA qu'il a acceptées ; tout part avec l'ontologie à « Enregistrer »
+	var D = { nouvelles: [], modifiees: {}, supprimees: {}, ia: [], iaJeton: null };
+	var F = null;   // formulaire d'instance ouvert : { mode: 'nouvelle'|'edition', idx, iri, nom, classe, types, valeurs, orig, entrants, iriAuto, local, chargement }
+	function nbInst() { return D.nouvelles.length + Object.keys(D.modifiees).length + Object.keys(D.supprimees).length + D.ia.length; }
+	function viderBrouillonInstances() { D = { nouvelles: [], modifiees: {}, supprimees: {}, ia: [], iaJeton: null }; F = null; }
+
+	function espaceInstances() { return (I && I.espace) || E.espace; }
+	function prefixeInstances() {
+		var ex = I && I.classes.reduce(function (r, c) { return r || c.items.filter(function (it) { return it.iri && it.iri.indexOf(I.espace) === 0 && it.nom.indexOf(':') > 0; })[0]; }, null);
+		return ex ? ex.nom.slice(0, ex.nom.indexOf(':') + 1) : '';
+	}
+	function iriInstanceExiste(iri) {
+		return D.nouvelles.some(function (n) { return n.iri === iri; }) || !!(I && I.classes.some(function (c) { return c.items.some(function (it) { return it.iri === iri; }); }));
+	}
+	function proprietesPour(classe) {
+		var lignees = [classe].concat(ancetres(classe));
+		return E.props.filter(function (p) { return !p.supprime && p.domain && lignees.indexOf(p.domain) >= 0; });
+	}
+	// Valeur vide pour la propriété p : référence vers une instance, ou littéral du type de sa portée
+	function valeurVide(piri) {
+		var p = pr(piri), r = p && p.range;
+		if (r && !litteral(r)) return { p: piri, k: 'iri', v: '', dt: '', l: '' };
+		return { p: piri, k: 'lit', v: '', dt: r && r !== RDFS + 'Literal' && r !== RDF + 'langString' ? r : '', l: '' };
+	}
+	function signature(valeurs) {
+		return JSON.stringify(valeurs.filter(function (v) { return v.k !== 'bn' && String(v.v).trim() !== ''; })
+			.map(function (v) { return [v.p, v.k, String(v.v).trim(), v.dt || '', v.l || '']; }).sort());
+	}
+	function titreInstance(valeurs, classe) {
+		var t = valeurs.filter(function (v) { return v.k === 'lit' && String(v.v).trim() && /(label|name|nom|titre|title)$/i.test(v.p); })[0] ||
+			valeurs.filter(function (v) { return v.k === 'lit' && String(v.v).trim() && !v.dt; })[0];
+		return t ? String(t.v).trim() : '';
+	}
+	function proposeLocal(f) {
+		var base = titreInstance(f.valeurs) ? slug(titreInstance(f.valeurs), false) : slug((cl(f.classe) ? affiche(cl(f.classe)) : 'instance'), false) + 1;
+		var local = base, k = 1;
+		while (iriInstanceExiste(espaceInstances() + local)) local = base + (++k);
+		return local.toLowerCase();
+	}
+
 	function rendInstances() {
 		var zone = $('#p-instances');
 		if (!I) return;
+		if (F) { rendFormulaire(); return; }
 		var total = I.classes.reduce(function (s, c) { return s + c.n; }, 0);
 		$('#c-inst').textContent = total;
 		var selIri = E.sel && E.sel.t === 'classe' ? E.sel.iri : null;
 		if (selIri && selIri !== dernierSel) { ouverts[selIri] = true; dernierSel = selIri; }   // choisir un concept ouvre sa liste
-		var h = '<p class="astuce" style="margin-top:0">Les individus de votre copie, par concept. Sélectionnez un concept dans le graphe pour voir les siens.' +
-			(I.tronque ? ' <strong>Liste tronquée.</strong>' : '') + '</p>';
-		if (!I.classes.length) h += '<p class="astuce">Aucune instance : peuplez-la avec l\'IA (onglet voisin) ou avec <code>INSERT DATA</code>.</p>';
+		var h = '<div class="ligne" style="margin-top:0"><button type="button" class="btn secondaire petit" data-ab="nouvelle">＋ Nouvelle instance</button></div>';
+		h += rendBrouillonInstances();
+		h += '<p class="astuce">Les individus de votre copie, par concept. Sélectionnez un concept dans le graphe pour voir les siens.' + (I.tronque ? ' <strong>Liste tronquée.</strong>' : '') + '</p>';
+		if (!I.classes.length) h += '<p class="astuce">Aucune instance : ajoutez-en une, ou peuplez l\'instance avec l\'IA (onglet voisin).</p>';
 		I.classes.forEach(function (c) {
 			var ouvert = !!ouverts[c.iri];
 			var nIA = c.items.filter(function (it) { return it.iri && iaIris[it.iri]; }).length;
@@ -540,9 +670,13 @@
 			if (ouvert) {
 				c.items.forEach(function (it) {
 					var vals = it.props.map(function (p) { return echappe(p.p) + ' = ' + echappe(p.v) + (p.l ? '@' + echappe(p.l) : ''); }).join(' · ');
-					h += '<div class="inst' + (it.iri && iaIris[it.iri] ? ' nouveau-ia' : '') + '"><div class="tete"><strong title="' + echappe(it.iri || it.nom) + '">' + echappe(it.titre || it.nom) + '</strong>' +
-						(it.iri && iaIris[it.iri] ? '<span class="badge ia">IA</span>' : '') + '</div>' +
-						(it.titre ? '<div class="vals">' + echappe(it.nom) + '</div>' : '') + (vals ? '<div class="vals">' + vals + '</div>' : '') + '</div>';
+					var supprime = it.iri && D.supprimees[it.iri] !== undefined, modifie_ = it.iri && D.modifiees[it.iri];
+					h += '<div class="inst' + (it.iri && iaIris[it.iri] ? ' nouveau-ia' : '') + (supprime ? ' supprimee' : '') + '"><div class="tete"><strong title="' + echappe(it.iri || it.nom) + '">' + echappe(it.titre || it.nom) + '</strong>' +
+						(it.iri && iaIris[it.iri] ? '<span class="badge ia">IA</span>' : '') + (supprime ? '<span class="badge del">supprimée</span>' : modifie_ ? '<span class="badge mod">modifiée</span>' : '') +
+						(it.iri && !supprime ? '<button type="button" class="lien-mini" data-ab="edite" data-id="' + echappe(it.iri) + '" title="Modifier ou supprimer cette instance">✎</button>'
+							: it.iri ? '<button type="button" class="lien-mini" data-ab="annule-sup" data-id="' + echappe(it.iri) + '">annuler</button>' : '') + '</div>' +
+						(it.titre ? '<div class="vals">' + echappe(it.nom) + '</div>' : '') + (vals ? '<div class="vals">' + vals + '</div>' : '') +
+						(it.iri ? '' : '<div class="vals">nœud anonyme : à modifier avec une requête</div>') + '</div>';
 				});
 				if (c.plus > 0) h += '<div class="inst-plus">… et ' + c.plus + ' autre' + (c.plus > 1 ? 's' : '') + ' non affichée' + (c.plus > 1 ? 's' : '') + '</div>';
 			}
@@ -550,7 +684,103 @@
 		});
 		zone.innerHTML = h;
 	}
+	function rendBrouillonInstances() {
+		if (!nbInst()) return '';
+		var l = [];
+		D.nouvelles.forEach(function (n, i) {
+			l.push('<li>＋ ' + echappe(cl(n.classe) ? affiche(cl(n.classe)) : nomCourt(n.classe)) + ' « ' + echappe(n.titre || n.local) + ' » <button type="button" class="lien-mini" data-ab="nouvelle-edite" data-id="' + i + '">modifier</button> <button type="button" class="lien-mini" data-ab="nouvelle-annule" data-id="' + i + '">retirer</button></li>');
+		});
+		Object.keys(D.modifiees).forEach(function (iri) {
+			l.push('<li>✎ ' + echappe(D.modifiees[iri].nom) + ' <button type="button" class="lien-mini" data-ab="edite" data-id="' + echappe(iri) + '">modifier</button> <button type="button" class="lien-mini" data-ab="modif-annule" data-id="' + echappe(iri) + '">annuler</button></li>');
+		});
+		Object.keys(D.supprimees).forEach(function (iri) {
+			l.push('<li>🗑 ' + echappe(D.supprimees[iri]) + ' <button type="button" class="lien-mini" data-ab="annule-sup" data-id="' + echappe(iri) + '">annuler</button></li>');
+		});
+		D.ia.forEach(function (p) {
+			l.push('<li>✨ ' + (p.genre === 'nouveau' ? 'Créer ' + echappe(p.cible) + ' « ' + echappe(p.titre) + ' »' : 'Compléter ' + echappe(p.cible)) + ' <button type="button" class="lien-mini" data-ab="ia-retire" data-id="' + p.i + '">retirer</button></li>');
+		});
+		return '<div class="inst-brouillon"><strong>À enregistrer (' + nbInst() + ')</strong><ul>' + l.join('') + '</ul></div>';
+	}
 
+	// Formulaire d'une instance : ses valeurs, une ligne par valeur
+	function ligneValeur(v, k) {
+		var p = pr(v.p), nom = p ? affiche(p) : (v.nom || nomCourt(v.p));
+		var h = '<div class="if-ligne" data-k="' + k + '"><span class="if-p" title="' + echappe(v.p) + '">' + echappe(nom) + '</span>';
+		if (v.k === 'bn') return h + '<span class="vals">' + echappe(v.v) + ' <em>(nœud anonyme, non modifiable ici)</em></span><span></span></div>';
+		var texte = v.k === 'lit' && (!v.dt || v.dt === XSD + 'string');
+		if (v.k === 'iri') h += '<input type="text" class="champ" list="dl-inst" data-champ="v" value="' + echappe(v.v) + '" placeholder="ex:nom ou IRI">';
+		else if (v.dt === XSD + 'boolean') h += '<select class="champ" data-champ="v"><option value=""></option><option' + (v.v === 'true' ? ' selected' : '') + '>true</option><option' + (v.v === 'false' ? ' selected' : '') + '>false</option></select>';
+		else {
+			var type = /#(integer|int|long|decimal|double|float)$/.test(v.dt) ? 'number' : /#date$/.test(v.dt) ? 'date' : 'text';
+			h += '<span style="display:flex;gap:4px"><input type="' + type + '" class="champ" step="any" data-champ="v" value="' + echappe(v.v) + '"' + (v.dt && type === 'text' && v.dt !== XSD + 'string' ? ' placeholder="' + echappe(nomCourt(v.dt)) + '"' : '') + '>' +
+				(texte ? '<input type="text" class="champ" data-champ="l" value="' + echappe(v.l) + '" placeholder="langue" title="Langue du texte (fr, en…), facultative" style="width:4.5em">' : '') + '</span>';
+		}
+		return h + '<button type="button" class="lien-mini" data-rm-val="' + k + '" aria-label="Retirer cette valeur">✕</button></div>';
+	}
+	function rendFormulaire() {
+		var z = $('#p-instances');
+		if (F.chargement) { z.innerHTML = "<p class='astuce'>⏳ Chargement de l'instance…</p>"; return; }
+		var h = '<div class="inst-form"><h3 style="margin:0 0 8px">' + (F.mode === 'nouvelle' ? '＋ Nouvelle instance' : '✎ ' + echappe(F.nom)) + '</h3>';
+		if (F.mode === 'nouvelle') {
+			h += '<div class="if-ligne"><span class="if-p">Concept</span><select id="if-classe" class="champ">' + E.classes.filter(function (c) { return !c.supprime; }).map(function (c) {
+				return '<option value="' + echappe(c.iri) + '"' + (c.iri === F.classe ? ' selected' : '') + '>' + echappe(affiche(c)) + '</option>';
+			}).join('') + '</select><span></span></div>' +
+				'<div class="if-ligne"><span class="if-p">Identifiant</span><input type="text" id="if-local" class="champ" value="' + echappe(F.local) + '" title="' + echappe(espaceInstances()) + '…"><span></span></div>';
+		} else h += '<p class="astuce" style="margin:0 0 6px">' + (F.types.length ? 'Concept : ' + F.types.map(function (t) { return echappe(t.nom); }).join(', ') : 'Sans concept') +
+			(F.entrants ? ' · ' + F.entrants + ' référence(s) vers elle' : '') + '</p>';
+		h += '<div id="if-valeurs">' + F.valeurs.map(ligneValeur).join('') + '</div>';
+		var ap = F.classe ? proprietesPour(F.classe) : [], autres = E.props.filter(function (p) { return !p.supprime && ap.indexOf(p) < 0; });
+		var opt = function (p) { return '<option value="' + echappe(p.iri) + '">' + echappe(affiche(p)) + '</option>'; };
+		h += '<select id="if-ajout" class="champ" aria-label="Ajouter une valeur"><option value="">＋ ajouter une valeur…</option>' + ap.map(opt).join('') +
+			(autres.length ? '<optgroup label="Autres propriétés">' + autres.map(opt).join('') + '</optgroup>' : '') + '</select>';
+		var noms = [];
+		(I ? I.classes : []).forEach(function (c) { c.items.forEach(function (it) { if (it.iri && noms.length < 600) noms.push('<option value="' + echappe(it.nom) + '" label="' + echappe(it.titre || '') + '">'); }); });
+		h += '<datalist id="dl-inst">' + noms.join('') + '</datalist>';
+		h += '<div class="boutons"><button type="button" class="btn vert petit" id="if-ok">✔ Valider</button><button type="button" class="btn secondaire petit" id="if-annule">Annuler</button>' +
+			(F.mode === 'edition' && !F.bn ? '<button type="button" class="btn danger petit" id="if-suppr">🗑️ Supprimer l\'instance</button>' : '') + '</div>' +
+			'<p class="astuce">Rien n\'est écrit dans votre copie avant « Enregistrer ».</p></div>';
+		z.innerHTML = h;
+	}
+	function ouvreNouvelle(classe) {
+		var c = classe || (E.sel && E.sel.t === 'classe' && cl(E.sel.iri) && !cl(E.sel.iri).supprime ? E.sel.iri : (E.classes.filter(function (x) { return !x.supprime; })[0] || {}).iri);
+		if (!c) { toast('Créez d\'abord un concept'); return; }
+		F = { mode: 'nouvelle', idx: -1, classe: c, valeurs: proprietesPour(c).slice(0, 10).map(function (p) { return valeurVide(p.iri); }), iriAuto: true, local: '' };
+		F.local = proposeLocal(F);
+		rendInstances();
+	}
+	function ouvreEdition(iri) {
+		if (D.modifiees[iri]) {
+			var m = D.modifiees[iri];
+			F = { mode: 'edition', iri: iri, nom: m.nom, classe: m.classe, types: m.types, valeurs: JSON.parse(JSON.stringify(m.valeurs)), orig: m.orig, entrants: m.entrants };
+			rendInstances(); return;
+		}
+		F = { mode: 'edition', iri: iri, nom: iri, chargement: true, valeurs: [], types: [] };
+		rendInstances();
+		appel('instance', { iri: iri }).then(function (r) {
+			if (!F || F.iri !== iri) return;
+			if (!r.ok) { F = null; message(r.html); rendInstances(); return; }
+			var m = r.modele;
+			F = { mode: 'edition', iri: iri, nom: m.nom, classe: m.types[0] ? m.types[0].iri : '', types: m.types, valeurs: m.valeurs, orig: signature(m.valeurs), entrants: m.entrants,
+				bn: false };
+			rendInstances();
+		});
+	}
+	function valideFormulaire() {
+		var valeurs = F.valeurs.filter(function (v) { return v.k !== 'bn' && String(v.v).trim() !== ''; }).map(function (v) {
+			return { p: v.p, k: v.k, v: String(v.v).trim(), dt: v.k === 'lit' && !v.l ? (v.dt || '') : '', l: v.k === 'lit' ? (v.l || '') : '' };
+		});
+		if (F.mode === 'nouvelle') {
+			if (!/^[\p{L}\p{N}_-]+$/u.test(F.local)) { toast('Identifiant : lettres, chiffres, _ et - seulement'); return; }
+			var iri = espaceInstances() + F.local;
+			var autre = F.idx >= 0 && D.nouvelles[F.idx] && D.nouvelles[F.idx].iri === iri;
+			if (!autre && iriInstanceExiste(iri)) { toast('Cet identifiant existe déjà'); return; }
+			var entree = { iri: iri, local: F.local, classe: F.classe, valeurs: valeurs, titre: titreInstance(valeurs) };
+			if (F.idx >= 0) D.nouvelles[F.idx] = entree; else D.nouvelles.push(entree);
+		} else if (signature(valeurs) === F.orig) delete D.modifiees[F.iri];
+		else D.modifiees[F.iri] = { iri: F.iri, nom: F.nom, classe: F.classe, types: F.types, valeurs: valeurs, orig: F.orig, entrants: F.entrants };
+		F = null;
+		rend();
+	}
 	function ouvreOnglet(o) {
 		document.querySelectorAll('.onglets button').forEach(function (b) { b.classList.toggle('actif', b.dataset.onglet === o); });
 		['instances', 'ia'].forEach(function (k) { $('#p-' + k).hidden = k !== o; });
@@ -571,18 +801,18 @@
 		var z = $('#propositions');
 		if (!propositions || !propositions.liste.length) { z.innerHTML = ''; return; }
 		var h = '<div class="ligne"><strong>' + propositions.liste.length + ' proposition(s)</strong><button type="button" class="lien-mini" id="tout-cocher">tout cocher</button></div>';
-		propositions.liste.forEach(function (p, k) {
+		propositions.liste.forEach(function (p) {
 			h += '<label><input type="checkbox" data-p="' + p.i + '" checked> <span><strong>' +
 				(p.genre === 'nouveau' ? 'Créer ' + echappe(p.cible) + ' « ' + echappe(p.titre) + ' »' : 'Compléter ' + echappe(p.cible)) + '</strong>' +
 				(p.detail.length ? '<span class="detail">' + p.detail.map(echappe).join(' · ') + '</span>' : '') + '</span></label>';
 		});
-		var n = nbModifs();
-		h += '<div class="boutons"><button type="button" class="btn vert" id="accepte">➕ Ajouter les propositions cochées</button></div>' +
-			(n ? '<p class="astuce">Vos ' + n + ' modification(s) de l\'ontologie seront enregistrées en même temps : les données ne sont jamais ajoutées sans l\'ontologie qui les décrit.</p>' : '');
+		h += '<div class="boutons"><button type="button" class="btn vert" id="accepte">➕ Ajouter au brouillon</button></div>' +
+			'<p class="astuce">Les propositions choisies rejoignent la liste « À enregistrer » de l\'onglet Instance ; elles entrent dans votre copie avec « Enregistrer », en même temps que vos modifications de l\'ontologie.</p>';
 		z.innerHTML = h;
 	}
 	function genere() {
 		var mode = document.querySelector('input[name=mode]:checked').value;
+		if (D.ia.length) { message("<p class='statut ko'>❌ " + D.ia.length + " proposition(s) de l'IA attendent déjà d'être enregistrées : enregistrez-les (ou retirez-les) avant d'en demander d'autres.</p>"); return; }
 		if (mode === 'cible' && !modifies().length) { message("<p class='statut ko'>❌ Aucune modification de l'ontologie à viser : modifiez d'abord un concept ou une propriété, ou choisissez le peuplement général.</p>"); return; }
 		var bouton = $('#generer');
 		bouton.disabled = true;
@@ -596,20 +826,18 @@
 			rendPropositions();
 		});
 	}
+	// Les propositions cochées rejoignent le brouillon ; elles entrent dans la copie à « Enregistrer »
 	function accepte() {
-		var cochees = [].slice.call(document.querySelectorAll('#propositions input[data-p]:checked')).map(function (c) { return c.dataset.p; });
+		var cochees = [].slice.call(document.querySelectorAll('#propositions input[data-p]:checked')).map(function (c) { return String(c.dataset.p); });
 		if (!cochees.length) { toast('Cochez au moins une proposition'); return; }
-		var bouton = $('#accepte'); bouton.disabled = true; enCours = true; rendEtat();
-		appel('ia_ajouter', { jeton: propositions.jeton, indices: cochees.join(','), brouillon64: base64(JSON.stringify(brouillon())) }).then(function (r) {
-			enCours = false;
-			message(r.html);
-			if (!r.ok) { bouton.disabled = false; rendEtat(); return; }
-			(r.sujets || []).forEach(function (s) { iaIris[s] = true; });
-			propositions.liste = propositions.liste.filter(function (p) { return cochees.indexOf(String(p.i)) < 0; });
-			if (r.modele) charge(r.modele);
-			rend(); rendPropositions();
-			chargeInstances().then(function () { toast('✨ ' + cochees.length + ' élément(s) ajouté(s) à l\'instance'); ouvreOnglet('instances'); });
-		});
+		var prises = propositions.liste.filter(function (p) { return cochees.indexOf(String(p.i)) >= 0; });
+		D.iaJeton = propositions.jeton;
+		prises.forEach(function (p) { D.ia.push(p); });
+		propositions.liste = propositions.liste.filter(function (p) { return cochees.indexOf(String(p.i)) < 0; });
+		message('');
+		rend(); rendPropositions();
+		toast('✨ ' + prises.length + ' proposition(s) ajoutée(s) au brouillon : à enregistrer');
+		ouvreOnglet('instances');
 	}
 
 	//--------------------------------------------------------------------------
@@ -622,8 +850,28 @@
 		if (o) { ouvreOnglet(o.dataset.onglet); return; }
 		var ic = e.target.closest('[data-ic]');
 		if (ic) { ouverts[ic.dataset.ic] = !ouverts[ic.dataset.ic]; rendInstances(); return; }
+		var ab = e.target.closest('[data-ab]');
+		if (ab) {
+			var act = ab.dataset.ab, ident = ab.dataset.id;
+			if (act === 'nouvelle') ouvreNouvelle();
+			else if (act === 'edite') ouvreEdition(ident);
+			else if (act === 'nouvelle-edite') { var n = D.nouvelles[+ident]; F = { mode: 'nouvelle', idx: +ident, classe: n.classe, valeurs: JSON.parse(JSON.stringify(n.valeurs)), iriAuto: false, local: n.local }; rendInstances(); }
+			else if (act === 'nouvelle-annule') { D.nouvelles.splice(+ident, 1); rend(); }
+			else if (act === 'modif-annule') { delete D.modifiees[ident]; rend(); }
+			else if (act === 'annule-sup') { delete D.supprimees[ident]; rend(); }
+			else if (act === 'ia-retire') { D.ia = D.ia.filter(function (p) { return String(p.i) !== ident; }); rend(); }
+			return;
+		}
+		var rv = e.target.closest('[data-rm-val]');
+		if (rv && F) { F.valeurs.splice(+rv.dataset.rmVal, 1); rendInstances(); return; }
 		var id = e.target.id;
-		if (id === 'generer') genere();
+		if (id === 'if-ok') valideFormulaire();
+		else if (id === 'if-annule') { F = null; rendInstances(); }
+		else if (id === 'if-suppr') {
+			if (F.entrants && !window.confirm(F.entrants + ' autre(s) ressource(s) font référence à cette instance : ces liens seront supprimés avec elle. Continuer ?')) return;
+			D.supprimees[F.iri] = F.nom; delete D.modifiees[F.iri]; F = null; rend();
+		}
+		else if (id === 'generer') genere();
 		else if (id === 'accepte') accepte();
 		else if (id === 'tout-cocher') document.querySelectorAll('#propositions input[data-p]').forEach(function (c) { c.checked = true; });
 		else if (id === 'add-classe') creeConcept();
@@ -640,6 +888,30 @@
 		else if (id === 's-continuer') $('#dlg-sortie').close();
 		else if (id === 's-abandon') { $('#dlg-sortie').close(); retour(); }
 		else if (id === 's-enreg') { $('#dlg-sortie').close(); enregistre().then(function (ok) { if (ok) retour(); }); }
+	});
+	// Saisies du formulaire d'instance : elles mettent à jour F sans redessiner (le curseur reste en place)
+	document.addEventListener('input', function (e) {
+		if (!F) return;
+		var li = e.target.closest('.if-ligne[data-k]');
+		if (li && e.target.dataset.champ) {
+			var v = F.valeurs[+li.dataset.k]; v[e.target.dataset.champ] = e.target.value;
+			if (F.mode === 'nouvelle' && F.iriAuto && e.target.dataset.champ === 'v') { F.local = proposeLocal(F); var l = $('#if-local'); if (l) l.value = F.local; }
+		} else if (e.target.id === 'if-local') { F.local = e.target.value.trim(); F.iriAuto = false; }
+	});
+	document.addEventListener('change', function (e) {
+		if (!F) return;
+		if (e.target.id === 'if-classe') {
+			var garde = F.valeurs.filter(function (v) { return String(v.v).trim() !== ''; });
+			F.classe = e.target.value;
+			F.valeurs = proprietesPour(F.classe).slice(0, 10).map(function (p) { return valeurVide(p.iri); }).filter(function (v) { return !garde.some(function (g) { return g.p === v.p; }); }).concat(garde);
+			if (F.iriAuto) F.local = proposeLocal(F);
+			rendInstances();
+		} else if (e.target.id === 'if-ajout' && e.target.value) {
+			F.valeurs.push(valeurVide(e.target.value));
+			rendInstances();
+		} else if (e.target.tagName === 'SELECT' && e.target.dataset.champ) {
+			var l2 = e.target.closest('.if-ligne[data-k]'); if (l2) F.valeurs[+l2.dataset.k][e.target.dataset.champ] = e.target.value;
+		}
 	});
 	document.addEventListener('keydown', function (e) {
 		if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.noeud')) { e.preventDefault(); e.target.click(); return; }

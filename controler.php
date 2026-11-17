@@ -1,8 +1,8 @@
 <?php
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
-// ontologie (jeu), ontologie_enregistrer (jeu, brouillon64), instances (jeu),
-// ia_peupler (jeu, mode, quantite, consigne, brouillon64), ia_ajouter (jeu, jeton, indices, brouillon64) :
+// ontologie (jeu), ontologie_enregistrer (jeu, brouillon64 : ontologie, instances, propositions de l'IA), instances (jeu),
+// instance (jeu, iri), ia_peupler (jeu, mode, quantite, consigne, brouillon64) :
 // éditeur d'ontologie (editeur.php), affichage et peuplement par IA des instances (peuplement.php),
 // exercice (jeu, exercice), verifier (jeu, exercice, question, requete64),
 // intention (jeu, exercice, question, intention) : correction par IA si elle est activée
@@ -88,8 +88,8 @@ case 'ontologie_enregistrer':
 	$texte = is_string($brut) ? base64_decode($brut, true) : false;
 	$brouillon = $texte === false ? null : json_decode($texte, true);
 	if (!is_array($brouillon)) reponse(false, "<p class='statut ko'>❌ Brouillon reçu illisible.</p>", 400);
-	list($ok, $h, $modele) = enregistre_ontologie($jeu, $brouillon);
-	echo json_encode(array('ok' => $ok, 'html' => $h, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	list($ok, $h, $modele, $sujets) = enregistre_ontologie($jeu, $brouillon);
+	echo json_encode(array('ok' => $ok, 'html' => $h, 'modele' => $modele, 'sujets' => $sujets), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'instances':
 	list($modele, $erreur) = modele_instances($jeu);
@@ -104,12 +104,10 @@ case 'ia_peupler':
 	if (isset($r['erreur'])) echo json_encode(array('ok' => false, 'html' => "<p class='statut ko'>❌ ".html($r['erreur'])."</p>"), JSON_UNESCAPED_UNICODE);
 	else echo json_encode($r, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
-case 'ia_ajouter':
-	$brouillon = brouillon_recu();
-	if (is_null($brouillon)) reponse(false, "<p class='statut ko'>❌ Brouillon reçu illisible.</p>", 400);
-	$indices = array_filter(explode(',', (string)param('indices')), 'is_numeric');
-	list($ok, $h, $modele, $sujets) = peupl_ajoute($jeu, param('jeton'), $indices, $brouillon);
-	echo json_encode(array('ok' => $ok, 'html' => $h, 'modele' => $modele, 'sujets' => $sujets), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+case 'instance':
+	list($modele, $erreur) = modele_instance($jeu, (string)param('iri'));
+	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
+	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'reinitialiser':
 	reinitialise_jeu($jeu);

@@ -3,7 +3,7 @@
 // SPARQL qui applique les changements faits par l'étudiant (page editeur.php, js/editeur.js).
 //
 // Le modèle ne garde que ce que l'éditeur sait modifier :
-//   classes : iri, nom, label (+ langue), comment (+ langue), parent (une super-classe), n (instances)
+//   classes : iri, nom, label (+ langue), comment (+ langue), parents (super-classes), n (instances)
 //   props   : iri, nom, label (+ langue), domain, range (une seule valeur chacun), decl
 // Les autres déclarations (plusieurs domaines, annotations…) ne sont jamais touchées : la mise à
 // jour n'efface que les triplets que l'éditeur a lus, un par un (DELETE DATA), jamais en bloc,
@@ -91,7 +91,7 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		list($label, $ll) = onto_choisit_litteral($labels[$iri] ?? array());
 		list($comment, $cl_) = onto_choisit_litteral($comments[$iri] ?? array());
 		$sortie['classes'][] = array('iri' => $iri, 'nom' => $nom($iri), 'label' => $label, 'llang' => $ll,
-			'comment' => $comment, 'clang' => $cl_, 'parent' => $p ? $p[0] : '', 'n' => (int)($instances[$iri] ?? 0), 'decl' => $decl);
+			'comment' => $comment, 'clang' => $cl_, 'parents' => $p, 'n' => (int)($instances[$iri] ?? 0), 'decl' => $decl);
 	}
 	ksort($pr);
 	foreach ($pr as $iri => $d) {
@@ -189,11 +189,19 @@ function onto_nettoie_brouillon($b) {
 				if (!onto_langue_valide($l)) return array(null, 'Langue invalide.');
 				$o[$c] = $l;
 			}
-			foreach (array('parent', 'domain', 'range') as $c) {
+			foreach (array('domain', 'range') as $c) {
 				$v = $e[$c] ?? '';
 				if ($v !== '' && !onto_iri_valide($v)) return array(null, 'IRI invalide dans le brouillon.');
 				$o[$c] = (string)$v;
 			}
+			$ps = $e['parents'] ?? array();
+			if (!is_array($ps) || count($ps) > 30) return array(null, 'Trop de super-classes.');
+			$o['parents'] = array();
+			foreach ($ps as $v) {
+				if (!onto_iri_valide($v)) return array(null, 'IRI invalide dans le brouillon.');
+				$o['parents'][$v] = $v;
+			}
+			$o['parents'] = array_values($o['parents']);
 			$sortie[$k][$o['iri']] = $o;
 		}
 		$sup = $b['supprimes'][$k] ?? array();
@@ -206,7 +214,7 @@ function onto_nettoie_brouillon($b) {
 	return array($sortie, null);
 }
 
-// Remplacement d'une valeur à un seul exemplaire (parent, domaine, portée, libellé…) :
+// Remplacement d'une valeur à un seul exemplaire (domaine, portée, libellé…) :
 // ajoute les triplets à retirer dans $moins et ceux à ajouter dans $plus
 function onto_remplace(&$moins, &$plus, $s, $p, $ancien, $nouveau) {
 	if ($ancien === $nouveau) return;
@@ -237,7 +245,7 @@ function onto_mise_a_jour(array $courant, array $b) {
 			$avant = count($moins) + count($plus);
 			if (is_null($o)) { // nouvel élément
 				$plus[] = $s.' '.$type.' '.onto_iri($k === 'classes' ? $RDFS.'Class' : $RDF.'Property').' .';
-				$o = array('label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parent' => '', 'domain' => '', 'range' => '');
+				$o = array('label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parents' => array(), 'domain' => '', 'range' => '');
 				if ($e['label'] !== '' && $e['llang'] === '') $e['llang'] = ONTO_LANGUE_DEFAUT;
 				if ($e['comment'] !== '' && $e['clang'] === '') $e['clang'] = ONTO_LANGUE_DEFAUT;
 			}
@@ -245,7 +253,9 @@ function onto_mise_a_jour(array $courant, array $b) {
 			onto_remplace($moins, $plus, $s, $label, $texte($o['label'], $o['llang']), $texte($e['label'], $e['llang'] !== '' || $o['label'] === '' ? $e['llang'] : $o['llang']));
 			if ($k === 'classes') {
 				onto_remplace($moins, $plus, $s, $comment, $texte($o['comment'], $o['clang']), $texte($e['comment'], $e['clang'] !== '' || $o['comment'] === '' ? $e['clang'] : $o['clang']));
-				onto_remplace($moins, $plus, $s, $sous, $iriSi($o['parent']), $iriSi($e['parent']));
+				// super-classes : on retire celles qui ont disparu, on ajoute les nouvelles (les autres ne bougent pas)
+				foreach (array_diff($o['parents'], $e['parents']) as $v) $moins[] = "$s $sous ".onto_iri($v)." .";
+				foreach (array_diff($e['parents'], $o['parents']) as $v) $plus[] = "$s $sous ".onto_iri($v)." .";
 			} else {
 				onto_remplace($moins, $plus, $s, $domain, $iriSi($o['domain']), $iriSi($e['domain']));
 				onto_remplace($moins, $plus, $s, $range, $iriSi($o['range']), $iriSi($e['range']));
@@ -260,19 +270,35 @@ function onto_mise_a_jour(array $courant, array $b) {
 	return array(implode(" ;\n", $ops), $n);
 }
 
-// Applique le brouillon à la copie de session ; renvoie array(ok, HTML du message, modèle à jour|null)
+// Applique le brouillon (ontologie et instances) à la copie de session, en une seule mise à jour :
+// tout ou rien. Renvoie array(ok, HTML du message, modèle de l'ontologie à jour|null, IRI des instances ajoutées ou modifiées)
 function enregistre_ontologie($jeu, $brouillon) {
+	$ko = function ($m) { return array(false, "<p class='statut ko'>❌ ".html($m)."</p>", null, array()); };
 	list($b, $erreur) = onto_nettoie_brouillon($brouillon);
-	if (is_null($b)) return array(false, "<p class='statut ko'>❌ ".html($erreur)."</p>", null);
+	if (is_null($b)) return $ko($erreur);
+	$prefixes = array_merge(PREFIXES_STANDARD, prefixes_jeu($jeu));
+	list($bi, $erreur) = inst_nettoie($brouillon['instances'] ?? array(), $prefixes);
+	if (is_null($bi)) return $ko($erreur);
 	list($courant, $erreur) = modele_ontologie($jeu);
-	if (is_null($courant)) return array(false, "<p class='statut ko'>❌ ".html($erreur)."</p>", null);
+	if (is_null($courant)) return $ko($erreur);
 	list($maj, $n) = onto_mise_a_jour($courant, $b);
-	if ($maj === '') return array(true, "<p class='statut ok'>Rien à enregistrer : l'ontologie est déjà à jour.</p>", $courant);
-	$r = execute_sparql($jeu, $maj);
-	if (!$r['ok']) return array(false, affiche_resultat($r, array()), null);
+	list($majI, $nb, $erreur, $sujets) = inst_mise_a_jour($jeu, $bi, $prefixes);
+	if (!is_null($erreur)) return $ko($erreur);
+	$tout = implode(" ;\n", array_filter(array($maj, $majI), 'strlen'));
+	if ($tout === '') return array(true, "<p class='statut ok'>Rien à enregistrer : votre copie est déjà à jour.</p>", $courant, array());
+	$r = execute_sparql($jeu, $tout);
+	if (!$r['ok']) return array(false, affiche_resultat($r, array()), null, array());
+	if ($bi['ia'] && isset($_SESSION['peuplement'][$jeu])) { // propositions de l'IA acceptées : retirées de la liste
+		foreach ($bi['ia']['indices'] as $k) unset($_SESSION['peuplement'][$jeu]['propositions'][$k]);
+	}
 	list($nouveau, $erreur) = modele_ontologie($jeu);
-	return array(true, "<p class='statut ok'>✅ $n élément".($n > 1 ? 's' : '')." de l'ontologie enregistré".($n > 1 ? 's' : '').".</p>"
-		.affiche_corps($r, prefixes_jeu($jeu)), $nouveau);
+	$parts = array();
+	if ($n) $parts[] = "$n élément".($n > 1 ? 's' : '')." de l'ontologie";
+	$ajout = $nb['nouvelles'] + $nb['ia'];
+	if ($ajout) $parts[] = "$ajout instance".($ajout > 1 ? 's' : '')." ajoutée".($ajout > 1 ? 's' : '');
+	if ($nb['modifiees']) $parts[] = $nb['modifiees']." instance".($nb['modifiees'] > 1 ? 's' : '')." modifiée".($nb['modifiees'] > 1 ? 's' : '');
+	if ($nb['supprimees']) $parts[] = $nb['supprimees']." instance".($nb['supprimees'] > 1 ? 's' : '')." supprimée".($nb['supprimees'] > 1 ? 's' : '');
+	return array(true, "<p class='statut ok'>✅ Enregistré : ".implode(', ', $parts).".</p>".affiche_corps($r, prefixes_jeu($jeu)), $nouveau, $sujets);
 }
 
 // Ontologie « effective » : le modèle courant avec le brouillon appliqué (éléments ajoutés,
@@ -286,9 +312,9 @@ function onto_applique_brouillon(array $courant, array $b, array $prefixes) {
 		foreach ($b[$k] as $iri => $e) {
 			if (isset($b['supprimes'][$k][$iri])) continue;
 			$o = $m[$iri] ?? ($k === 'classes'
-				? array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parent' => '', 'n' => 0, 'decl' => true)
+				? array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'comment' => '', 'clang' => '', 'parents' => array(), 'n' => 0, 'decl' => true)
 				: array('iri' => $iri, 'nom' => abrege_iri($iri, $prefixes), 'label' => '', 'llang' => '', 'domain' => '', 'range' => ''));
-			foreach (array('label', 'llang', 'comment', 'clang', 'parent', 'domain', 'range') as $c)
+			foreach (array('label', 'llang', 'comment', 'clang', 'parents', 'domain', 'range') as $c)
 				if (array_key_exists($c, $o) && array_key_exists($c, $e)) $o[$c] = $e[$c];
 			$m[$iri] = $o;
 		}
