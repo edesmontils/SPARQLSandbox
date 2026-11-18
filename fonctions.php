@@ -97,7 +97,14 @@ function contenu_xml($element) {
 // nom => [titre, fichiers, référence, description (HTML), exemples [[titre, requête]...]].
 // Un jeu peut avoir plusieurs fichiers (par exemple l'ontologie et les instances), chargés
 // ensemble dans le graphe par défaut.
+// Jeux de données de l'installation : ceux de donnees/ (partagés par tous), puis les jeux vierges personnels de la session
 function liste_jeux() {
+	$jeux = jeux_partages();
+	foreach (jeux_perso() as $id => $jeu) $jeux[$id] = $jeu;
+	return $jeux;
+}
+
+function jeux_partages() {
 	static $jeux = null;
 	if (!is_null($jeux)) return $jeux;
 	$jeux = array();
@@ -134,6 +141,80 @@ function liste_jeux() {
 	return $jeux;
 }
 
+//------------------------------------------------------
+// Jeux vierges personnels : un étudiant crée un jeu de données vide, privé à sa session, pour construire une ontologie
+// de zéro avec l'éditeur ; il le supprime quand il veut. Rien de partagé n'est touché : le jeu n'existe que dans la
+// session (titre) et dans sa copie de travail, et disparaît avec elles.
+//------------------------------------------------------
+
+const JEUX_PERSO_MAX = 5;
+const JEU_PERSO_TITRE_MAX = 60;
+
+function est_jeu_perso($id) { return is_string($id) && isset($_SESSION['jeux_perso'][$id]); }
+
+// Espace de noms du vocabulaire (voc:) et des instances (ex:) d'un jeu vierge personnel
+function jeu_perso_espaces($id) { return array('voc' => 'http://example.org/'.$id.'/vocab#', 'ex' => 'http://example.org/'.$id.'/'); }
+
+// Jeux personnels de la session, au format de jeux_partages()
+function jeux_perso() {
+	$sortie = array();
+	$liste = $_SESSION['jeux_perso'] ?? array();
+	if (!is_array($liste)) return $sortie;
+	foreach ($liste as $id => $j) {
+		if (!is_string($id) || !preg_match('/^perso-[0-9a-f]{8}$/D', $id) || !is_array($j)) continue;
+		$titre = (string)($j['titre'] ?? $id);
+		$sortie[$id] = array(
+			'titre' => $titre, 'fichiers' => array(), 'formes' => array(), 'référence' => '', 'perso' => true,
+			'description' => "<p>Votre jeu de données <strong>vierge</strong> : il ne contient rien. Construisez-y une ontologie avec "
+				."<strong>✏️ Éditer l'ontologie</strong> (concepts, propriétés, instances, axiomes), ou importez un fichier Turtle depuis l'éditeur (« Import / export »).</p>"
+				."<p>Il est <strong>privé à cette session</strong> et disparaît avec elle : exportez-le en Turtle avant de partir. "
+				."Préfixes : <code>voc:</code> pour le vocabulaire, <code>ex:</code> pour les instances.</p>",
+			'exemples' => array(array('Tout le contenu', "SELECT ?s ?p ?o\nWHERE {\n  ?s ?p ?o .\n}\nLIMIT 50")),
+		);
+	}
+	return $sortie;
+}
+
+// Crée un jeu vierge personnel ; renvoie array(ok, identifiant ou message d'erreur)
+function cree_jeu_perso($titre) {
+	if (!isset($_SESSION)) return array(false, 'Session indisponible.');
+	$titre = trim(preg_replace('/[\x00-\x1f\x7f]+/u', ' ', (string)$titre));
+	if ($titre === '' || mb_strlen($titre) > JEU_PERSO_TITRE_MAX || !mb_check_encoding($titre, 'UTF-8'))
+		return array(false, 'Donnez un titre de 1 à '.JEU_PERSO_TITRE_MAX.' caractères.');
+	if (count($_SESSION['jeux_perso'] ?? array()) >= JEUX_PERSO_MAX)
+		return array(false, 'Vous avez déjà '.JEUX_PERSO_MAX.' jeux vierges : supprimez-en un d\'abord.');
+	do { $id = 'perso-'.bin2hex(random_bytes(4)); } while (isset($_SESSION['jeux_perso'][$id]) || isset(jeux_partages()[$id]));
+	$_SESSION['jeux_perso'][$id] = array('titre' => $titre, 'cree' => time());
+	return array(true, $id);
+}
+
+// Supprime un jeu vierge personnel, avec sa copie de travail et tout ce qui s'y rattache ; renvoie array(ok, message)
+function supprime_jeu_perso($id) {
+	if (!est_jeu_perso($id)) return array(false, "Ce jeu n'est pas un de vos jeux vierges : il ne peut pas être supprimé ici.");
+	reinitialise_jeu($id);            // copie de travail, cohérence, préfixes ajoutés
+	unset($_SESSION['jeux_perso'][$id], $_SESSION['peuplement'][$id]);
+	return array(true, 'Jeu supprimé.');
+}
+
+// Store vide, point de départ des jeux vierges (créé une fois pour toutes dans le dossier de travail)
+function store_vide(&$erreur = null) {
+	if (is_null(DOSSIER_TMP)) { $erreur = "Aucun dossier de travail n'est accessible en écriture."; return null; }
+	$dossier = DOSSIER_TMP.'/origine_vide';
+	if (is_dir($dossier)) return $dossier;
+	$v = verrou('origine_vide', 30);
+	if (!is_dir($dossier)) {
+		$tmp = $dossier.'.tmp'.getmypid();
+		supprime_dossier($tmp);
+		$r = lance_oxigraph(array('update', '--location', $tmp), 'INSERT DATA { }');
+		if (!($r['code'] === 0 && is_dir($tmp) && @rename($tmp, $dossier))) {
+			supprime_dossier($tmp);
+			$erreur = "Le jeu vierge n'a pas pu être préparé.";
+		}
+	}
+	libere($v);
+	return is_dir($dossier) ? $dossier : null;
+}
+
 // Texte d'un exemple sans la marge due à l'indentation du XML (l'indentation propre à la
 // requête est gardée)
 function retire_marge($texte) {
@@ -155,6 +236,7 @@ function prefixes_jeu($jeu) {
 }
 
 function prefixes_fichiers($jeu) {
+	if (est_jeu_perso($jeu)) return jeu_perso_espaces($jeu);
 	$jeux = liste_jeux();
 	if (!isset($jeux[$jeu])) return array();
 	$texte = '';
@@ -473,6 +555,7 @@ function libere($h) {
 function store_origine($jeu, &$erreur = null) {
 	$jeux = liste_jeux();
 	if (!isset($jeux[$jeu]) || is_null(DOSSIER_TMP)) { $erreur = "Jeu de données inconnu."; return null; }
+	if (!empty($jeux[$jeu]['perso'])) return store_vide($erreur);
 	$fichiers = $jeux[$jeu]['fichiers'];
 	$empreinte = '';
 	foreach ($fichiers as $f) $empreinte .= basename($f).':'.sha1_file($f)."\n";

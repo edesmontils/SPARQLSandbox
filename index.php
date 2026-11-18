@@ -66,6 +66,7 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
   <script type="application/json" id="donnees"><?php echo json_encode($donnees_js, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?></script>
   <script src="<?php echo url_fichier('js/disposition.js'); ?>" defer></script>
   <script src="<?php echo url_fichier('js/vocabulaire.js'); ?>" defer></script>
+  <script src="<?php echo url_fichier('js/jeux.js'); ?>" defer></script>
   <script src="<?php echo url_fichier('js/sandbox.js'); ?>" defer></script>
 </head>
 <body>
@@ -83,8 +84,9 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
   <span class="libelle">Jeux de données :</span>
   <ul class="pastilles">
 <?php foreach ($jeux as $nom => $j) { ?>
-    <li><a class="pastille<?php echo $nom === $jeu ? ' active' : ''; ?>" href="?jeu=<?php echo html(urlencode($nom)); ?>"<?php echo $nom === $jeu ? ' aria-current="page"' : ''; ?>><?php echo html($j['titre']); ?></a></li>
+    <li><a class="pastille<?php echo $nom === $jeu ? ' active' : ''; ?>" href="?jeu=<?php echo html(urlencode($nom)); ?>"<?php echo $nom === $jeu ? ' aria-current="page"' : ''; ?>><?php echo !empty($j['perso']) ? '👤 ' : ''; echo html($j['titre']); ?></a></li>
 <?php } ?>
+    <li><button type="button" class="pastille" id="nouveau-jeu" title="Créer un jeu de données vierge, privé à cette session, pour construire une ontologie de zéro">＋ Mon jeu vierge</button></li>
   </ul>
 </nav>
 <main id="contenu">
@@ -99,6 +101,10 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
 <?php if ($j['référence'] !== '') { ?>
       <p class="astuce">Référence : <a href="<?php echo html($j['référence']); ?>" rel="noopener" target="_blank"><?php echo html($j['référence']); ?></a></p>
 <?php } ?>
+<?php if (!empty($j['perso'])) { ?>
+      <p class="boutons"><a class="btn petit" href="editeur.php?jeu=<?php echo html(urlencode($jeu)); ?>">✏️ Construire l'ontologie</a>
+        <button type="button" class="btn danger petit" id="supprimer-jeu" data-titre="<?php echo html($j['titre']); ?>">🗑️ Supprimer ce jeu</button></p>
+<?php } ?>
     </div>
   </section>
 
@@ -108,10 +114,7 @@ $exercices = is_null($jeu) ? array() : exos_de_jeu($jeu);
       <summary class="title">🗺️ Vocabulaire de votre copie</summary>
       <p class="astuce">Classes (avec leurs attributs), sous-classes et propriétés entre classes ; les nombres sont ceux de vos données.
         Cliquez sur une classe ou une propriété pour voir ses instances ou ses triplets.</p>
-      <p class="boutons hors-exercice" style="margin:0 0 8px"><a class="btn secondaire petit" href="editeur.php?jeu=<?php echo html(urlencode($jeu)); ?>" title="Ajouter, modifier ou supprimer des concepts et des propriétés dans votre copie">✏️ Éditer l'ontologie</a>
-        <a class="btn secondaire petit" href="export.php?jeu=<?php echo html(urlencode($jeu)); ?>" download title="Télécharger votre copie (ontologie et instances) au format Turtle">⬇️ Exporter en Turtle</a>
-        <a class="btn secondaire petit" href="export.php?jeu=<?php echo html(urlencode($jeu)); ?>&amp;partie=ontologie" download title="Télécharger seulement l'ontologie (classes, propriétés) en Turtle">⬇️ Ontologie</a>
-        <a class="btn secondaire petit" href="export.php?jeu=<?php echo html(urlencode($jeu)); ?>&amp;partie=instances" download title="Télécharger seulement les instances en Turtle">⬇️ Instances</a></p>
+      <p class="boutons hors-exercice" style="margin:0 0 8px"><a class="btn secondaire petit" href="editeur.php?jeu=<?php echo html(urlencode($jeu)); ?>" title="Ajouter, modifier ou supprimer des concepts et des propriétés dans votre copie">✏️ Éditer l'ontologie</a></p>
       <p class="legende-vocabulaire">
         <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-obs"/></svg> observé dans les données</span>
         <span><svg width="38" height="10" aria-hidden="true"><line x1="0" y1="5" x2="38" y2="5" class="voc-trait voc-decl"/></svg> déclaré, jamais observé</span>

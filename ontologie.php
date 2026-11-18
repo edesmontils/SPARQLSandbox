@@ -110,14 +110,14 @@ function onto_choisit_litteral(array $valeurs) {
 }
 
 // Espace de noms des nouveaux éléments : le plus fréquent parmi les classes et propriétés déclarées
-function onto_espace(array $iris) {
+function onto_espace(array $iris, $defaut = ONTO_ESPACE_DEFAUT) {
 	$n = array();
 	foreach ($iris as $iri) {
 		if (voc_est_meta($iri) || voc_est_litteral($iri)) continue;
 		$p = max((int)strrpos($iri, '#'), (int)strrpos($iri, '/'));
 		if ($p > 0) { $e = substr($iri, 0, $p + 1); $n[$e] = ($n[$e] ?? 0) + 1; }
 	}
-	if (!$n) return ONTO_ESPACE_DEFAUT;
+	if (!$n) return $defaut;
 	arsort($n);
 	return array_key_first($n);
 }
@@ -214,7 +214,7 @@ function construit_modele_ontologie(array $classes, array $parents, array $props
 		$sortie['props'][] = $e;
 	}
 	foreach (onto_types() as $t) $sortie['types'][] = array('iri' => $t, 'nom' => $nom($t));
-	$sortie['espace'] = onto_espace(array_merge(array_keys($cl), array_keys($pr)));
+	$sortie['espace'] = onto_espace(array_merge(array_keys($cl), array_keys($pr)), $prefixes['voc'] ?? ONTO_ESPACE_DEFAUT);   // jeu vierge : son espace voc:
 	$sortie['prefixes'] = $prefixes;   // pour abréger et résoudre les identifiants saisis dans l'éditeur
 	$sortie['meta'] = onto_meta();
 	return $sortie;

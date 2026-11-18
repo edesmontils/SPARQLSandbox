@@ -2,17 +2,10 @@
 
 Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
 
-- **Créer et supprimer un jeu de données** : créer un jeu vierge (nom, titre, description ; fichiers `ontologie.ttl` et
-  d'instances vides, `config.xml`, formes facultatives) et en supprimer un (avec confirmation). À décider :
-  - **où** : dans l'application web (réservé à l'enseignant : il faudrait une authentification, et les droits d'écriture
-    sur `donnees/`, aujourd'hui en lecture seule côté serveur) ou dans l'application d'administration de bureau
-    (`admin/sparqlsandbox_admin/jeux.py`, `page_jeux.py`) qui gère déjà les jeux ;
-  - **sécurité** : nom de dossier validé (`^[a-z0-9][a-z0-9_-]*$`, comme `liste_jeux()`), jamais de chemin saisi ;
-  - **effets d'une suppression** : copies de session en cours, exercices du jeu (`donnees/exercices/`), suivi gardé dans
-    le navigateur des étudiants, cache de `liste_jeux()`, jeu choisi dans l'URL ;
-  - **jeu vierge** : un jeu sans instance ni ontologie doit s'ouvrir sans erreur (diagramme vide, éditeur utilisable
-    pour tout construire), avec un exemple de requête minimal ;
-  - **déploiement** : le dossier créé vit-il dans le dépôt git (jeu partagé) ou à côté (jeu local d'une installation) ?
+- **Créer et supprimer un jeu de données** : *fait pour les jeux vierges personnels* (bouton « ＋ Mon jeu vierge » : jeu
+  privé à la session, 5 au plus, ontologie à construire dans l'éditeur, suppression avec confirmation ; exportez avant de
+  partir). Reste : créer/supprimer un jeu **partagé** (aujourd'hui via l'application d'administration de bureau,
+  `admin/sparqlsandbox_admin/jeux.py`), ce qui demanderait une authentification côté web.
 - **Exercices** : synchroniser le catalogue d'une instance QueryCraft (`exos_source`), comme
   SQLSandbox, quand QueryCraft gérera des jeux RDF ; comparer les graphes de `CONSTRUCT` à
   l'isomorphisme près (aujourd'hui, tous les nœuds anonymes sont tenus pour égaux) ; vérifier

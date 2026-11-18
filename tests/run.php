@@ -549,6 +549,38 @@ verifie($refus('inst.ttl', "@prefix a: <http://e/> .\na:x a:p 1 .\n", 'ttl', 'on
 verifie(!glob(DOSSIER_TMP.'/import_*') , 'import : aucun fichier temporaire ne reste');
 reinitialise_jeu('cinema');
 
+// Jeux vierges personnels : créés et supprimés par l'étudiant, privés à sa session
+$_SESSION['jeux_perso'] = array();
+verifie(!cree_jeu_perso('')[0] && !cree_jeu_perso(str_repeat('x', JEU_PERSO_TITRE_MAX + 1))[0] && !cree_jeu_perso("  \n\t ")[0], 'jeu vierge : titre vide ou trop long refusé');
+list($ok, $vierge) = cree_jeu_perso("  Ma <b>météo</b>\n");
+$jv = liste_jeux();
+verifie($ok && preg_match('/^perso-[0-9a-f]{8}$/D', $vierge) && isset($jv[$vierge]) && $jv[$vierge]['titre'] === 'Ma <b>météo</b>' && $jv[$vierge]['perso'] === true && isset($jv['cinema']), 'jeu vierge : créé, titre nettoyé, listé avec les jeux partagés');
+verifie(!isset(jeux_partages()[$vierge]) && est_jeu_perso($vierge) && !est_jeu_perso('cinema'), 'jeu vierge : absent des jeux partagés');
+$copie_v = store_copie($vierge, $erreur);
+verifie(!is_null($copie_v) && compte_triplets($copie_v) === 0, 'jeu vierge : copie de travail vide ('.$erreur.')');
+list($mv, $err) = modele_ontologie($vierge);
+verifie(!is_null($mv) && !$mv['classes'] && !$mv['props'] && $mv['espace'] === 'http://example.org/'.$vierge.'/vocab#' && ($mv['prefixes']['voc'] ?? '') === $mv['espace'] && ($mv['prefixes']['ex'] ?? '') === 'http://example.org/'.$vierge.'/', 'jeu vierge : ontologie vide, espaces voc: et ex: propres au jeu');
+list($miv, ) = modele_instances($vierge);
+verifie(!$miv['classes'] && $miv['espace'] === 'http://example.org/'.$vierge.'/', 'jeu vierge : aucune instance, espace ex: proposé');
+$espv = $mv['espace'];
+list($ok, $h, $m2, ) = enregistre_ontologie($vierge, array('classes' => array(array('iri' => $espv.'Station', 'label' => 'Station', 'llang' => 'fr', 'comment' => '', 'clang' => '', 'parents' => array(), 'equiv' => array(), 'disjoint' => array(), 'voir' => array(), 'defini' => array())),
+	'props' => array(), 'supprimes' => array('classes' => array(), 'props' => array()), 'instances' => array('nouvelles' => array(array('iri' => 'http://example.org/'.$vierge.'/brest', 'classe' => $espv.'Station', 'valeurs' => array(array('p' => 'http://www.w3.org/2000/01/rdf-schema#label', 'k' => 'lit', 'v' => 'Brest', 'dt' => '', 'l' => 'fr')))))));
+verifie($ok && count($m2['classes']) == 1 && $m2['classes'][0]['nom'] === 'voc:Station' && $m2['classes'][0]['n'] == 1, 'jeu vierge : on y construit une ontologie et des instances ('.strip_tags($h).')');
+verifie(compte_triplets(store_copie('cinema')) > 200 && compte_triplets(store_copie($vierge)) > 0, 'jeu vierge : le jeu partagé n\'est pas touché');
+list($ok2, $v2) = cree_jeu_perso('Deuxième');
+verifie($ok2 && $v2 !== $vierge && count(jeux_perso()) == 2 && compte_triplets(store_copie($v2)) === 0, 'jeu vierge : un second jeu est indépendant du premier');
+for ($k = count($_SESSION['jeux_perso']); $k < JEUX_PERSO_MAX; $k++) cree_jeu_perso('Jeu '.$k);
+verifie(!cree_jeu_perso('Un de trop')[0] && count($_SESSION['jeux_perso']) == JEUX_PERSO_MAX, 'jeu vierge : nombre limité');
+reinitialise_jeu($vierge);
+verifie(compte_triplets(store_copie($vierge)) === 0, 'jeu vierge : « revenir au jeu d\'origine » le vide');
+verifie(!supprime_jeu_perso('cinema')[0] && !supprime_jeu_perso('perso-00000000')[0] && isset(liste_jeux()['cinema']), 'jeu vierge : un jeu partagé ou inconnu ne se supprime pas');
+$dossier_v = $_SESSION['copies'][$vierge];
+list($ok, ) = supprime_jeu_perso($vierge);
+verifie($ok && !isset(liste_jeux()[$vierge]) && !is_dir($dossier_v) && !isset($_SESSION['copies'][$vierge]) && !isset($_SESSION['jeux_perso'][$vierge]), 'jeu vierge : supprimé avec sa copie de travail');
+verifie(isset(liste_jeux()[$v2]) && count(jeux_perso()) == JEUX_PERSO_MAX - 1, 'jeu vierge : les autres jeux personnels restent');
+foreach (array_keys($_SESSION['jeux_perso']) as $id) supprime_jeu_perso($id);
+verifie(!$_SESSION['jeux_perso'] && !jeux_perso(), 'jeu vierge : tous supprimés');
+
 // Contrôle de cohérence du brouillon : rien n'est écrit, le rapport est celui du panneau « Cohérence » plus les modifications
 reinitialise_jeu('cinema');
 list($mo, ) = modele_ontologie('cinema');

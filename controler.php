@@ -1,6 +1,7 @@
 <?php
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
+// jeu_creer (titre) : crée un jeu vierge personnel ; jeu_supprimer (jeu) : le supprime,
 // ontologie (jeu), ontologie_enregistrer (jeu, brouillon64 : ontologie, instances, propositions de l'IA), instances (jeu),
 // importer (jeu, fichier, partie, mode, simuler) : import d'un fichier Turtle dans la copie (import.php),
 // controle (jeu, brouillon64) : cohérence de la copie avec le brouillon, sans rien écrire,
@@ -41,6 +42,12 @@ if (!jeton_valide())
 	reponse(false, "<p class='statut ko'>❌ Session expirée (plus de ".libelle_duree(DUREE_SESSION)." d'inactivité, "
 		."ou application ouverte dans un autre onglet) : rechargez la page pour continuer.</p>", 403);
 
+// Créer un jeu vierge personnel n'a pas besoin de jeu existant
+if (param('action') === 'jeu_creer') {
+	list($ok, $r) = cree_jeu_perso(param('titre'));
+	echo json_encode($ok ? array('ok' => true, 'jeu' => $r) : array('ok' => false, 'html' => "<p class='statut ko'>❌ ".html($r)."</p>"), JSON_UNESCAPED_UNICODE);
+	exit;
+}
 $jeux = liste_jeux();
 $jeu = param('jeu');
 if (!is_string($jeu) || !isset($jeux[$jeu])) reponse(false, "<p class='statut ko'>❌ Jeu de données inconnu.</p>", 400);
@@ -155,6 +162,9 @@ case 'prefixe_retirer':
 	list($ok, $m) = retire_prefixe($jeu, (string)param('prefixe'));
 	echo json_encode(array('ok' => $ok, 'message' => $m, 'prefixes' => liste_prefixes($jeu)), JSON_UNESCAPED_UNICODE);
 	exit;
+case 'jeu_supprimer':
+	list($ok, $m) = supprime_jeu_perso($jeu);
+	reponse($ok, "<p class='statut ".($ok ? 'ok' : 'ko')."'>".($ok ? '✅ ' : '❌ ').html($m)."</p>", $ok ? 200 : 400);
 case 'reinitialiser':
 	reinitialise_jeu($jeu);
 	reponse(true, "<p class='statut ok'>↩️ Votre copie a été remise dans l'état d'origine.</p>");

@@ -93,7 +93,7 @@ function construit_modele_instances(array $lignes, array $nombres, array $proven
 		$total = max($n[$c] ?? 0, count($liste));
 		$sortie['classes'][] = array('iri' => $c, 'nom' => abrege_iri($c, $prefixes), 'n' => $total, 'plus' => $total - count($liste), 'items' => $liste);
 	}
-	$sortie['espace'] = $iris ? onto_espace($iris) : '';
+	$sortie['espace'] = $iris ? onto_espace($iris) : ($prefixes['ex'] ?? '');   // sans instance : l'espace ex: du jeu, s'il en a un
 	return $sortie;
 }
 
