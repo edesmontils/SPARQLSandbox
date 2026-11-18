@@ -87,7 +87,8 @@ function charge_config() {
 
 // Contenu HTML d'un élément XML (sans la balise elle-même)
 function contenu_xml($element) {
-	if (is_null($element)) return '';
+	// un élément absent donne un SimpleXMLElement vide (count() = 0 et pas de nœud DOM) : pas de description
+	if (is_null($element) || !isset($element[0])) return '';
 	$h = '';
 	foreach (dom_import_simplexml($element)->childNodes as $n) $h .= $n->ownerDocument->saveXML($n);
 	return trim($h);

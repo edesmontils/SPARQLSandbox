@@ -34,6 +34,8 @@ if (is_null(chemin_oxigraph())) { echo "Oxigraph est nécessaire aux tests.\n"; 
 //------------------------------------------------------------
 verifie(libelle_duree(3 * 3600) === '3 heures', 'durée : 3 heures');
 verifie(libelle_duree(3600) === '1 heure', 'durée : 1 heure');
+$x_sans = simplexml_load_string('<jeu><titre>a</titre></jeu>');
+verifie(contenu_xml($x_sans->description) === '', 'config.xml sans <description> (jeu créé par l\'admin) : pas de plantage');
 verifie(libelle_duree(5400) === '1 heure 30', 'durée : 1 heure 30');
 verifie(libelle_duree(45 * 60) === '45 minutes', 'durée : 45 minutes');
 verifie(libelle_duree(60) === '1 minute', 'durée : 1 minute');
