@@ -56,6 +56,29 @@ class FenetreTest(unittest.TestCase):
         maint = self.f.pages[5][1]
         self.assertTrue(attend(lambda: maint.resultats.count() >= 5))
 
+    def test_nouveau_jeu(self):
+        """Régression : « Nouveau jeu… » n'ajoutait rien (d.Accepted sur une instance, erreur silencieuse)."""
+        from PySide6.QtWidgets import QDialog
+        from sparqlsandbox_admin.ui import dialogues, page_jeux
+        jeux = self.f.pages[0][1]
+        self.assertTrue(attend(lambda: jeux.liste.count() == 2))
+        ttl = self.tmp / "x.ttl"
+        ttl.write_text("@prefix ex: <http://e/> . ex:a ex:b ex:c .")
+
+        class Dlg(dialogues.DialogueNouveauJeu):
+            def exec(self):
+                self.nom.setText("nouveau")
+                self.titre.setText("Nouveau")
+                self.ontologie.champ.setText(str(ttl))
+                return QDialog.Accepted
+
+        ancien = page_jeux.DialogueNouveauJeu
+        page_jeux.DialogueNouveauJeu = Dlg
+        self.addCleanup(setattr, page_jeux, "DialogueNouveauJeu", ancien)
+        jeux.nouveau()
+        self.assertTrue(attend(lambda: jeux.liste.count() == 3))
+        self.assertTrue((self.tmp / "site/donnees/nouveau/config.xml").exists())
+
     def test_barre_de_modifications(self):
         jeux = self.f.pages[0][1]
         self.assertTrue(attend(lambda: jeux.liste.count() == 2))

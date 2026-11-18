@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtWidgets import (QAbstractItemView, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPlainTextEdit,
                                QSplitter, QStackedWidget, QTabWidget, QTableWidget, QTableWidgetItem,
                                QTextBrowser, QVBoxLayout, QWidget)
@@ -415,7 +415,7 @@ class PageJeux(PageBase):
         if self.ctx.profil is None:
             return self.ctx.erreur("Ajoutez d'abord une machine.")
         d = DialogueNouveauJeu(self)
-        if d.exec() != d.Accepted:
+        if d.exec() != QDialog.Accepted:
             return
         try:
             jeu, fichiers = d.resultat()
