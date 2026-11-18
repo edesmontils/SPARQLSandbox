@@ -45,6 +45,23 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   (la disposition en couches est simple, sans minimisation des croisements), propriétés
   `owl:inverseOf` et restrictions OWL, export du diagramme en SVG ou PNG, zoom.
 
+## Suites des sessions de contrôle (import, cohérence, administration)
+
+À traiter en priorité : elles prolongent des défauts rencontrés avec `em-all.ttl`.
+
+- **Chargement `--file` et nœuds anonymes** : `fonctions.php` (`store_origine`) charge les fichiers des jeux partagés avec
+  `oxigraph load --file`, qui peut séparer les triplets d'un même nœud anonyme dans un `.nt` (corrigé pour l'import, qui passe
+  par l'entrée standard). Faire de même pour les jeux, ou signaler que leurs fichiers doivent être en Turtle.
+- **Message de portée** : « un nœud anonyme : un nœud anonyme n'est pas de type … » (`controles_rdfs`, `coherence.php`) répète
+  la même chose et ne dit pas comment corriger. Reformuler : objet de quel triplet, portée attendue, « ajoutez `a …` ».
+- **Règle de typage** : décider si une ressource sans aucun type doit être signalée par rapport à une portée ou à un domaine
+  (contrôle strict, voulu pour apprendre à typer) ou tolérée comme en RDFS (le type est déduit) ; au moins un réglage par jeu.
+- **Anomalies répétées** : une seule cause (ex. `em:Parcout` pour `em:Parcourt`) donne des dizaines de lignes et la liste est
+  tronquée à 100 ; regrouper par propriété et par cause, avec le nombre d'occurrences et quelques exemples.
+- **README** : il ne décrit toujours pas l'éditeur, le peuplement par IA, les préfixes, les axiomes, SHACL, « Contrôler », la
+  provenance, l'import et l'export, ni les jeux vierges personnels.
+- **Nettoyage** : dossier `maquettes/` (maquettes de l'éditeur, devenues inutiles).
+
 ## Retours utilisateurs (TODO-list)
 
 Tâches relevées lors d'une session de test, par priorité décroissante. Les identifiants (T1…T14)
