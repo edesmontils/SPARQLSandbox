@@ -573,6 +573,15 @@ verifie($refus('inst.ttl', "@prefix a: <http://e/> .\na:x a:p 1 .\n", 'ttl', 'on
 verifie(!glob(DOSSIER_TMP.'/import_*') , 'import : aucun fichier temporaire ne reste');
 reinitialise_jeu('cinema');
 
+// Import d'un fichier à nombreux nœuds anonymes typés : le type ne doit pas se perdre (régression « load --file » d'un .nt)
+$bn = '@prefix : <http://b.example/> . @prefix owl: <http://www.w3.org/2002/07/owl#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .'."\n"
+	.':R a owl:Class . :Etape a owl:Class . :n a owl:DatatypeProperty . :passe a owl:ObjectProperty ; rdfs:domain :R ; rdfs:range :Etape .'."\n";
+for ($i = 0; $i < 1500; $i++) $bn .= ":r$i a :R ; :passe [ a :Etape ; :n $i ] .\n";
+list($okb, $vb) = cree_jeu_perso('Anonymes');
+list($ok, $h, $fait) = import_turtle($vb, $ecrit('bn.ttl', $bn), 'ttl', 'tout', 'fusionner', false);
+verifie($ok && $fait && strpos($h, 'Aucune incohérence') !== false, 'import : nœuds anonymes typés conservés ('.strip_tags($h).')');
+supprime_jeu_perso($vb);
+
 // Jeux vierges personnels : créés et supprimés par l'étudiant, privés à sa session
 $_SESSION['jeux_perso'] = array();
 verifie(!cree_jeu_perso('')[0] && !cree_jeu_perso(str_repeat('x', JEU_PERSO_TITRE_MAX + 1))[0] && !cree_jeu_perso("  \n\t ")[0], 'jeu vierge : titre vide ou trop long refusé');

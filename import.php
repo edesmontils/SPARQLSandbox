@@ -88,7 +88,8 @@ function import_turtle($jeu, $fichier, $extension, $partie, $mode, $simuler) {
 	try {
 		if (!@copy($fichier, $source)) return $ko('Le fichier n\'a pas pu être préparé.');
 		// 1. lecture : le fichier est chargé dans un store jetable, ce qui le valide
-		$r = lance_oxigraph(array('load', '--location', $lu, '--file', $source), '', IMPORT_DELAI);
+		// (par l'entrée standard : « load --file » charge un .nt en parallèle et sépare les triplets d'un même nœud anonyme)
+		$r = lance_oxigraph(array('load', '--location', $lu, '--format', $extension), $texte, IMPORT_DELAI);
 		if ($r['delai']) return $ko('La lecture du fichier a pris trop de temps.');
 		if ($r['code'] !== 0) return $ko('Fichier refusé : '.import_message_erreur($r['erreur']));
 		$n_fichier = compte_triplets($lu);
@@ -98,7 +99,7 @@ function import_turtle($jeu, $fichier, $extension, $partie, $mode, $simuler) {
 		// 2. la partie voulue, extraite en N-Triples
 		$r = lance_oxigraph(array('query', '--location', $lu, '--results-format', 'nt'), import_extrait($partie), IMPORT_DELAI);
 		if ($r['code'] !== 0 || $r['trop'] || $r['delai']) return $ko('La partie à importer n\'a pas pu être extraite du fichier.');
-		file_put_contents($part, $r['sortie']);
+		$sortie_part = $r['sortie'];
 		$n_part = substr_count($r['sortie'], "\n");
 		if ($n_part == 0) return $ko('Le fichier ne contient rien de cette partie ('.($partie === 'ontologie' ? "pas de déclaration de concept ni de propriété" : 'pas d\'instance').').');
 		// 3. copie jetable de la copie : effacement éventuel, puis chargement
@@ -109,7 +110,7 @@ function import_turtle($jeu, $fichier, $extension, $partie, $mode, $simuler) {
 			$r = lance_oxigraph(array('update', '--location', $jetable), import_efface($partie), IMPORT_DELAI);
 			if ($r['code'] !== 0) return $ko('Remplacement impossible : '.message_oxigraph($r['erreur']));
 		}
-		$r = lance_oxigraph(array('load', '--location', $jetable, '--file', $part), '', IMPORT_DELAI);
+		$r = lance_oxigraph(array('load', '--location', $jetable, '--format', 'nt'), $sortie_part, IMPORT_DELAI);
 		if ($r['code'] !== 0) return $ko('Import impossible : '.message_oxigraph($r['erreur']));
 		$apres_n = compte_triplets($jetable);
 		if (taille_dossier($jetable) > TAILLE_MAX_COPIE) return $ko('Cet import ferait dépasser '.round(TAILLE_MAX_COPIE / 1048576).' Mo à votre copie : il n\'a pas été fait.');
