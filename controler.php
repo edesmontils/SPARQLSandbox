@@ -2,6 +2,7 @@
 // Actions appelées par le JavaScript (POST, réponse JSON) :
 // executer (jeu, requete64), explorer (jeu), vocabulaire (jeu), reinitialiser (jeu),
 // ontologie (jeu), ontologie_enregistrer (jeu, brouillon64 : ontologie, instances, propositions de l'IA), instances (jeu),
+// importer (jeu, fichier, partie, mode, simuler) : import d'un fichier Turtle dans la copie (import.php),
 // controle (jeu, brouillon64) : cohérence de la copie avec le brouillon, sans rien écrire,
 // formes (jeu, brouillon64) : formes SHACL de l'ontologie et du jeu,
 // prefixes (jeu), prefixe_ajouter (jeu, prefixe, iri), prefixe_retirer (jeu, prefixe) : préfixes de la copie,
@@ -15,6 +16,7 @@ require_once __DIR__.'/fonctions.php';
 require_once __DIR__.'/exercices.php';
 require_once __DIR__.'/ia.php';
 require_once __DIR__.'/peuplement.php';
+require_once __DIR__.'/import.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -111,6 +113,15 @@ case 'instance':
 	list($modele, $erreur) = modele_instance($jeu, (string)param('iri'), (string)param('anon'));
 	if (is_null($modele)) reponse(false, "<p class='statut ko'>❌ ".html($erreur)."</p>");
 	echo json_encode(array('ok' => true, 'modele' => $modele), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+	exit;
+case 'importer':
+	// fichier Turtle (ou N-Triples) téléversé : import_turtle() le valide, l'essaie sur une copie jetable et ne remplace la copie qu'à la fin
+	$f = $_FILES['fichier'] ?? null;
+	$erreurs_envoi = array(UPLOAD_ERR_INI_SIZE => 'Le fichier est trop gros.', UPLOAD_ERR_FORM_SIZE => 'Le fichier est trop gros.', UPLOAD_ERR_PARTIAL => "Le fichier n'est pas arrivé en entier : recommencez.", UPLOAD_ERR_NO_FILE => 'Choisissez un fichier.');
+	if (!is_array($f) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)($f['tmp_name'] ?? '')))
+		reponse(false, "<p class='statut ko'>❌ ".html($erreurs_envoi[$f['error'] ?? UPLOAD_ERR_NO_FILE] ?? "Le fichier n'a pas pu être reçu.")."</p>", 400);
+	list($ok, $h, $importe) = import_turtle($jeu, $f['tmp_name'], strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION)), (string)param('partie'), (string)param('mode'), param('simuler') === '1');
+	echo json_encode(array('ok' => $ok, 'html' => $h, 'importe' => $importe), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 case 'controle':
 	$brouillon = brouillon_recu();

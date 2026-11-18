@@ -600,3 +600,12 @@ body.exercice-actif .hors-exercice { display: none !important; }
 .inst-rel { margin: 2px 0 8px; padding: 6px 10px; border-left: 3px solid var(--sb-accent-2); background: var(--sb-surface-2); border-radius: 0 var(--sb-radius-sm) var(--sb-radius-sm) 0; font-size: .86em; color: var(--sb-ink-soft); }
 .inst-rel > strong { display: block; margin-bottom: 2px; }
 
+/* Éditeur : import et export Turtle */
+#dlg-import { max-width: 780px; }
+#dlg-import h2 { margin-top: 0; }
+#dlg-import h3 { margin: 14px 0 6px; font-size: 1em; }
+.imp-champs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: start; }
+.imp-champs .imp-t, .imp-champs > label { font-weight: 600; color: var(--sb-ink-soft); padding-top: 2px; }
+.imp-champs label { cursor: pointer; }
+.imp-champs > div label { display: inline-block; margin-right: 14px; font-weight: 400; color: var(--sb-ink); }
+

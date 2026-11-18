@@ -32,15 +32,14 @@ Pistes pour rapprocher SPARQLSandbox de SQLSandbox, par ordre d'intérêt :
   `owl:inverseOf`), traduction d'un sous-ensemble de SHACL en SPARQL pour se passer de pyshacl
   sur un hébergement sans Python, et choix par jeu entre avertir et refuser une mise à jour
   incohérente.
-- **Import et export en Turtle** : l'export de la copie, de l'ontologie seule ou des instances seules existe
-  (`export.php`, boutons sous le diagramme du vocabulaire). À faire :
-  - **import** d'un fichier Turtle (téléversement) dans la copie, pour l'ontologie, les instances ou les deux,
-    avec choix entre fusionner et remplacer (`LOAD` reste interdit : le fichier est lu par Oxigraph à l'arrivée) ;
-    limites de taille et de nombre de triplets, rejet d'un fichier mal formé avec la ligne en cause, copie intacte
-    en cas d'échec, `@prefix` du fichier proposés comme préfixes ajoutés, cohérence recalculée après l'import ;
-  - **boutons dans l'éditeur** (importer, exporter) et reprise du brouillon d'ontologie après un import ;
-  - **export** avec les préfixes ajoutés par l'étudiant, d'un résultat de requête (CSV, Turtle) et d'autres
-    sérialisations (N-Triples, RDF/XML, JSON-LD).
+- **Import et export en Turtle** (import fait : `import.php`, bouton « 🔁 Import / export » de l'éditeur) : un fichier
+  Turtle (`.ttl`) ou N-Triples (`.nt`), 1 Mo et 20 000 triplets au plus, est validé par Oxigraph (ligne et colonne en cas
+  d'erreur), puis sa partie « ontologie », « instances » ou « tout » est versée par fusion ou remplacement dans une copie
+  jetable qui passe les contrôles de cohérence ; la copie de l'étudiant n'est remplacée qu'à la fin, et une simulation
+  (« Analyser ») ne change rien. Les `@prefix` du fichier sont ajoutés aux préfixes de la copie. Reste :
+  - import depuis la page principale (aujourd'hui seulement dans l'éditeur), et d'autres formats (TriG, RDF/XML, JSON-LD) ;
+  - **export** d'un résultat de requête (CSV, Turtle) et d'autres sérialisations (N-Triples, RDF/XML, JSON-LD) ;
+  - jeu d'origine à rétablir après un import raté de l'ontologie : le bouton « Revenir au jeu d'origine » existe déjà.
 - **Préfixes** (fait) : l'étudiant ajoute à sa copie un vocabulaire standard (catalogue de `PREFIXES_CATALOGUE`) ou un préfixe métier,
   gardé en session ; piste : l'exporter avec le Turtle de la copie, ou le garder avec les mémoires de requêtes.
 - **Éditeur d'ontologie** (fait : `editeur.php`, `js/editeur.js`, `js/disposition.js`, `ontologie.php`,

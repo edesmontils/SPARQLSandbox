@@ -12,6 +12,7 @@ require __DIR__.'/../fonctions.php';
 require __DIR__.'/../exercices.php';
 require __DIR__.'/../ia.php';
 require __DIR__.'/../peuplement.php';
+require __DIR__.'/../import.php';
 require __DIR__.'/../federation.php';
 $_SESSION = array();
 
@@ -500,6 +501,52 @@ if ($avecShacl) {
 // la propriété supprimée emporte sa cardinalité
 list($ok, , , ) = enregistre_ontologie('cinema', array('classes' => array(), 'props' => array(), 'supprimes' => array('classes' => array(), 'props' => array($esp.'duree'))));
 verifie($ok && !$q('ASK { GRAPH <'.ONTO_GRAPHE_CONTRAINTES.'> { <'.$esp.'duree> ?c ?n } }'), 'formes dérivées : la propriété supprimée emporte sa cardinalité');
+reinitialise_jeu('cinema');
+
+// Import d'un fichier Turtle : validé, essayé sur une copie jetable, copie intacte en cas d'échec
+reinitialise_jeu('cinema');
+$q = function ($r) { $x = execute_sparql('cinema', $r); return $x['ok'] && $x['resultat'] === true; };
+$ecrit = function ($nom, $texte) use ($travail) { $f = "$travail/$nom"; file_put_contents($f, $texte); return $f; };
+$meteo = "@prefix meteo: <http://example.org/meteo#> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n"
+	."@prefix cine: <http://example.org/cinema/vocab#> .\n"
+	."meteo:Station a rdfs:Class ; rdfs:label \"Station\"@fr .\n"
+	."meteo:temperature a rdf:Property ; rdfs:domain meteo:Station ; rdfs:range xsd:decimal .\n"
+	."meteo:brest a meteo:Station ; meteo:temperature 12.5 .\nmeteo:nantes a meteo:Station ; meteo:temperature 14.0 .\n";
+$meteo = str_replace('@prefix rdfs:', "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n@prefix rdfs:", $meteo);
+$n0 = compte_triplets(store_copie('cinema'));
+list($ok, $h, $fait) = import_turtle('cinema', $ecrit('meteo.ttl', $meteo), 'ttl', 'tout', 'fusionner', true);
+verifie($ok && !$fait && strpos($h, 'Simulation') !== false && compte_triplets(store_copie('cinema')) === $n0 && !prefixes_ajoutes('cinema'), 'import : la simulation ne change rien (copie, préfixes)');
+list($ok, $h, $fait) = import_turtle('cinema', $ecrit('meteo.ttl', $meteo), 'ttl', 'tout', 'fusionner', false);
+verifie($ok && $fait && $q('ASK { <http://example.org/meteo#brest> a <http://example.org/meteo#Station> ; <http://example.org/meteo#temperature> 12.5 }') && $q('ASK { <http://example.org/cinema/amelie> ?p ?o }'), 'import : fusion, données d\'origine conservées ('.strip_tags($h).')');
+verifie(isset(prefixes_ajoutes('cinema')['meteo']) && !isset(prefixes_ajoutes('cinema')['cine']) && !isset(prefixes_ajoutes('cinema')['rdfs']), 'import : @prefix du fichier ajoutés, sans toucher aux préfixes connus');
+list($mo, ) = modele_ontologie('cinema');
+$cn = array_column($mo['classes'], 'nom');
+verifie(in_array('meteo:Station', $cn) && in_array('cine:Film', $cn), 'import : le modèle de l\'éditeur voit l\'ontologie importée et l\'ancienne');
+// remplacer les instances : l'ontologie reste
+$nouvelles = "@prefix meteo: <http://example.org/meteo#> .\nmeteo:lorient a meteo:Station ; meteo:temperature 11.0 .\n";
+list($ok, , ) = import_turtle('cinema', $ecrit('inst.ttl', $nouvelles), 'ttl', 'instances', 'remplacer', false);
+verifie($ok && $q('ASK { <http://example.org/meteo#lorient> a <http://example.org/meteo#Station> }') && !$q('ASK { <http://example.org/meteo#brest> ?p ?o }') && !$q('ASK { <http://example.org/cinema/amelie> ?p ?o }')
+	&& $q('ASK { <http://example.org/cinema/vocab#Film> a <http://www.w3.org/2000/01/rdf-schema#Class> }'), 'import : instances remplacées (anciennes retirées), ontologie conservée');
+// remplacer tout
+list($ok, , ) = import_turtle('cinema', $ecrit('meteo.ttl', $meteo), 'ttl', 'tout', 'remplacer', false);
+verifie($ok && $q('ASK { <http://example.org/meteo#brest> ?p ?o }') && !$q('ASK { <http://example.org/cinema/vocab#Film> ?p ?o }') && !$q('ASK { <http://example.org/meteo#lorient> ?p ?o }'), 'import : tout remplacé');
+// refus : copie intacte
+$n1 = compte_triplets(store_copie('cinema'));
+$refus = function ($nom, $texte, $ext, $partie, $morceau) use ($ecrit, $n1) {
+	list($ok, $h, $fait) = import_turtle('cinema', $ecrit($nom, $texte), $ext, $partie, 'remplacer', false);
+	return !$ok && !$fait && strpos(strip_tags($h), $morceau) !== false && compte_triplets(store_copie('cinema')) === $n1;
+};
+verifie($refus('mauvais.ttl', "@prefix a: <http://e/> .\na:x a:p \"pas fini .\n", 'ttl', 'tout', 'refusé'), 'import : Turtle mal formé refusé, copie intacte');
+$ligne_erreur = import_turtle('cinema', $ecrit('mauvais2.ttl', "@prefix a: <http://e/> .\na:x a:p a:y .\na:z a:p .\n", 'ttl'), 'ttl', 'tout', 'fusionner', true)[1];
+verifie(preg_match('/(ligne|line)\s*3|3:\d/', strip_tags($ligne_erreur)) === 1, 'import : la ligne fautive est donnée ('.strip_tags($ligne_erreur).')');
+verifie($refus('x.csv', 'a,b', 'csv', 'tout', 'Format non pris'), 'import : format non pris en charge refusé');
+verifie($refus('binaire.ttl', "\0\1\2binaire", 'ttl', 'tout', 'UTF-8'), 'import : fichier binaire refusé');
+verifie($refus('vide.ttl', '', 'ttl', 'tout', 'vide'), 'import : fichier vide refusé');
+verifie($refus('gros.ttl', str_repeat('#', IMPORT_TAILLE_MAX + 1), 'ttl', 'tout', 'trop gros'), 'import : fichier trop gros refusé');
+$nombreux = "@prefix a: <http://e/> .\n"; for ($i = 0; $i <= IMPORT_TRIPLETS_MAX; $i++) $nombreux .= "a:s$i a:p $i .\n";
+verifie(strlen($nombreux) < IMPORT_TAILLE_MAX ? $refus('nombreux.ttl', $nombreux, 'ttl', 'tout', 'triplets') : true, 'import : trop de triplets refusé');
+verifie($refus('inst.ttl', "@prefix a: <http://e/> .\na:x a:p 1 .\n", 'ttl', 'ontologie', 'ne contient rien de cette partie'), 'import : partie absente du fichier refusée');
+verifie(!glob(DOSSIER_TMP.'/import_*') , 'import : aucun fichier temporaire ne reste');
 reinitialise_jeu('cinema');
 
 // Contrôle de cohérence du brouillon : rien n'est écrit, le rapport est celui du panneau « Cohérence » plus les modifications

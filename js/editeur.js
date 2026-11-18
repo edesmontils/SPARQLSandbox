@@ -1123,6 +1123,7 @@
 	}
 	function rendPropositions() {
 		var z = $('#propositions');
+		if (!z) return;   // IA non activée sur ce serveur : pas de zone de propositions
 		if (!propositions || !propositions.liste.length) { z.innerHTML = ''; return; }
 		var douteuses = propositions.liste.filter(function (p) { return p.anomalies && p.anomalies.length; }).length;
 		var h = '<div class="ligne"><strong>' + propositions.liste.length + ' proposition(s)</strong><button type="button" class="lien-mini" id="tout-cocher">tout cocher</button>' +
@@ -1167,6 +1168,59 @@
 		rend(); rendPropositions();
 		toast('✨ ' + prises.length + ' proposition(s) ajoutée(s) au brouillon : à enregistrer');
 		ouvreOnglet('instances');
+	}
+
+	//--------------------------------------------------------------------------
+	// Import et export Turtle (import.php, export.php)
+	//--------------------------------------------------------------------------
+	var IMPORT_TAILLE_MAX = 1048576;
+	function appelFichier(action, champs, fichier) {
+		var corps = new FormData();
+		corps.set('action', action); corps.set('jeu', donnees.jeu); corps.set('csrf', donnees.csrf);
+		Object.keys(champs).forEach(function (k) { corps.set(k, champs[k]); });
+		corps.set('fichier', fichier);
+		return fetch('controler.php', { method: 'POST', body: corps, credentials: 'same-origin' }).then(function (r) {
+			if (!r.headers.get('X-SPARQLSandbox')) return { ok: false, html: "<p class='statut ko'>❌ La requête a été bloquée avant d'atteindre l'application (code " + r.status + ").</p>" };
+			return r.json();
+		}).catch(function () { return { ok: false, html: "<p class='statut ko'>❌ Le serveur ne répond pas.</p>" }; });
+	}
+	function ouvreImport() {
+		var n = nbModifs(), jeu = encodeURIComponent(donnees.jeu), d = $('#dlg-import');
+		d.innerHTML = '<h2>🔁 Import et export Turtle</h2>' +
+			'<h3>Exporter votre copie</h3><p class="boutons" style="margin:0"><a class="btn secondaire petit" href="export.php?jeu=' + jeu + '" download>⬇️ Tout</a>' +
+			'<a class="btn secondaire petit" href="export.php?jeu=' + jeu + '&amp;partie=ontologie" download>⬇️ Ontologie</a><a class="btn secondaire petit" href="export.php?jeu=' + jeu + '&amp;partie=instances" download>⬇️ Instances</a></p>' +
+			'<p class="astuce">Ce qui est enregistré dans votre copie (pas votre brouillon), avec les préfixes que vous avez ajoutés.</p>' +
+			'<h3>Importer un fichier</h3>' + (n ? '<p class="statut avertissement">⚠️ Vous avez ' + n + ' modification' + (n > 1 ? 's' : '') + ' non enregistrée' + (n > 1 ? 's' : '') + ' : enregistrez-les ou abandonnez-les avant d\'importer.</p>' : '') +
+			'<p class="astuce">Un fichier Turtle (<code>.ttl</code>) ou N-Triples (<code>.nt</code>), de 1 Mo et 20 000 triplets au plus. Il est contrôlé puis essayé sur une copie jetable : en cas de problème, votre copie reste intacte.</p>' +
+			'<div class="imp-champs"><label for="imp-fichier">Fichier</label><input type="file" id="imp-fichier" accept=".ttl,.nt">' +
+			'<span class="imp-t">Partie</span><div><label><input type="radio" name="imp-partie" value="tout" checked> ontologie et instances</label> <label><input type="radio" name="imp-partie" value="ontologie"> ontologie seule</label> <label><input type="radio" name="imp-partie" value="instances"> instances seules</label></div>' +
+			'<span class="imp-t">Mode</span><div><label><input type="radio" name="imp-mode" value="fusionner" checked> fusionner (ajouter à votre copie)</label> <label><input type="radio" name="imp-mode" value="remplacer"> remplacer (efface d\'abord la même partie de votre copie)</label></div></div>' +
+			'<div class="boutons"><button type="button" class="btn secondaire" id="imp-analyse"' + (n ? ' disabled' : '') + '>🔎 Analyser, sans importer</button>' +
+			'<button type="button" class="btn vert" id="imp-fait"' + (n ? ' disabled' : '') + '>📥 Importer</button><button type="button" class="btn" id="imp-fermer">Fermer</button></div>' +
+			'<div id="imp-msg" aria-live="polite"></div>';
+		if (!d.open) d.showModal();
+	}
+	function lanceImport(simuler) {
+		var f = $('#imp-fichier').files[0], m = $('#imp-msg');
+		if (!f) { m.innerHTML = "<p class='statut ko'>❌ Choisissez un fichier.</p>"; return; }
+		if (f.size > IMPORT_TAILLE_MAX) { m.innerHTML = "<p class='statut ko'>❌ Le fichier est trop gros (1 Mo au plus).</p>"; return; }
+		var partie = document.querySelector('input[name=imp-partie]:checked').value, mode = document.querySelector('input[name=imp-mode]:checked').value;
+		if (!simuler && mode === 'remplacer' && !window.confirm('Remplacer : la même partie de votre copie sera effacée avant l\'import. Continuer ?')) return;
+		m.innerHTML = "<p class='astuce'>⏳ " + (simuler ? 'Analyse' : 'Import') + ' en cours…</p>';
+		document.querySelectorAll('#imp-analyse, #imp-fait').forEach(function (b) { b.disabled = true; });
+		appelFichier('importer', { partie: partie, mode: mode, simuler: simuler ? '1' : '0' }, f).then(function (r) {
+			m.innerHTML = r.html;
+			document.querySelectorAll('#imp-analyse, #imp-fait').forEach(function (b) { b.disabled = false; });
+			if (r.ok && r.importe) apresImport();
+		});
+	}
+	// La copie a changé : le modèle de l'éditeur, ses positions et les instances sont relus
+	function apresImport() {
+		E.pos = {}; E.routes = {}; E.sel = null; iaIris = {}; propositions = null; rendPropositions();
+		appel('ontologie').then(function (r) {
+			if (!r.ok) { message(r.html); return; }
+			charge(r.modele); rend(); chargeInstances();
+		});
 	}
 
 	//--------------------------------------------------------------------------
@@ -1294,6 +1348,10 @@
 		if (rv && F) { F.valeurs.splice(+rv.dataset.rmVal, 1); rendInstances(); return; }
 		var id = e.target.id;
 		if (id === 'b-prefixes') ouvrePrefixes();
+		else if (id === 'b-import') ouvreImport();
+		else if (id === 'imp-fermer') $('#dlg-import').close();
+		else if (id === 'imp-analyse') lanceImport(true);
+		else if (id === 'imp-fait') lanceImport(false);
 		else if (id === 'b-controle') ouvreControle();
 		else if (id === 'controle-fermer') $('#dlg-controle').close();
 		else if (id === 'b-formes') ouvreFormes();
