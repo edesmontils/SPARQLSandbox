@@ -18,6 +18,29 @@ define('ANOMALIES_MAX', 50);           // anomalies gardées par contrôle
 define('DELAI_SHACL', 15);             // secondes pour la validation SHACL
 define('TYPES_VERIFIES', array('integer', 'decimal', 'double', 'float', 'boolean', 'date', 'dateTime'));
 
+// Types dérivés de xsd:integer et leurs bornes. Oxigraph range les entiers sous xsd:integer (un "56"^^xsd:int est relu
+// "56"^^xsd:integer) : une valeur entière est donc acceptée pour une portée xsd:int, xsd:long… quand elle tient dans les
+// bornes du type, et pour xsd:decimal (xsd:integer en est un sous-type).
+const TYPES_ENTIERS = array(
+	'int' => array(-2147483648, 2147483647), 'long' => array('-9223372036854775808', '9223372036854775807'),
+	'short' => array(-32768, 32767), 'byte' => array(-128, 127),
+	'nonNegativeInteger' => array(0, null), 'positiveInteger' => array(1, null),
+	'nonPositiveInteger' => array(null, 0), 'negativeInteger' => array(null, -1),
+	'unsignedLong' => array('0', '18446744073709551615'), 'unsignedInt' => array(0, 4294967295),
+	'unsignedShort' => array(0, 65535), 'unsignedByte' => array(0, 255));
+
+// Condition SPARQL (sur ?o et ?r) : l'entier ?o convient au type de portée ?r
+function valeur_dans_type_entier() {
+	$c = array('?r = xsd:decimal');
+	foreach (TYPES_ENTIERS as $ty => $b) {
+		$bornes = array();
+		if (!is_null($b[0])) $bornes[] = '?o >= '.$b[0];
+		if (!is_null($b[1])) $bornes[] = '?o <= '.$b[1];
+		$c[] = "(?r = xsd:$ty".($bornes ? ' && '.implode(' && ', $bornes) : '').')';
+	}
+	return 'datatype(?o) = xsd:integer && ('.implode(' || ', $c).')';
+}
+
 // Exécute une requête de contrôle sur $store ; lignes (bindings) ou null en cas d'échec
 function requete_controle($store, $requete) {
 	$r = lance_oxigraph(array('query', '--location', $store, '--results-format', 'json'), $requete, 10);
@@ -91,10 +114,12 @@ function controles_rdfs($store, $prefixes) {
 
 	// rdfs:domain
 	$liste = array();
-	foreach ((array)requete_controle($store, $P.'SELECT ?s ?p ?d WHERE {
+	// (propriété symétrique : le triplet peut être écrit dans l'un ou l'autre sens, l'autre extrémité tient le domaine)
+	foreach ((array)requete_controle($store, $P.'SELECT DISTINCT ?s ?p ?d WHERE {
 			?p rdfs:domain ?d . FILTER (isIRI(?d) && ?d != rdfs:Resource)
 			?s ?p ?o .
-			FILTER NOT EXISTS { ?s rdf:type/rdfs:subClassOf* ?d } }'.$lim) as $l)
+			FILTER NOT EXISTS { ?s rdf:type/rdfs:subClassOf* ?d }
+			FILTER NOT EXISTS { ?p a owl:SymmetricProperty . ?o rdf:type/rdfs:subClassOf* ?d } }'.$lim) as $l)
 		$liste[] = anomalie('RDFS', $t($l, 's').' a la propriété '.$t($l, 'p').', dont le domaine est '.$t($l, 'd')
 			.', mais n\'est pas de type '.$t($l, 'd').'.');
 	$ajoute($liste);
@@ -105,7 +130,8 @@ function controles_rdfs($store, $prefixes) {
 	foreach ((array)requete_controle($store, $P.'SELECT ?s ?p ?o ?r WHERE {
 			?p rdfs:range ?r . FILTER (isIRI(?r) && ?r != rdfs:Resource && !('.$litteraux.'))
 			?s ?p ?o .
-			FILTER (isLiteral(?o) || NOT EXISTS { ?o rdf:type/rdfs:subClassOf* ?r }) }'.$lim) as $l)
+			FILTER (isLiteral(?o) || NOT EXISTS { ?o rdf:type/rdfs:subClassOf* ?r })
+			FILTER NOT EXISTS { ?p a owl:SymmetricProperty . ?s rdf:type/rdfs:subClassOf* ?r } }'.$lim) as $l)
 		$liste[] = anomalie('RDFS', ($l['o']['type'] === 'literal'
 			? $t($l, 's').' '.$t($l, 'p').' '.$t($l, 'o').' : la valeur devrait être une ressource de type '.$t($l, 'r').', pas un littéral.'
 			: $t($l, 's').' '.$t($l, 'p').' '.$t($l, 'o').' : '.$t($l, 'o').' n\'est pas de type '.$t($l, 'r').' (co-domaine de '.$t($l, 'p').').'));
@@ -116,7 +142,7 @@ function controles_rdfs($store, $prefixes) {
 	foreach ((array)requete_controle($store, $P.'SELECT ?s ?p ?o ?r WHERE {
 			?p rdfs:range ?r . FILTER (isIRI(?r) && ('.$litteraux.'))
 			?s ?p ?o .
-			FILTER (!isLiteral(?o) || (?r != rdfs:Literal && datatype(?o) != ?r)) }'.$lim) as $l)
+			FILTER (!isLiteral(?o) || (?r != rdfs:Literal && datatype(?o) != ?r && !('.valeur_dans_type_entier().'))) }'.$lim) as $l)
 		$liste[] = anomalie('RDFS', $t($l, 's').' '.$t($l, 'p').' '.$t($l, 'o').' : la valeur devrait être '
 			.(($l['r']['value'] ?? '') === PREFIXES_STANDARD['rdfs'].'Literal' ? 'un littéral' : 'un littéral de type '.$t($l, 'r')).'.');
 	$ajoute($liste);

@@ -283,6 +283,28 @@ verifie(!$ok, 'intention trop longue refusée');
 $_SESSION = array();
 $avecShacl = !is_null(chemin_programme('pyshacl'));
 if (!$avecShacl) echo "(pyshacl absent : contrôles SHACL non testés)\n";
+// Propriété symétrique (triplet écrit dans un sens ou l'autre) et entiers : xsd:int relu xsd:integer par Oxigraph
+$st = DOSSIER_TMP.'/test_regles_rdfs';
+supprime_dossier($st);
+$ttl = '@prefix : <http://t.example/> . @prefix owl: <http://www.w3.org/2002/07/owl#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+:P a owl:Class . :M a owl:Class .
+:cotoie a owl:ObjectProperty, owl:SymmetricProperty ; rdfs:domain :P ; rdfs:range :M .
+:suit a owl:ObjectProperty ; rdfs:domain :P ; rdfs:range :M .
+:nb a owl:DatatypeProperty ; rdfs:domain :P ; rdfs:range xsd:int .
+:gros a owl:DatatypeProperty ; rdfs:domain :P ; rdfs:range xsd:int .
+:dec a owl:DatatypeProperty ; rdfs:domain :P ; rdfs:range xsd:decimal .
+:p1 a :P ; :nb "56"^^xsd:int ; :dec 3 . :mer1 a :M . :mer1 :cotoie :p1 . :p1 :cotoie :mer1 .
+:p2 a :P ; :gros "99999999999"^^xsd:long ; :suit :p1 .';
+$r = lance_oxigraph(array('load', '--location', $st, '--format', 'text/turtle'), $ttl);
+$msgs = array();
+foreach (controles_rdfs($st, array('' => 'http://t.example/'))[0] as $a) $msgs[] = $a['message'];
+$tous = implode("\n", $msgs);
+verifie(strpos($tous, 'cotoie') === false, 'RDFS : propriété symétrique, triplet dans l\'un ou l\'autre sens accepté : '.$tous);
+verifie(strpos($tous, ':nb') === false && strpos($tous, ':dec') === false, 'RDFS : entier accepté pour xsd:int et xsd:decimal');
+verifie(strpos($tous, ':gros') !== false, 'RDFS : entier hors des bornes de xsd:int signalé');
+verifie(strpos($tous, ':suit') !== false, 'RDFS : propriété non symétrique, co-domaine toujours contrôlé');
+supprime_dossier($st);
+
 foreach (array('cinema', 'amis') as $jeu) {
 	$r = coherence_origine($jeu);
 	verifie(!is_null($r) && $r['anomalies'] === array(), "$jeu : aucune incohérence au chargement : ".json_encode($r['anomalies'] ?? null, JSON_UNESCAPED_UNICODE));
